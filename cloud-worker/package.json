@@ -1,0 +1,15 @@
+{
+  "name": "codex-cloud-console",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-assets.mjs",
+    "deploy": "npm run build && wrangler deploy",
+    "dev": "npm run build && wrangler dev",
+    "d1:schema:local": "wrangler d1 execute codex-cloud-console --local --file ./schema.sql",
+    "d1:schema:remote": "wrangler d1 execute codex-cloud-console --remote --file ./schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.17.0"
+  }
+}

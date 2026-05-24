@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Dock</title>
+    <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="%23f9f9f9"/><path d="M9 10h14M9 16h14M9 22h14" stroke="%230d0d0d" stroke-width="2" stroke-linecap="round"/></svg>' />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar" aria-label="主导航">
+        <div class="sidebar-top">
+          <div class="brand-lockup">
+          <div class="brand-mark" aria-label="Codex Dock">
+            <svg class="brand-logo" viewBox="0 0 32 32" aria-hidden="true">
+              <g fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 9h16"></path>
+                <path d="M8 16h16"></path>
+                <path d="M8 23h16"></path>
+                <path d="M12 6v20"></path>
+                <path d="M20 6v20"></path>
+              </g>
+            </svg>
+          </div>
+          <strong>Codex Dock</strong>
+          </div>
+          <button class="collapse-button" id="collapseSidebarBtn" type="button" aria-label="隐藏侧边栏" aria-expanded="true">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+          </button>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-item active" type="button" data-view="accounts">
+            <span class="nav-icon">⌾</span>
+            <span>账号池</span>
+          </button>
+          <button class="nav-item" type="button" data-view="helper">
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 6.5h14v9H5z"></path><path d="M9 19h6"></path><path d="M12 15.5V19"></path></svg>
+            </span>
+            <span>Dock Helper</span>
+          </button>
+          <button class="nav-item" type="button" id="openSettingsNav">
+            <span class="nav-icon">⚙</span>
+            <span>设置</span>
+          </button>
+          <button class="nav-item admin-only" type="button" data-view="admin" hidden>
+            <span class="nav-icon">◇</span>
+            <span>管理</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="sync-card" id="sidebarSyncCard">
+            <strong>快速切换</strong>
+            <span>安装 Helper 后可一键切换。</span>
+            <button id="sidebarLoginBtn" type="button">登录以同步</button>
+          </div>
+          <div class="mini-status">
+            <span id="sideCloudStatus">云端：未登录</span>
+            <span id="sideHelperStatus">助手：探测中</span>
+          </div>
+          <div class="sidebar-utility">
+            <a class="utility-button helper-download" href="/downloads/CodexDockHelper.exe" download title="下载 Dock Helper" aria-label="下载 Dock Helper">
+              <span class="nav-icon">↓</span>
+              <span>下载 Helper</span>
+            </a>
+            <button class="utility-button" type="button" id="sidebarSettingsBtn" title="设置" aria-label="设置">
+              <span class="nav-icon">⚙</span>
+              <span>设置</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="main-shell">
+        <header class="topbar">
+          <div class="view-title">
+            <h1 id="viewTitle">账号池</h1>
+            <p id="viewSubtitle">管理账号、查看额度并快速切换。</p>
+          </div>
+          <div class="top-actions">
+            <span class="status-pill" id="syncPill">本地</span>
+            <span class="status-pill" id="autoSwitchPill">自动切换未开启</span>
+            <span class="status-pill" id="codexPill">Codex 状态确认中</span>
+            <span class="status-pill" id="helperPill">助手探测中</span>
+            <button id="userMenuBtn" type="button">登录以同步</button>
+          </div>
+        </header>
+
+        <main class="content">
+          <section class="view active" id="accountsView">
+            <div class="account-home">
+              <div class="home-title">
+                <h2 id="homeHeadline">账号池</h2>
+                <p id="homeSubcopy">登录后可在多台设备同步账号池。</p>
+              </div>
+
+              <div class="workbench-command">
+                <div class="command-shell" id="commandShell" role="search">
+                  <div class="command-main-row">
+                    <button class="icon-button" id="openImportBtn" type="button" aria-label="导入账号" title="导入账号">+</button>
+                    <input id="accountSearchInput" class="command-input" type="search" autocomplete="off" placeholder="搜索账号，或把 JSON 文件拖到这里" />
+                  </div>
+                  <div class="command-attachments" id="commandAttachments" hidden></div>
+                </div>
+
+                <div class="primary-actions">
+                  <button id="importLocalAuthBtn" type="button">同步本机</button>
+                  <button id="refreshAllUsageBtn" type="button">刷新额度</button>
+                  <button id="smartSettingsBtn" type="button">切换设置</button>
+                  <button class="command-primary" id="quickSwitchBtn" type="button">智能切换</button>
+                </div>
+              </div>
+
+              <div class="account-toolbar">
+                <div>
+                  <strong id="vaultTitle">本地账号池 · 0 个账号</strong>
+                  <span id="vaultCopy">安装 Dock Helper 后可一键切换；未安装时可下载 auth.json。</span>
+                </div>
+                <div class="toolbar-controls">
+                  <div class="segmented" aria-label="账号筛选">
+                    <button class="active" type="button" data-filter="all">全部</button>
+                    <button type="button" data-filter="paid">Plus</button>
+                    <button type="button" data-filter="attention">需处理</button>
+                  </div>
+                  <select id="accountSortSelect" aria-label="排序">
+                    <option value="updated">最近更新</option>
+                    <option value="last-switch">最近切换</option>
+                    <option value="quota">额度余量</option>
+                    <option value="token-expiry">Token 到期</option>
+                    <option value="created">导入时间</option>
+                    <option value="name">账号名</option>
+                  </select>
+                  <div class="segmented" aria-label="账号布局">
+                    <button class="active" type="button" data-layout="list">列表</button>
+                    <button type="button" data-layout="cards">卡片</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="filter-panel" id="filterPanel">
+                <label>套餐
+                  <select id="filterPlan">
+                    <option value="all">全部</option>
+                    <option value="paid">付费</option>
+                    <option value="plus">Plus</option>
+                    <option value="free">Free</option>
+                    <option value="pro-team">Pro / Team</option>
+                    <option value="unknown">未知</option>
+                  </select>
+                </label>
+                <label>Token
+                  <select id="filterToken">
+                    <option value="all">全部</option>
+                    <option value="rt">RT</option>
+                    <option value="at">AT</option>
+                    <option value="soon">即将到期</option>
+                    <option value="expired">已失效</option>
+                    <option value="missing">缺失</option>
+                  </select>
+                </label>
+                <label>额度
+                  <select id="filterUsage">
+                    <option value="all">全部</option>
+                    <option value="low5h">5H 低余量</option>
+                    <option value="low7d">7D 低余量</option>
+                    <option value="unrefreshed">未刷新</option>
+                    <option value="failed">刷新失败</option>
+                  </select>
+                </label>
+                <label>状态
+                  <select id="filterStatus">
+                    <option value="all">全部</option>
+                    <option value="current">当前使用</option>
+                    <option value="direct">可一键切换</option>
+                    <option value="download">可下载 auth</option>
+                    <option value="attention">需处理</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="bulk-bar" id="bulkBar">
+                <span id="bulkCount">未选择账号</span>
+                <button id="selectAllFilteredBtn" type="button">选择当前结果</button>
+                <button id="selectInvalidBtn" type="button">选择失效账号</button>
+                <button id="bulkRefreshBtn" type="button">刷新额度</button>
+                <button id="bulkExportBtn" type="button">导出</button>
+                <select id="bulkPrioritySelect" aria-label="批量设置偏好">
+                  <option value="">设置偏好</option>
+                  <option value="primary">优先使用</option>
+                  <option value="normal">正常使用</option>
+                  <option value="reserve">尽量少用</option>
+                </select>
+                <button class="subtle-danger" id="bulkDeleteBtn" type="button">删除</button>
+              </div>
+
+              <div class="metrics-grid" id="metricsGrid" hidden></div>
+              <div id="accountGrid" class="account-list chat-list"></div>
+            </div>
+          </section>
+
+          <section class="view" id="helperView" hidden>
+            <div class="plain-layout">
+              <section class="account-surface">
+                <div class="surface-head">
+                  <div>
+                    <h2>Dock Helper</h2>
+                    <p>安装后即可自动写入 auth 并重启 Codex。</p>
+                  </div>
+                  <div class="surface-actions">
+                    <a class="button-link primary-link" href="/downloads/CodexDockHelper.exe" download>下载 Dock Helper</a>
+                    <button id="refreshHelperBtn" type="button">重新探测</button>
+                  </div>
+                </div>
+                <div id="devicePanel" class="device-panel"></div>
+              </section>
+
+              <section class="account-surface">
+                <div class="surface-head">
+                  <div>
+                    <h2>设备连接</h2>
+                    <p>保持 Helper 在线，即可在网页中完成切换。</p>
+                  </div>
+                </div>
+                <div class="pair-box">
+                  <span>设备 Key</span>
+                  <code id="deviceKeyBox">未生成</code>
+                  <div class="action-row loose">
+                    <button id="rotateDeviceKeyBtn" type="button">重新生成</button>
+                    <button id="openLocalStatusBtn" type="button">打开状态页</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section class="view" id="adminView" hidden>
+            <div class="plain-layout">
+              <section class="account-surface">
+                <div class="surface-head">
+                  <div>
+                    <h2>管理概览</h2>
+                    <p>查看用户、账号、设备和最近操作。</p>
+                  </div>
+                  <button id="refreshAdminBtn" type="button">刷新管理数据</button>
+                </div>
+                <div class="admin-summary" id="adminSummary"></div>
+              </section>
+
+              <section class="account-surface">
+                <div class="surface-head">
+                  <div>
+                    <h2>用户</h2>
+                    <p>启用、禁用、重置密码或踢下线。</p>
+                  </div>
+                </div>
+                <div class="admin-message" id="adminMessage" hidden></div>
+                <div class="admin-filter-row">
+                  <input id="adminUserSearch" type="search" placeholder="搜索用户邮箱" />
+                  <select id="adminRoleFilter">
+                    <option value="">全部角色</option>
+                    <option value="admin">管理员</option>
+                    <option value="user">用户</option>
+                  </select>
+                  <select id="adminStatusFilter">
+                    <option value="">全部状态</option>
+                    <option value="active">可用</option>
+                    <option value="disabled">已停用</option>
+                  </select>
+                  <button id="adminSelectAllBtn" type="button">选择结果</button>
+                  <button id="adminBulkDisableBtn" type="button">批量禁用</button>
+                  <button id="adminBulkEnableBtn" type="button">批量启用</button>
+                  <button id="adminBulkKickBtn" type="button">批量踢下线</button>
+                </div>
+                <div id="adminUsers" class="admin-table-wrap"></div>
+              </section>
+
+              <section class="account-surface">
+                <div class="surface-head">
+                  <div>
+                    <h2>审计记录</h2>
+                    <p>查看导入、切换和管理操作。</p>
+                  </div>
+                </div>
+                <div class="admin-filter-row">
+                  <input id="adminAuditSearch" type="search" placeholder="搜索用户或账号" />
+                  <select id="adminAuditActionFilter">
+                    <option value="">全部动作</option>
+                    <option value="import">导入</option>
+                    <option value="switch">切换</option>
+                    <option value="switch-payload">生成 auth</option>
+                    <option value="admin-update-user">用户调整</option>
+                    <option value="admin-reset-password">重置密码</option>
+                    <option value="admin-delete-sessions">踢下线</option>
+                  </select>
+                </div>
+                <div id="adminAudit" class="audit-list wide"></div>
+              </section>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div class="modal" id="authModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="authModal"></div>
+      <section class="auth-card" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+        <button class="modal-close" type="button" data-close-modal="authModal" aria-label="关闭">×</button>
+        <h2 id="authTitle">登录或注册</h2>
+        <p id="authCopy">登录后可把本地账号池同步到云端，并在其他设备继续使用。</p>
+        <form id="authForm" class="auth-form">
+          <label>
+            <span>电子邮件地址</span>
+            <input id="authEmail" autocomplete="email" type="email" required />
+          </label>
+          <label>
+            <span>密码</span>
+            <input id="authPassword" autocomplete="current-password" type="password" minlength="8" required />
+          </label>
+          <button class="primary full" id="authSubmitBtn" type="submit">继续</button>
+        </form>
+        <button class="text-link" id="toggleAuthModeBtn" type="button">没有账号？创建一个</button>
+      </section>
+    </div>
+
+    <div class="modal" id="syncModal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <section class="sync-dialog" role="dialog" aria-modal="true" aria-labelledby="syncTitle">
+        <h2 id="syncTitle">同步确认</h2>
+        <p>检测到本地账号池和云端账号池。选择这台设备接下来怎么处理。</p>
+        <div class="sync-stats" id="syncStats"></div>
+        <div class="sync-actions">
+          <button class="primary" id="mergeSyncBtn" type="button">合并并同步</button>
+          <button id="localOnlyBtn" type="button">只使用本地</button>
+          <button class="danger" id="cloudOverwriteBtn" type="button">拉取云端覆盖本地</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal" id="accountDetailModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="accountDetailModal"></div>
+      <section class="account-detail-card" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+        <div class="detail-top">
+          <div>
+            <span class="eyebrow">账号详情</span>
+            <h2 id="detailTitle">当前选择</h2>
+            <p id="selectedState">未选择账号</p>
+          </div>
+          <button class="modal-close" type="button" data-close-modal="accountDetailModal" aria-label="关闭">×</button>
+        </div>
+        <div class="detail-scroll">
+          <div id="selectedAccountPanel" class="selected-panel"></div>
+
+          <section class="detail-section">
+            <button class="section-toggle" type="button" data-toggle="auditBody">运行记录</button>
+            <div class="section-body" id="auditBody">
+              <div class="audit-list" id="auditList"></div>
+              <button class="ghost" id="clearAuditBtn" type="button">刷新</button>
+            </div>
+          </section>
+
+          <section class="detail-section">
+            <button class="section-toggle" type="button" data-toggle="authPreviewBody">高级信息</button>
+            <div class="section-body collapsed" id="authPreviewBody">
+              <div class="warning" id="tokenWarning" hidden></div>
+              <pre class="output" id="authPreview">选择账号后显示摘要。</pre>
+            </div>
+          </section>
+        </div>
+        <div class="detail-action-row">
+          <button class="primary" id="switchBtn" type="button">立即切换</button>
+          <button id="copyAuthBtn" type="button">复制 auth</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal" id="settingsModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="settingsModal"></div>
+      <section class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="settings-head">
+          <h2 id="settingsTitle">设置</h2>
+          <button class="modal-close" type="button" data-close-modal="settingsModal" aria-label="关闭">×</button>
+        </div>
+        <div class="settings-layout">
+          <nav class="settings-tabs">
+            <button class="active" type="button" data-settings-tab="account">账号</button>
+            <button type="button" data-settings-tab="data">数据</button>
+            <button type="button" data-settings-tab="smart">智能切换</button>
+            <button type="button" data-settings-tab="helper">Dock Helper</button>
+            <button type="button" data-settings-tab="appearance">外观</button>
+            <button class="admin-only" type="button" data-settings-tab="admin" hidden>管理员</button>
+          </nav>
+          <div class="settings-panels">
+            <section class="settings-panel active" data-panel="account">
+              <h3>账号</h3>
+              <div id="settingsAccountState" class="setting-box"></div>
+              <form id="changePasswordForm" class="stack-form">
+                <label>
+                  <span>当前密码</span>
+                  <input id="currentPassword" type="password" autocomplete="current-password" />
+                </label>
+                <label>
+                  <span>新密码</span>
+                  <input id="nextPassword" type="password" autocomplete="new-password" minlength="8" />
+                </label>
+                <button type="submit">修改密码</button>
+              </form>
+            </section>
+
+            <section class="settings-panel" data-panel="data">
+              <h3>数据</h3>
+              <div id="backupCloudState" class="setting-box"></div>
+              <div class="setting-actions">
+                <button id="settingsImportBtn" type="button">导入 JSON</button>
+                <button id="pullCloudLocalBtn" type="button">拉取云端到本机</button>
+                <button id="exportLocalBtn" type="button">导出本地</button>
+                <button id="migrateLegacyCacheBtn" type="button">从旧本地缓存迁移</button>
+                <button class="danger" id="clearLocalBtn" type="button">清空本地缓存</button>
+              </div>
+            </section>
+
+            <section class="settings-panel" data-panel="smart">
+              <h3>智能切换</h3>
+              <div id="smartSettingsState" class="setting-list"></div>
+            </section>
+
+            <section class="settings-panel" data-panel="helper">
+              <h3>Dock Helper</h3>
+              <div id="settingsHelperState" class="setting-box"></div>
+              <div class="setting-actions">
+                <button id="settingsRefreshHelperBtn" type="button">重新探测</button>
+                <button id="settingsOpenLocalStatusBtn" type="button">打开状态页</button>
+                <a class="button-link" href="/downloads/CodexDockHelper.exe" download>下载 Helper</a>
+              </div>
+            </section>
+
+            <section class="settings-panel" data-panel="appearance">
+              <h3>外观</h3>
+              <div class="setting-box">
+                <strong>主题</strong>
+                <span>当前跟随浅色系统界面。深色主题先预留，不影响核心切换链路。</span>
+              </div>
+            </section>
+
+            <section class="settings-panel" data-panel="admin">
+              <h3>管理员</h3>
+              <div class="setting-box">
+                <strong>用户管理</strong>
+                <span>管理用户、角色、状态和在线会话。</span>
+                <button id="goAdminBtn" type="button">进入管理页</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="import-drawer" id="importDrawer" aria-hidden="true">
+      <div class="drawer-backdrop" id="drawerBackdrop"></div>
+      <aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+        <div class="drawer-head">
+          <div>
+            <h2 id="drawerTitle">导入账号</h2>
+            <p>先解析预览，确认无误后再导入。</p>
+          </div>
+          <button class="ghost" id="closeImportBtn" type="button">关闭</button>
+        </div>
+        <div id="accountForm" class="import-form">
+          <div class="import-source-grid" role="tablist" aria-label="导入方式">
+            <button class="import-source-card active" type="button" data-import-mode="oauth">
+              <span class="source-icon">↻</span>
+              <strong>OAuth 网页登录</strong>
+              <small>打开授权页，粘贴回调链接解析。</small>
+            </button>
+            <button class="import-source-card" type="button" data-import-mode="session">
+              <span class="source-icon">⌁</span>
+              <strong>Session JSON</strong>
+              <small>登录 ChatGPT 后复制 session JSON。</small>
+            </button>
+            <button class="import-source-card" type="button" data-import-mode="device">
+              <span class="source-icon">↥</span>
+              <strong>同步当前设备</strong>
+              <small>读取本机已登录的 auth.json。</small>
+            </button>
+            <button class="import-source-card" type="button" data-import-mode="file">
+              <span class="source-icon">↓</span>
+              <strong>上传文件</strong>
+              <small>批量导入 auth / CPA / Sub JSON。</small>
+            </button>
+          </div>
+
+          <section class="import-mode-panel active" data-import-panel="oauth">
+            <div class="auth-method-panel oauth-panel">
+              <div>
+                <strong>OAuth 网页登录</strong>
+                <span>打开授权页完成登录后，把浏览器地址栏里的回调链接粘贴回来解析。</span>
+              </div>
+              <button id="openOauthAuthBtn" type="button">打开授权页面</button>
+              <label>
+                <span>授权链接</span>
+                <input id="oauthAuthUrl" readonly />
+              </label>
+              <label>
+                <span>回调链接</span>
+                <textarea id="oauthCallbackInput" spellcheck="false" placeholder="粘贴浏览器跳转后的完整回调链接"></textarea>
+              </label>
+              <div class="auth-acquire-actions">
+                <button id="copyOauthUrlBtn" type="button">复制授权链接</button>
+                <button id="parseOauthCallbackBtn" type="button">解析回调</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="import-mode-panel" data-import-panel="session">
+            <div class="auth-method-panel">
+              <div>
+                <strong>Session JSON</strong>
+                <span>先登录 ChatGPT，再打开 Session JSON 页面，复制全部内容粘贴到这里。</span>
+              </div>
+              <div class="auth-acquire-actions">
+                <button type="button" data-auth-action="open-chatgpt-login">打开 ChatGPT 登录</button>
+                <button type="button" data-auth-action="open-session-json">打开 Session JSON</button>
+                <button type="button" data-auth-action="copy-session-url">复制 Session 地址</button>
+              </div>
+            </div>
+            <label>
+              <span>Session / auth JSON</span>
+              <textarea id="sessionInput" spellcheck="false" placeholder="粘贴 auth.json、/api/auth/session、CPA JSON、Sub JSON，或包含 accounts/sessions/items/data 的数组结构"></textarea>
+            </label>
+            <button id="previewImportBtn" type="button">解析粘贴内容</button>
+          </section>
+
+          <section class="import-mode-panel" data-import-panel="device">
+            <div class="auth-method-panel">
+              <div>
+                <strong>同步当前设备登录</strong>
+                <span>Dock Helper 在线时，可直接读取本机 .codex/auth.json 并纳入账号池。</span>
+              </div>
+              <div class="auth-acquire-actions">
+                <button type="button" data-auth-action="sync-local-auth">同步本机 auth</button>
+                <button type="button" data-auth-action="copy-codex-login">复制 Codex 登录命令</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="import-mode-panel" data-import-panel="file">
+            <div class="file-import-row">
+              <button id="pickJsonBtn" type="button">选择 JSON 文件</button>
+              <input id="jsonFileInput" type="file" accept=".json,application/json" multiple hidden />
+              <span>可一次选择多个文件。登录后导入的账号自动保存到云端。</span>
+            </div>
+          </section>
+          <div class="import-result" id="importResult" hidden></div>
+          <div class="import-preview-head">
+            <strong id="importPreviewSummary">还没有待导入账号</strong>
+            <span>解析后会自动合并重复项，并标出新增、更新和失败。</span>
+          </div>
+          <div class="import-preview-list" id="importPreviewList"></div>
+          <div class="action-row loose">
+            <button class="primary" id="confirmImportBtn" type="button" disabled>确认导入</button>
+            <button id="finishImportBtn" type="button">完成</button>
+            <button id="clearFormBtn" type="button">继续导入</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="modal" id="progressModal" aria-hidden="true">
+      <div class="modal-backdrop"></div>
+      <section class="progress-card" role="dialog" aria-modal="true" aria-labelledby="progressTitle">
+        <h2 id="progressTitle">正在处理</h2>
+        <p id="progressSummary">请稍候。</p>
+        <div class="progress-meter"><i id="progressMeterBar" style="width:0%"></i></div>
+        <div class="progress-list" id="progressList"></div>
+        <div class="action-row loose">
+          <button id="progressCloseBtn" type="button" disabled>完成</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="toast" id="toast" hidden></div>
+    <script src="app.js"></script>
+  </body>
+</html>

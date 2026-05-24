@@ -1,0 +1,11 @@
+.playwright-mcp/
+.server.*.log
+auth-compare*.json
+page-account-state.json
+*.bak
+cloud-worker/.wrangler/
+cloud-worker/node_modules/
+cloud-worker/public/
+cloud-worker/.wrangler-dry-run/
+dist/CodexDockHelper/CodexAppServerProxy.exe
+dist/CodexPlusLocalHelper/
