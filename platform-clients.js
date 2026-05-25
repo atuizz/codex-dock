@@ -67,6 +67,9 @@
       health() {
         return request("/api/health", { cache: "no-store" });
       },
+      repairTray() {
+        return request("/api/tray/repair", { method: "POST" });
+      },
       currentAuth() {
         return request("/api/current-auth", { cache: "no-store" });
       },

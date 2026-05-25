@@ -6,6 +6,12 @@ const repoRoot = path.resolve(__dirname, "..");
 const helperSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexPlusLocalHelper.cs"), "utf8");
 
 assert.match(helperSource, /\/api\/diagnostics\/export/);
+assert.match(helperSource, /\/api\/tray\/repair/);
+assert.match(helperSource, /TrayStatusJson/);
+assert.match(helperSource, /RepairTrayIconFromAnyThread/);
+assert.match(helperSource, /EnsureTrayIconHeartbeat[\s\S]*EnsureTrayIcon\("托盘心跳", false\)/);
+assert.match(helperSource, /protected override void WndProc\(ref Message m\)/);
+assert.match(helperSource, /RecoverRichTextState\(ex\)/);
 assert.match(helperSource, /RedactDiagnosticText/);
 assert.ok(helperSource.includes("\\\\bAuthorization\\\\s*:\\\\s*Bearer"));
 assert.match(helperSource, /cdh_\[REDACTED\]/);
@@ -53,6 +59,7 @@ async function verifyLiveHelper() {
   const body = await response.json();
   assert.equal(body.ok, true);
   assert.equal(body.redaction?.applied, true);
+  assert.equal(typeof body.tray?.visible, "boolean");
   assert.ok(Array.isArray(body.recent_logs));
   const text = JSON.stringify(body);
   for (const secret of fakeSecrets) {

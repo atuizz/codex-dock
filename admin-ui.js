@@ -66,7 +66,7 @@
       `;
     }
 
-    function renderVersionList(versions = [], minVersion = "0.4.1") {
+    function renderVersionList(versions = [], minVersion = "0.4.2") {
       if (!versions.length) return '<div class="ops-inline muted">暂无设备版本。</div>';
       return `
         <div class="ops-version-list">
@@ -81,7 +81,7 @@
 
     function renderSummary(summary, devices = []) {
       if (!summary) return "";
-      const minVersion = summary.minSupportedHelperVersion || "0.4.1";
+      const minVersion = summary.minSupportedHelperVersion || "0.4.2";
       const versions = summary.helperVersions?.length ? summary.helperVersions : derivedHelperVersions(devices);
       const fallbackOutdated = devices.filter((device) => !device.helperVersion || compareVersion(device.helperVersion, minVersion) < 0).length;
       const outdatedHelpers = Number.isFinite(Number(summary.deviceHealth?.outdated)) ? Number(summary.deviceHealth.outdated) : fallbackOutdated;
@@ -190,7 +190,7 @@
           <tbody>
             ${devices.map((device) => {
               const version = device.helperVersion || "未上报";
-              const versionStatus = !device.helperVersion || compareVersion(device.helperVersion, "0.4.1") < 0 ? " · 待升级" : "";
+              const versionStatus = !device.helperVersion || compareVersion(device.helperVersion, "0.4.2") < 0 ? " · 待升级" : "";
               return `<tr>
                 <td><strong>${escapeHtml(device.name || "设备")}</strong><span>${escapeHtml(shortId(device.id))}</span></td>
                 <td>${escapeHtml(device.userEmail || "未知用户")}</td>
@@ -234,3 +234,4 @@
     createAdminUi,
   });
 });
+

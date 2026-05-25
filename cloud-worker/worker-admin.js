@@ -18,7 +18,7 @@ export function assertAdmin(user) {
   return (user?.role || "user") === "admin";
 }
 
-const MIN_SUPPORTED_HELPER_VERSION = "0.4.1";
+const MIN_SUPPORTED_HELPER_VERSION = "0.4.2";
 
 function number(value) {
   return Number(value || 0);
@@ -418,3 +418,4 @@ export async function handleAdmin(request, env, user, path, options = {}) {
 
   return json({ ok: false, error: "Not found" }, 404);
 }
+

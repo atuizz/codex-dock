@@ -59,7 +59,7 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.1";
+        private const string HelperVersion = "0.4.2";
         private const string HelperBuildDate = "2026-05-26";
         private const int HelperLogMaxBytes = 1024 * 1024;
         private const int HelperLogBackups = 5;
@@ -105,6 +105,9 @@ namespace CodexPlusLocalHelper
         private volatile bool _running;
         private bool _allowExit;
         private bool _trayTipShown;
+        private DateTime _lastTrayIconConfirmedAtUtc = DateTime.MinValue;
+        private string _lastTrayIconReason = "";
+        private string _lastTrayIconError = "";
         private volatile bool _applicationClosing;
         private readonly object _recentLogLock = new object();
         private readonly Queue<string> _recentLogLines = new Queue<string>();
@@ -916,21 +919,41 @@ namespace CodexPlusLocalHelper
                 _trayIcon.ContextMenuStrip = _trayMenu;
                 _trayIcon.Visible = false;
                 _trayIcon.Visible = true;
+                _lastTrayIconConfirmedAtUtc = DateTime.UtcNow;
+                _lastTrayIconReason = reason ?? "";
+                _lastTrayIconError = "";
                 if (logSuccess) WriteLifecycleLog("托盘图标已确认; reason=" + reason);
             }
             catch (Exception ex)
             {
+                _lastTrayIconError = ex.GetType().Name + ": " + ShortNonEmpty(ex.Message, 180);
                 WriteLifecycleLog("托盘图标确认失败; reason=" + reason + "; " + ex.Message);
+            }
+        }
+
+        private void RepairTrayIconFromAnyThread(string reason, bool logSuccess)
+        {
+            if (_applicationClosing || _trayIcon == null) return;
+            try
+            {
+                if (IsHandleCreated && InvokeRequired)
+                {
+                    BeginInvoke(new Action(delegate { EnsureTrayIcon(reason, logSuccess); }));
+                    return;
+                }
+                EnsureTrayIcon(reason, logSuccess);
+            }
+            catch (Exception ex)
+            {
+                _lastTrayIconError = ex.GetType().Name + ": " + ShortNonEmpty(ex.Message, 180);
+                WriteLifecycleLog("托盘修复调度失败; reason=" + reason + "; " + ex.Message);
             }
         }
 
         private void EnsureTrayIconHeartbeat()
         {
             if (_applicationClosing || _trayIcon == null) return;
-            if (!Visible || !ShowInTaskbar || WindowState == FormWindowState.Minimized)
-            {
-                EnsureTrayIcon("托盘心跳", false);
-            }
+            EnsureTrayIcon("托盘心跳", false);
         }
 
         protected override void WndProc(ref Message m)
@@ -1255,7 +1278,19 @@ namespace CodexPlusLocalHelper
 
             if (request.HttpMethod == "GET" && path == "/api/health")
             {
-                SendJson(context.Response, 200, "{\"ok\":true,\"mode\":\"native-helper\",\"version\":\"" + JsonEscape(HelperVersion) + "\",\"build_date\":\"" + JsonEscape(HelperBuildDate) + "\",\"port\":" + _port + ",\"cloud_console_url\":\"" + JsonEscape(CloudConsoleUrl) + "\",\"auto_switch\":" + AutoSwitchStatusJson() + ",\"codex_proxy\":" + CodexProxyStatusJson() + ",\"codex_status\":" + CodexStatusJson() + "}");
+                SendJson(context.Response, 200, "{\"ok\":true,\"mode\":\"native-helper\",\"version\":\"" + JsonEscape(HelperVersion) + "\",\"build_date\":\"" + JsonEscape(HelperBuildDate) + "\",\"port\":" + _port + ",\"cloud_console_url\":\"" + JsonEscape(CloudConsoleUrl) + "\",\"tray\":" + TrayStatusJson() + ",\"auto_switch\":" + AutoSwitchStatusJson() + ",\"codex_proxy\":" + CodexProxyStatusJson() + ",\"codex_status\":" + CodexStatusJson() + "}");
+                return true;
+            }
+
+            if (request.HttpMethod == "POST" && path == "/api/tray/repair")
+            {
+                if (!IsAllowedOrigin(request))
+                {
+                    SendJson(context.Response, 403, "{\"ok\":false,\"error\":\"来源未授权\"}");
+                    return true;
+                }
+                RepairTrayIconFromAnyThread("本地 API 修复请求", true);
+                SendJson(context.Response, 200, "{\"ok\":true,\"tray\":" + TrayStatusJson() + "}");
                 return true;
             }
 
@@ -2085,6 +2120,26 @@ namespace CodexPlusLocalHelper
             return Path.Combine(DockDataDir(), "helper.log");
         }
 
+        private string TrayStatusJson()
+        {
+            var visible = false;
+            var text = "";
+            try
+            {
+                visible = _trayIcon != null && _trayIcon.Visible;
+                text = _trayIcon == null ? "" : (_trayIcon.Text ?? "");
+            }
+            catch { }
+
+            return "{"
+                + "\"visible\":" + (visible ? "true" : "false") + ","
+                + "\"last_confirmed_at\":\"" + JsonEscape(_lastTrayIconConfirmedAtUtc == DateTime.MinValue ? "" : _lastTrayIconConfirmedAtUtc.ToString("o")) + "\","
+                + "\"last_reason\":\"" + JsonEscape(_lastTrayIconReason) + "\","
+                + "\"last_error\":\"" + JsonEscape(_lastTrayIconError) + "\","
+                + "\"text\":\"" + JsonEscape(text) + "\""
+                + "}";
+        }
+
         private string DiagnosticsExportJson()
         {
             var lines = ReadHelperLogTail(HelperUiLogLineLimit);
@@ -2098,6 +2153,7 @@ namespace CodexPlusLocalHelper
             sb.Append("\"port\":").Append(_port.ToString(CultureInfo.InvariantCulture)).Append(",");
             sb.Append("\"cloud_console_url\":\"").Append(JsonEscape(CloudConsoleUrl)).Append("\",");
             sb.Append("\"helper_log_exists\":").Append(File.Exists(HelperLogPath()) ? "true" : "false").Append(",");
+            sb.Append("\"tray\":").Append(TrayStatusJson()).Append(",");
             sb.Append("\"auto_switch\":").Append(RedactDiagnosticText(AutoSwitchStatusJson())).Append(",");
             sb.Append("\"codex_proxy\":").Append(RedactDiagnosticText(CodexProxyStatusJson())).Append(",");
             sb.Append("\"codex_status\":").Append(RedactDiagnosticText(CodexStatusJson())).Append(",");
@@ -5275,6 +5331,22 @@ namespace CodexPlusLocalHelper
                 try
                 {
                     base.OnHandleCreated(e);
+                }
+                catch (ArgumentException ex)
+                {
+                    RecoverRichTextState(ex);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    RecoverRichTextState(ex);
+                }
+            }
+
+            protected override void WndProc(ref Message m)
+            {
+                try
+                {
+                    base.WndProc(ref m);
                 }
                 catch (ArgumentException ex)
                 {

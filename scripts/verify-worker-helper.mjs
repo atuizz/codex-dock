@@ -317,7 +317,7 @@ const issue = await handleDeviceRoutes(request("/api/devices/auto-switch-token",
   deviceKey: "desktop-1",
   name: "Dock Helper",
   helperBase: "http://127.0.0.1:18766",
-  helperVersion: "0.4.1",
+  helperVersion: "0.4.2",
   helperBuildDate: "2026-05-26",
 }), env, user, "/api/devices/auto-switch-token", { writeAudit });
 assert.equal(issue.status, 200);
@@ -327,7 +327,7 @@ assert.match(issueBody.deviceToken, /^cdh_/);
 assert.equal(issueBody.heartbeatSeconds, HELPER_HEARTBEAT_SECONDS);
 assert.equal(issueBody.settings.enabled, true);
 assert.equal(env.DB.devices.length, 1);
-assert.equal(env.DB.devices[0].helper_version, "0.4.1");
+assert.equal(env.DB.devices[0].helper_version, "0.4.2");
 assert.equal(env.DB.deviceTokens.length, 1);
 assert.equal(audits.at(-1).result, "issued");
 
@@ -552,3 +552,4 @@ assert.equal(expiredRow.status, "expired");
 assert.equal(env.DB.devices.find((item) => item.device_key === "desktop-expired").helper_online, 0);
 
 console.log("worker-helper verification passed");
+

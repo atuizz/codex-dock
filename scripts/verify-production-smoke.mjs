@@ -125,7 +125,7 @@ const deviceRegistered = await request("/api/devices/register", {
     name: "Smoke Helper",
     helperOnline: true,
     helperBase: "http://127.0.0.1:18766",
-    helperVersion: "0.4.1",
+    helperVersion: "0.4.2",
     helperBuildDate: "2026-05-26",
   },
 });
@@ -134,7 +134,7 @@ assert.equal(deviceRegistered.data.ok, true, "device register response should be
 
 const devices = await request("/api/devices");
 assert.equal(devices.response.status, 200, "device list should load");
-assert.ok(devices.data.devices.some((device) => device.device_key === deviceKey && device.helper_version === "0.4.1"), "device list should include smoke Helper version");
+assert.ok(devices.data.devices.some((device) => device.device_key === deviceKey && device.helper_version === "0.4.2"), "device list should include smoke Helper version");
 
 const adminDenied = await request("/api/admin/summary");
 assert.equal(adminDenied.response.status, 403, "normal smoke user must not access admin summary");
@@ -177,3 +177,4 @@ console.log(JSON.stringify({
   helperSha256: onlineHash,
   localHelperSha256: localHash || null,
 }, null, 2));
+

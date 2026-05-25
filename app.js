@@ -105,7 +105,7 @@ const defaultUsageRefreshSettings = {
   lastUsageRefreshSource: "",
   lastUsageRefreshAt: "",
 };
-const minimumHelperVersion = "0.4.1";
+const minimumHelperVersion = "0.4.2";
 
 const state = {
   user: null,
@@ -3243,6 +3243,26 @@ function openLocalStatus() {
   window.open(state.helperBase, "_blank", "noopener,noreferrer");
 }
 
+async function repairHelperTray() {
+  if (!state.helperReady || !state.helperBase) {
+    await checkHelper();
+    if (!state.helperReady || !state.helperBase) {
+      toast("Helper 未连接，无法修复托盘图标。");
+      return;
+    }
+  }
+  try {
+    const result = await helperClient().repairTray();
+    if (result.tray) state.helperInfo = { ...(state.helperInfo || {}), tray: result.tray };
+    renderDevice();
+    renderSettings();
+    toast("已请求 Helper 重新注册托盘图标。");
+    window.setTimeout(checkHelper, 1200);
+  } catch (error) {
+    toast(error.message || "修复托盘图标失败。");
+  }
+}
+
 async function changePassword(event) {
   event.preventDefault();
   if (!state.user) return;
@@ -3575,6 +3595,8 @@ function bindEvents() {
   $("rotateDeviceKeyBtn").addEventListener("click", rotateDeviceKey);
   $("openLocalStatusBtn").addEventListener("click", openLocalStatus);
   $("settingsOpenLocalStatusBtn").addEventListener("click", openLocalStatus);
+  $("repairTrayBtn").addEventListener("click", repairHelperTray);
+  $("settingsRepairTrayBtn").addEventListener("click", repairHelperTray);
   $("migrateLegacyCacheBtn").addEventListener("click", migrateLegacyCache);
   $("pullCloudLocalBtn").addEventListener("click", pullCloudToLocal);
   $("backupCloudState").addEventListener("change", async (event) => {
@@ -3766,3 +3788,4 @@ function init() {
 }
 
 init();
+

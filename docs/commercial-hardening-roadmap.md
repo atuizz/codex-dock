@@ -58,7 +58,7 @@
 
 - 已完成商业化专项质量门槛：额度刷新通道支持本机 Helper / 云端 Worker / 自动选择 / 仅手动；自动切换必须等待 Helper 上报安全轮次边界；Helper 日志先持久化再渲染，窗口隐藏/恢复和 RichTextBox 异常不会丢日志。
 - 已补 Cloudflare Worker `worker-usage.js`、D1 `0005_usage_refresh_channels.sql`、用户刷新设置、刷新来源快照、批量刷新聚合审计和管理员 Helper 版本视图。
-- 已将 Helper 升级到 `0.4.1`，上报版本与构建日期，控制台可识别过旧 Helper；发布流程见 `.github/workflows/ci.yml` 和 `.github/workflows/cloudflare-deploy.yml`。
+- 已将 Helper 升级到 `0.4.2`，上报版本与构建日期，控制台可识别过旧 Helper；发布流程见 `.github/workflows/ci.yml` 和 `.github/workflows/cloudflare-deploy.yml`。
 - 已建立设计令牌和多端布局基线，修复手机侧栏、主操作区、导入抽屉和进度明细的溢出风险。
 - 已将前端账号/JWT/usage/导入解析纯函数抽离到 `account-core.js`，云端 API / Helper 通信抽离到 `platform-clients.js`，通用格式化与状态文案抽离到 `format-core.js`，进度弹窗抽离到 `progress-ui.js`，Shell/指标/工具栏状态抽离到 `shell-ui.js`，弹窗/抽屉/同步提示抽离到 `dialog-ui.js`，设置页渲染抽离到 `settings-ui.js`，账号列表/卡片渲染抽离到 `account-list-ui.js`，账号详情面板渲染抽离到 `account-detail-ui.js`，审计标题与诊断描述抽离到 `audit-core.js`，管理台统计/用户表/审计列表渲染抽离到 `admin-ui.js`，运行记录/Helper 状态/Token 安全摘要抽离到 `panels-ui.js`，导入预览/去重/payload 组装抽离到 `import-core.js`，导入抽屉预览/结果/模式状态渲染抽离到 `import-ui.js`，并补 `scripts/verify-format-core.cjs` / `scripts/verify-progress-ui.cjs` / `scripts/verify-shell-ui.cjs` / `scripts/verify-dialog-ui.cjs` / `scripts/verify-settings-ui.cjs` / `scripts/verify-account-list-ui.cjs` / `scripts/verify-account-detail-ui.cjs` / `scripts/verify-admin-ui.cjs` / `scripts/verify-panels-ui.cjs` / `scripts/verify-audit-core.cjs` / `scripts/verify-import-core.cjs` / `scripts/verify-import-ui.cjs` 回归脚本。
 - 已更新 Worker Static Assets 构建脚本，确保 `account-core.js`、`platform-clients.js`、`format-core.js`、`progress-ui.js`、`shell-ui.js`、`dialog-ui.js`、`settings-ui.js`、`account-list-ui.js`、`account-detail-ui.js`、`audit-core.js`、`admin-ui.js`、`panels-ui.js`、`import-core.js`、`import-ui.js` 与控制台页面一起发布。
@@ -92,3 +92,4 @@
 - `app.js`：继续收束剩余事件绑定和页面编排逻辑；进度弹窗、Shell/指标/工具栏、弹窗/抽屉、导入抽屉、设置页、账号列表/卡片、账号详情面板、管理台核心渲染、运行记录/Helper 状态/Token 安全摘要已分别落到独立 UI 模块。
 - `cloud-worker/worker.js`：主入口已收束到 API 编排和 Cloudflare fetch 包装；通用 Worker shared、认证、账号、用户设置/改密、自动切换设置、Helper 通信、审计、管理员均已落到独立模块。
 - `native-helper/CodexPlusLocalHelper.cs`：继续梳理长任务状态机、Helper 本体 UI 进度反馈、版本号和本地滚动日志。
+

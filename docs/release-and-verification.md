@@ -6,7 +6,7 @@ This document is the operational checklist for shipping the Cloudflare console a
 
 - Cloud console: Cloudflare Worker `codex-cloud-console` with Static Assets from `cloud-worker/public`.
 - Cloud data: D1 database `codex-cloud-console`, managed by incremental files in `cloud-worker/migrations`.
-- Windows Helper: `dist/CodexDockHelper/CodexDockHelper.exe`, currently version `0.4.1` with build date `2026-05-26`.
+- Windows Helper: `dist/CodexDockHelper/CodexDockHelper.exe`, currently version `0.4.2` with build date `2026-05-26`.
 - Public domain: `https://codex.woai.pro`.
 
 ## Required Secrets And Variables
@@ -120,14 +120,14 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
   - `artifacts/verification/codex-dock-production-smoke-playwright.png`
   - `artifacts/verification/codex-dock-oauth-core-live.png`
   - `artifacts/verification/codex-dock-import-primary-live.png`
-- Local Helper health verified against `http://127.0.0.1:18766/` with version `0.4.1`, build date `2026-05-26`, active Codex state, and `safe_to_switch: false`.
-- Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available, `/api/diagnostics/export` returns redacted logs/status, no Microsoft .NET Framework dialog appears, no new `[unhandled:]` log entry is emitted, simulated Windows `TaskbarCreated` restores the tray icon registration, and Helper `0.4.1` silently re-registers `NotifyIcon` while hidden.
-- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `1e2fe409-c262-4b52-a39d-fac5bcfebadd`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
-- Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `0408C16592B00FB4B3A0C8E3780066AC4EE70D00F87B17222D851CCF142E6EDB`.
-- Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, static asset manifest/version parity, structured API error codes/request ids/diagnostic summaries, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity. Current static asset version is `f048babca0a7`; production `index.html` has 17 versioned JS/CSS references and no stale `20260525-oauth-primary2` string.
+- Local Helper health verified against `http://127.0.0.1:18766/` with version `0.4.2`, build date `2026-05-26`, active Codex state, and `safe_to_switch: false`.
+- Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available with `tray` diagnostics, `/api/diagnostics/export` returns redacted logs/status, no Microsoft .NET Framework dialog appears, no new `[unhandled:]` log entry is emitted, simulated Windows `TaskbarCreated` restores the tray icon registration, and Helper `0.4.2` silently re-registers `NotifyIcon` even when the main window is visible.
+- Production deployment verified on `2026-05-26`: `wrangler deploy` published Worker version `20cf4d7e-b4c5-4b9b-b8bd-68f58c868088`, API register/login/logout and usage-refresh settings smoke tests passed, and the deployed static assets use version `2e941c008bbc`.
+- Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `D516CA84CF3FCAA4F09A3F4C806BD1685CF719497CE4D7816529BA6AC41743EB`.
+- Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, static asset manifest/version parity, structured API error codes/request ids/diagnostic summaries, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity. Current static asset version is `2e941c008bbc`; production `index.html` has versioned JS/CSS references, the Helper tray repair buttons, and no stale `20260525-oauth-primary2` string.
 - Admin operations summary verified on `2026-05-26`: `/api/admin/summary` aggregates users, sessions, account health, RT/AT split, latest usage failures, 24h audit failure trend, usage-refresh failures, Helper online/offline counts, and Helper version distribution without exposing credentials.
 - Live browser verification on `2026-05-26`: `https://codex.woai.pro` loaded `CodexAdminUi`, rendered the admin operations summary with 3 cards and 4 trend bars, and reported no horizontal overflow.
-- Live OAuth callback verification on `2026-05-26`: `https://codex.woai.pro` loaded `CodexOauthCore` from `oauth-core.js?v=f048babca0a7`; stale callback state returns `oauth_state_mismatch` and missing callback state returns `oauth_state_missing`, both with the user action "重新打开授权页面".
+- Live OAuth callback verification on `2026-05-26`: `https://codex.woai.pro` loaded `CodexOauthCore`; stale callback state returns `oauth_state_mismatch` and missing callback state returns `oauth_state_missing`, both with the user action "重新打开授权页面".
 - Live import drawer verification on `2026-05-26`: `https://codex.woai.pro` opens import on OAuth mode by default, shows "登录导入 RT 账号" as the primary recommended path, keeps advanced import collapsed, and has no stale asset version references.
 - Live account detail diagnostics verification on `2026-05-26`: `https://codex.woai.pro` renders the detail diagnosis card for usable RT accounts and AT-only accounts; AT-only rows show "不可用于 Codex", explain missing RT, disable switch, and expose the "补 RT" action.
 
@@ -138,3 +138,4 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 - Helper lifecycle: close-to-tray, persistent `%APPDATA%\CodexDock\helper.log`, bounded UI log buffer, redacted diagnostics export, log restore, and RichTextBox recovery are required before publishing a Helper artifact.
 - Admin operations: users, devices, Helper versions, RT/AT account health, 24h failure trend, usage-refresh failures, and audit are visible without exposing credentials.
 - API diagnostics: JSON API errors include stable `code`, body/header request id, and a short `diagnostic.summary` without exposing credentials or stack traces.
+

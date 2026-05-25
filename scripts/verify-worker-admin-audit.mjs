@@ -28,7 +28,7 @@ class FakeD1 {
       { id: "sess-1", user_id: "user-1", expires_at: "2999-01-01T00:00:00.000Z", last_seen_at: "2026-01-02" },
     ];
     this.devices = [
-      { id: "dev-1", user_id: "user-1", device_key: "desktop", name: "Dock Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.1", helper_build_date: "2026-05-26", created_at: "", last_seen_at: "" },
+      { id: "dev-1", user_id: "user-1", device_key: "desktop", name: "Dock Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.2", helper_build_date: "2026-05-26", created_at: "", last_seen_at: "" },
     ];
     this.auditLogs = [];
   }
@@ -324,12 +324,12 @@ assert.equal(summaryBody.summary.accountHealth.atOnly, 1);
 assert.equal(summaryBody.summary.accountHealth.usageFailed, 1);
 assert.equal(summaryBody.summary.failureTotals.usageRefreshFailures24h, 1);
 assert.ok(summaryBody.summary.failureTrend.some((bucket) => bucket.failures >= 1));
-assert.equal(summaryBody.summary.helperVersions[0].version, "0.4.1");
+assert.equal(summaryBody.summary.helperVersions[0].version, "0.4.2");
 assert.equal(summaryBody.summary.deviceHealth.outdated, 0);
 
 const devices = await handleAdmin(request("/api/admin/devices"), env, admin, "/api/admin/devices");
 const deviceBody = await devices.json();
-assert.equal(deviceBody.devices[0].helperVersion, "0.4.1");
+assert.equal(deviceBody.devices[0].helperVersion, "0.4.2");
 assert.equal(deviceBody.devices[0].helperBuildDate, "2026-05-26");
 
 const guard = await handleAdmin(request("/api/admin/users/admin-1", "PATCH", {
@@ -354,3 +354,4 @@ assert.match((await reset.json()).temporaryPassword, /^CodexTemp-/);
 assert.equal(env.DB.auditLogs.at(-1).action, "admin-reset-password");
 
 console.log("worker-admin-audit verification passed");
+

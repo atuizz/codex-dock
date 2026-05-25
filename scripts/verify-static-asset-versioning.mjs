@@ -57,6 +57,8 @@ assert.equal(refs.length, versionedAssets.size, "index should reference every ve
 assert.deepEqual(new Set(refs.map((ref) => ref.file)), versionedAssets, "index references should match source assets");
 assert.deepEqual(new Set(refs.map((ref) => ref.version)), new Set([manifest.version]), "all JS/CSS references should use the manifest version");
 assert.doesNotMatch(index, /20260525-oauth-primary2/, "built index should not keep the old hand-written asset version");
+assert.match(index, /id="repairTrayBtn"/, "Helper page should expose tray repair action");
+assert.match(index, /id="settingsRepairTrayBtn"/, "settings page should expose tray repair action");
 
 const entries = new Map((manifest.assets || []).map((entry) => [entry.file, entry]));
 for (const file of sourceAssets) {
