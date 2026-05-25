@@ -119,15 +119,15 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 - Production smoke screenshot:
   - `artifacts/verification/codex-dock-production-smoke-playwright.png`
 - Local Helper health verified against `http://127.0.0.1:18766/` with version `0.4.0`, build date `2026-05-26`, active Codex state, and `safe_to_switch: false`.
-- Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available, no Microsoft .NET Framework dialog appears, no new `[unhandled:]` log entry is emitted, and simulated Windows `TaskbarCreated` restores the tray icon registration.
-- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `805648bb-4030-4aa7-b09b-05a226e8a430`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
-- Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `20CB7636E7F712E70CE449FF20AB17CB184588237A1200A0825DAC1FD4255223`.
+- Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available, `/api/diagnostics/export` returns redacted logs/status, no Microsoft .NET Framework dialog appears, no new `[unhandled:]` log entry is emitted, and simulated Windows `TaskbarCreated` restores the tray icon registration.
+- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `b534196f-ed76-4ea0-b45d-62a469bb94fe`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
+- Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `6E0CF0A5FE2C31C89B8BC4E849FD52004C75BC7FE7F9CD3796CCEE7AEF551F55`.
 - Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, structured API error codes/request ids/diagnostic summaries, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity.
 
 ## Commercial Quality Gates
 
 - Usage refresh: supports Helper, cloud Worker, automatic fallback, and manual-only mode; shows the actual source; cloud writes are capped and aggregate audit noise.
 - Task continuity: cloud only issues auto-switch payloads when the Helper confirms an idle, safe round boundary.
-- Helper lifecycle: close-to-tray, persistent `%APPDATA%\CodexDock\helper.log`, bounded UI log buffer, log restore, and RichTextBox recovery are required before publishing a Helper artifact.
+- Helper lifecycle: close-to-tray, persistent `%APPDATA%\CodexDock\helper.log`, bounded UI log buffer, redacted diagnostics export, log restore, and RichTextBox recovery are required before publishing a Helper artifact.
 - Admin operations: users, devices, Helper versions, health totals, failures, and audit are visible without exposing credentials.
 - API diagnostics: JSON API errors include stable `code`, body/header request id, and a short `diagnostic.summary` without exposing credentials or stack traces.

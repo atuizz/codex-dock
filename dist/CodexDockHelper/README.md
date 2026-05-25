@@ -103,6 +103,19 @@ npm run smoke:production
 
 ## API 摘要
 
+本地 Helper 只监听 `127.0.0.1`，核心本机接口：
+
+- `GET /api/health`
+- `GET /api/diagnostics/export`：导出脱敏诊断 JSON，包含版本、状态和最近日志，不包含 auth、RT、device token 或 Bearer token 明文。
+- `GET /api/codex/status`
+- `GET /api/auto-switch/status`
+- `POST /api/auto-switch/configure`
+- `GET /api/current-auth`
+- `POST /api/apply-auth`
+- `POST /api/usage/preview`
+
+云端 Worker API：
+
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `POST /api/auth/logout`

@@ -1235,6 +1235,17 @@ namespace CodexPlusLocalHelper
                 return true;
             }
 
+            if (request.HttpMethod == "GET" && path == "/api/diagnostics/export")
+            {
+                if (!IsAllowedOrigin(request))
+                {
+                    SendJson(context.Response, 403, "{\"ok\":false,\"error\":\"来源未授权\"}");
+                    return true;
+                }
+                SendJson(context.Response, 200, DiagnosticsExportJson());
+                return true;
+            }
+
             if (request.HttpMethod == "GET" && path == "/api/codex/status")
             {
                 if (!IsAllowedOrigin(request))
@@ -2048,6 +2059,73 @@ namespace CodexPlusLocalHelper
         private static string HelperLogPath()
         {
             return Path.Combine(DockDataDir(), "helper.log");
+        }
+
+        private string DiagnosticsExportJson()
+        {
+            var lines = ReadHelperLogTail(HelperUiLogLineLimit);
+            var sb = new StringBuilder();
+            sb.Append("{");
+            sb.Append("\"ok\":true,");
+            sb.Append("\"generated_at\":\"").Append(JsonEscape(DateTime.UtcNow.ToString("o"))).Append("\",");
+            sb.Append("\"mode\":\"native-helper\",");
+            sb.Append("\"version\":\"").Append(JsonEscape(HelperVersion)).Append("\",");
+            sb.Append("\"build_date\":\"").Append(JsonEscape(HelperBuildDate)).Append("\",");
+            sb.Append("\"port\":").Append(_port.ToString(CultureInfo.InvariantCulture)).Append(",");
+            sb.Append("\"cloud_console_url\":\"").Append(JsonEscape(CloudConsoleUrl)).Append("\",");
+            sb.Append("\"helper_log_exists\":").Append(File.Exists(HelperLogPath()) ? "true" : "false").Append(",");
+            sb.Append("\"auto_switch\":").Append(RedactDiagnosticText(AutoSwitchStatusJson())).Append(",");
+            sb.Append("\"codex_proxy\":").Append(RedactDiagnosticText(CodexProxyStatusJson())).Append(",");
+            sb.Append("\"codex_status\":").Append(RedactDiagnosticText(CodexStatusJson())).Append(",");
+            sb.Append("\"recent_logs\":[");
+            for (var index = 0; index < lines.Length; index++)
+            {
+                if (index > 0) sb.Append(",");
+                sb.Append("\"").Append(JsonEscape(RedactDiagnosticText(lines[index]))).Append("\"");
+            }
+            sb.Append("],");
+            sb.Append("\"redaction\":{\"applied\":true,\"rules\":[\"auth-json\",\"bearer\",\"jwt\",\"helper-device-token\",\"oauth-query\"]}");
+            sb.Append("}");
+            return sb.ToString();
+        }
+
+        private static string[] ReadHelperLogTail(int maxLines)
+        {
+            try
+            {
+                var path = HelperLogPath();
+                if (!File.Exists(path)) return new string[0];
+                var lines = File.ReadAllLines(path, Encoding.UTF8);
+                var count = Math.Min(Math.Max(0, maxLines), lines.Length);
+                var result = new string[count];
+                Array.Copy(lines, lines.Length - count, result, 0, count);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                return new[] { "[diagnostics] helper log read failed: " + ex.GetType().Name + ": " + ex.Message };
+            }
+        }
+
+        private static string RedactDiagnosticText(string value)
+        {
+            var text = value ?? "";
+            text = Regex.Replace(
+                text,
+                "(\"(?:access_token|refresh_token|id_token|session_token|authJson|auth_json|deviceToken|device_token|token|authorization|cookie|codex_session)\"\\s*:\\s*\")([^\"]*)(\")",
+                "$1[REDACTED]$3",
+                RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, "\\bAuthorization\\s*:\\s*Bearer\\s+[A-Za-z0-9._\\-]+", "Authorization: Bearer [REDACTED]", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, "\\bBearer\\s+[A-Za-z0-9._\\-]+", "Bearer [REDACTED]", RegexOptions.IgnoreCase);
+            text = Regex.Replace(
+                text,
+                "((?:access_token|refresh_token|id_token|session_token|deviceToken|device_token|codex_session|authorization|cookie)\\s*[=:]\\s*)([^\\s,;&\"']+)",
+                "$1[REDACTED]",
+                RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, "\\bcdh_[A-Za-z0-9_\\-]{12,}\\b", "cdh_[REDACTED]", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, "\\beyJ[A-Za-z0-9_\\-]{20,}\\.[A-Za-z0-9_\\-]{20,}\\.[A-Za-z0-9_\\-]{8,}\\b", "[REDACTED_JWT]");
+            text = Regex.Replace(text, "([?&](?:code|state|token|access_token|refresh_token)=)[^\\s&]+", "$1[REDACTED]", RegexOptions.IgnoreCase);
+            return text;
         }
 
         private string CodexProxyExePath()
