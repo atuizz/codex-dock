@@ -29,32 +29,12 @@ jobs:
         working-directory: cloud-worker
         run: npm ci
 
-      - name: Build Windows Helper
-        shell: pwsh
-        run: .\native-helper\build-helper.ps1
-
-      - name: Build Cloudflare static assets
-        working-directory: cloud-worker
-        run: npm run build
-
-      - name: Run verification scripts
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          Get-ChildItem -File scripts -Filter 'verify-*' |
-            Where-Object { $_.Name -ne 'verify-production-smoke.mjs' } |
-            Sort-Object Name |
-            ForEach-Object {
-              Write-Host "Running $($_.Name)"
-              node $_.FullName
-              if ($LASTEXITCODE -ne 0) {
-                exit $LASTEXITCODE
-              }
-            }
+      - name: Run release preflight
+        run: npm run preflight
 
       - name: Upload Helper artifact
         uses: actions/upload-artifact@v4
         with:
           name: CodexDockHelper
-          path: dist/CodexDockHelper/
+          path: artifacts/build/CodexDockHelper/
           if-no-files-found: error

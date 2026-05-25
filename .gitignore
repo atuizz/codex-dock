@@ -8,5 +8,6 @@ cloud-worker/.wrangler/
 cloud-worker/node_modules/
 cloud-worker/public/
 cloud-worker/.wrangler-dry-run/
+artifacts/build/
 dist/CodexDockHelper/CodexAppServerProxy.exe
 dist/CodexPlusLocalHelper/

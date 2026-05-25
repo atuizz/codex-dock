@@ -30,21 +30,13 @@ Never commit real tokens, auth payloads, Worker secrets, device bearer tokens, o
 From the repository root:
 
 ```powershell
-cd cloud-worker
-npm ci
-cd ..
-.\native-helper\build-helper.ps1
-cd cloud-worker
-npm run build
-cd ..
-Get-ChildItem -File scripts -Filter 'verify-*' |
-  Where-Object { $_.Name -ne 'verify-production-smoke.mjs' } |
-  Sort-Object Name |
-  ForEach-Object {
-  node $_.FullName
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
+npm --prefix cloud-worker ci
+npm run preflight
 ```
+
+For a faster Worker/UI-only loop, use `npm test`. It builds Cloudflare Static Assets and runs every local `scripts/verify-*` verifier except production smoke.
+
+`npm run preflight` builds the Helper into `artifacts/build/CodexDockHelper` so local verification still works while the installed Helper is running from `dist\CodexDockHelper`. Use `npm run helper:build` when intentionally refreshing the distributable `dist` package.
 
 After a production deploy, run:
 
@@ -68,7 +60,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 ## GitHub Automation
 
 - `.github/workflows/ci.yml` runs on push, pull request, and manual dispatch.
-- CI installs Worker dependencies, builds the Windows Helper, builds Static Assets with a content-derived asset version, runs every local `scripts/verify-*` verifier except production smoke, and uploads `dist/CodexDockHelper/` as an artifact.
+- CI installs Worker dependencies, runs the root `npm run preflight` command, and uploads `artifacts/build/CodexDockHelper/` as an artifact. `preflight` builds the Windows Helper, builds Static Assets with a content-derived asset version, and runs every local `scripts/verify-*` verifier except production smoke.
 - `.github/workflows/cloudflare-deploy.yml` is manual only:
   - `preview` builds and runs `wrangler deploy --dry-run`.
   - `production` is guarded to `master` or `main`, applies remote D1 migrations, runs `wrangler deploy`, then runs `npm run smoke:production`.

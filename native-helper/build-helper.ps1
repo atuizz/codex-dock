@@ -1,6 +1,17 @@
+param(
+  [string]$OutDir = ""
+)
+
 $ErrorActionPreference = "Stop"
+
 $root = Split-Path -Parent $PSScriptRoot
-$outDir = Join-Path $root "dist\CodexDockHelper"
+$outDir = if ([string]::IsNullOrWhiteSpace($OutDir)) {
+  Join-Path $root "dist\CodexDockHelper"
+} elseif ([System.IO.Path]::IsPathRooted($OutDir)) {
+  $OutDir
+} else {
+  Join-Path $root $OutDir
+}
 $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
 $wpfRefDir = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\WPF"
 if (!(Test-Path $csc)) {
