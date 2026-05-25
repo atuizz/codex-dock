@@ -119,9 +119,9 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 - Production smoke screenshot:
   - `artifacts/verification/codex-dock-production-smoke-playwright.png`
 - Local Helper health verified against `http://127.0.0.1:18766/` with version `0.4.0`, build date `2026-05-26`, active Codex state, and `safe_to_switch: false`.
-- Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available, no Microsoft .NET Framework dialog appears, and no new `[unhandled:]` log entry is emitted.
-- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `efc6f35c-022d-4e02-acc0-7d81eb042370`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
-- Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `13E4A56841623477328B817A8381E51C50FDC97AB04C79AEF17102FF9CBED41B`.
+- Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available, no Microsoft .NET Framework dialog appears, no new `[unhandled:]` log entry is emitted, and simulated Windows `TaskbarCreated` restores the tray icon registration.
+- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `ebac3723-e6a4-4a40-be2f-8176ae331d8c`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
+- Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `20CB7636E7F712E70CE449FF20AB17CB184588237A1200A0825DAC1FD4255223`.
 - Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity.
 
 ## Commercial Quality Gates

@@ -66,7 +66,7 @@ Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲
 GitHub Actions 已提供：
 
 - `.github/workflows/ci.yml`：验证 Worker/UI 逻辑、构建 Cloudflare 静态资源、构建 Windows Helper 并上传产物。
-- `.github/workflows/cloudflare-deploy.yml`：手动触发，`preview` 做 dry-run，`production` 应用远端 D1 迁移并部署 Worker。
+- `.github/workflows/cloudflare-deploy.yml`：手动触发，`preview` 做 dry-run，`production` 应用远端 D1 迁移、部署 Worker，并执行线上 smoke。
 
 本地部署命令：
 
@@ -78,6 +78,15 @@ npx wrangler d1 execute codex-cloud-console --remote --file ./schema.sql
 npx wrangler secret put TOKEN_ENCRYPTION_KEY
 npx wrangler deploy
 ```
+
+发布后 smoke：
+
+```powershell
+cd cloud-worker
+npm run smoke:production
+```
+
+`smoke:production` 会注册一次临时云账号，验证登录/退出、额度刷新设置、设备登记、普通用户管理员拦截、账号列表不泄露 token，以及线上 Helper 下载包和本地 `dist` hash 一致。可用 `CODEX_DOCK_SMOKE_BASE_URL` 指向预览域名。
 
 已有线上库升级时，改用 `npx wrangler d1 migrations apply codex-cloud-console --remote` 应用增量迁移，避免重复执行完整 schema。
 

@@ -163,10 +163,14 @@ namespace CodexPlusLocalHelper
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern IntPtr SendMessageTimeout(IntPtr hWnd, int msg, IntPtr wParam, string lParam, int flags, int timeout, out IntPtr result);
 
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        private static extern int RegisterWindowMessage(string lpString);
+
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool DestroyIcon(IntPtr hIcon);
 
         private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);
+        private static readonly int TaskbarCreatedMessage = RegisterWindowMessage("TaskbarCreated");
         private const int WM_SETTINGCHANGE = 0x001A;
         private const int SMTO_ABORTIFHUNG = 0x0002;
 
@@ -586,6 +590,7 @@ namespace CodexPlusLocalHelper
                 StartCodexStatusMonitor();
                 StartAutoSwitchService();
                 RefreshDashboardUi();
+                EnsureTrayIcon("主窗口首次显示");
             };
         }
 
@@ -859,6 +864,7 @@ namespace CodexPlusLocalHelper
         {
             WriteLifecycleLog("主窗口收起到托盘; visible=" + Visible + ", handle=" + IsHandleCreated + ", disposing=" + Disposing);
             ResetVisibleLogBox("收起到托盘");
+            EnsureTrayIcon("收起到托盘");
             Hide();
             ShowInTaskbar = false;
             if (!_trayTipShown && _trayIcon != null)
@@ -877,12 +883,39 @@ namespace CodexPlusLocalHelper
 
         private void ShowFromTray()
         {
+            EnsureTrayIcon("托盘恢复");
             ShowInTaskbar = true;
             Show();
             WindowState = FormWindowState.Normal;
             Activate();
             WriteLifecycleLog("托盘恢复主窗口; visible=" + Visible + ", handle=" + IsHandleCreated + ", disposing=" + Disposing);
             RestoreRecentLogView("托盘恢复");
+        }
+
+        private void EnsureTrayIcon(string reason)
+        {
+            if (_applicationClosing || _trayIcon == null) return;
+            try
+            {
+                _trayIcon.Icon = _appIcon;
+                _trayIcon.ContextMenuStrip = _trayMenu;
+                _trayIcon.Visible = false;
+                _trayIcon.Visible = true;
+                WriteLifecycleLog("托盘图标已确认; reason=" + reason);
+            }
+            catch (Exception ex)
+            {
+                WriteLifecycleLog("托盘图标确认失败; reason=" + reason + "; " + ex.Message);
+            }
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            base.WndProc(ref m);
+            if (TaskbarCreatedMessage != 0 && m.Msg == TaskbarCreatedMessage)
+            {
+                EnsureTrayIcon("任务栏重建");
+            }
         }
 
         private void RefreshDashboardUi()
