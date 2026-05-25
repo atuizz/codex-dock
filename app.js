@@ -1896,6 +1896,9 @@ function renderDevice() {
     helper,
     codex,
     helperBase: helperDisplayBase(),
+    helperAuthorized: state.autoSwitchStatus.helperAuthorized || helperAuthorizedForCurrentConsole(helper),
+    userPresent: Boolean(state.user),
+    minimumHelperVersion,
     currentAuthChecking: state.currentAuthChecking,
     currentAuthMatched: Boolean(resolveCurrentAccountId()),
   });
@@ -3263,6 +3266,20 @@ async function repairHelperTray() {
   }
 }
 
+async function exportHelperDiagnostics() {
+  if (!state.helperReady || !state.helperBase) {
+    toast("Helper 未连接，无法导出诊断。");
+    return;
+  }
+  try {
+    const result = await helperClient().diagnosticsExport();
+    downloadText(`codex-dock-helper-diagnostics-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(result, null, 2));
+    toast("已导出 Helper 诊断文件。");
+  } catch (error) {
+    toast(error.message || "导出 Helper 诊断失败。");
+  }
+}
+
 async function changePassword(event) {
   event.preventDefault();
   if (!state.user) return;
@@ -3588,6 +3605,16 @@ function bindEvents() {
   $("refreshHelperBtn").addEventListener("click", checkHelper);
   $("settingsRefreshHelperBtn").addEventListener("click", checkHelper);
   $("devicePanel").addEventListener("click", (event) => {
+    const helperButton = event.target.closest("[data-helper-action]");
+    if (helperButton) {
+      const action = helperButton.dataset.helperAction;
+      if (action === "refresh") checkHelper();
+      if (action === "authorize") authorizeAutoSwitchHelper();
+      if (action === "repair-tray") repairHelperTray();
+      if (action === "open-status") openLocalStatus();
+      if (action === "export-diagnostics") exportHelperDiagnostics();
+      return;
+    }
     const button = event.target.closest("[data-codex-proxy-action]");
     if (!button) return;
     configureCodexProxy(button.dataset.codexProxyAction);

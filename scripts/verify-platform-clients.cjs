@@ -38,6 +38,10 @@ async function main() {
   await helper.health();
   assert.equal(calls.at(-1).url, "http://127.0.0.1:18766/api/health");
   assert.equal(calls.at(-1).init.cache, "no-store");
+
+  await helper.diagnosticsExport();
+  assert.equal(calls.at(-1).url, "http://127.0.0.1:18766/api/diagnostics/export");
+  assert.equal(calls.at(-1).init.cache, "no-store");
   console.log("platform-clients verification passed");
 }
 

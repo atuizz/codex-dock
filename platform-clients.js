@@ -70,6 +70,9 @@
       repairTray() {
         return request("/api/tray/repair", { method: "POST" });
       },
+      diagnosticsExport() {
+        return request("/api/diagnostics/export", { cache: "no-store" });
+      },
       currentAuth() {
         return request("/api/current-auth", { cache: "no-store" });
       },

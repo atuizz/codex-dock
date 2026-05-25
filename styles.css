@@ -1524,7 +1524,8 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
   gap: 6px;
 }
 
-.availability-diagnostic {
+.availability-diagnostic,
+.helper-diagnostic {
   display: grid;
   grid-template-columns: 0.9fr 1.2fr 1.3fr;
   gap: 1px;
@@ -1534,26 +1535,31 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
   background: var(--border-soft);
 }
 
-.availability-diagnostic > div {
+.availability-diagnostic > div,
+.helper-diagnostic > div {
   min-width: 0;
   background: #ffffff;
   padding: 12px;
 }
 
 .availability-diagnostic span,
-.availability-diagnostic strong {
+.availability-diagnostic strong,
+.helper-diagnostic span,
+.helper-diagnostic strong {
   display: block;
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.availability-diagnostic span {
+.availability-diagnostic span,
+.helper-diagnostic span {
   color: var(--text-secondary);
   font-size: 11px;
   line-height: 1.35;
 }
 
-.availability-diagnostic strong {
+.availability-diagnostic strong,
+.helper-diagnostic strong {
   margin-top: 4px;
   color: var(--text-primary);
   font-size: 13px;
@@ -1561,17 +1567,20 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
   line-height: 1.45;
 }
 
-.availability-diagnostic.ok {
+.availability-diagnostic.ok,
+.helper-diagnostic.ok {
   border-color: rgba(20, 181, 141, 0.35);
   background: rgba(20, 181, 141, 0.18);
 }
 
-.availability-diagnostic.warn {
+.availability-diagnostic.warn,
+.helper-diagnostic.warn {
   border-color: rgba(196, 124, 40, 0.35);
   background: rgba(196, 124, 40, 0.18);
 }
 
-.availability-diagnostic.bad {
+.availability-diagnostic.bad,
+.helper-diagnostic.bad {
   border-color: rgba(198, 66, 66, 0.34);
   background: rgba(198, 66, 66, 0.16);
 }
@@ -1593,6 +1602,18 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
 .audit-list {
   display: grid;
   gap: 0;
+}
+
+.helper-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 6px;
+}
+
+.helper-action-row button {
+  min-height: 34px;
+  flex: 1 1 118px;
 }
 
 .signal-grid {
@@ -3310,6 +3331,7 @@ label span {
   .quota-summary,
   .optional-grid,
   .availability-diagnostic,
+  .helper-diagnostic,
   .signal-grid,
   .detail-edit-grid {
     grid-template-columns: 1fr;
