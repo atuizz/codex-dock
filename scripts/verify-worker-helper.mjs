@@ -270,6 +270,14 @@ function request(path, body, headers = {}) {
   });
 }
 
+function jsonRequest(method, path, body, headers = {}) {
+  return new Request(`https://codex.example.test${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", ...headers },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 function authHeaders(token) {
   return { Authorization: `Bearer ${token}` };
 }
@@ -500,6 +508,28 @@ assert.ok(new Date(switchedAccount.last_switch_at).getTime() > 0);
 assert.equal(audits.at(-1).action, "auto-switch-helper");
 assert.equal(audits.at(-1).result, "switched");
 assert.equal(audits.at(-1).accountId, switchAccountId);
+
+const revoked = await handleDeviceRoutes(jsonRequest("DELETE", "/api/devices/auto-switch-token", {
+  deviceKey: "desktop-1",
+}), env, user, "/api/devices/auto-switch-token", { writeAudit });
+assert.equal(revoked.status, 200);
+assert.equal((await revoked.json()).ok, true);
+assert.equal(audits.at(-1).action, "helper-token");
+assert.equal(audits.at(-1).result, "revoked");
+assert.equal(audits.at(-1).deviceKey, "desktop-1");
+assert.doesNotMatch(JSON.stringify(audits.at(-1)), /cdh_|token_hash|replacementDeviceToken/i);
+assert.equal(await requireHelperDevice(new Request("https://codex.example.test/api/helper/auto-switch/config", {
+  headers: authHeaders(token),
+}), env), null);
+assert.equal(await requireHelperDevice(new Request("https://codex.example.test/api/helper/auto-switch/config", {
+  headers: authHeaders(configBody.replacementDeviceToken),
+}), env), null);
+const revokedHelper = await handleHelperAutoSwitch(new Request("https://codex.example.test/api/helper/auto-switch/config", {
+  headers: authHeaders(configBody.replacementDeviceToken),
+}), env, "/api/helper/auto-switch/config", { requestId: "req-revoked" }, { writeAudit });
+assert.equal(revokedHelper.status, 401);
+assert.equal((await revokedHelper.json()).error, "Helper 授权已失效，请重新授权");
+assert.ok(env.DB.deviceTokens.filter((item) => item.device_key === "desktop-1").every((item) => item.status === "revoked" && item.revoked_at));
 
 const expiredToken = await insertDeviceToken(env, "user-1", "desktop-expired", "Dock Helper", new Date(Date.now() - 1000).toISOString());
 env.DB.devices.push({
