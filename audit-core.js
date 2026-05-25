@@ -4,14 +4,19 @@
     const result = String(item?.result || "");
     const normalizedResult = result.toLowerCase();
     if (action.includes("auto-switch")) {
+      if (action.includes("auto-switch-check") && normalizedResult === "error") return "额度检查异常";
       if (normalizedResult === "switched") return "自动切换成功";
       if (normalizedResult === "payload-issued") return "已下发候选账号";
       if (normalizedResult === "no-candidate") return "自动切换无候选";
-      if (normalizedResult === "deferred-active-task") return "自动切换等待空闲";
+      if (normalizedResult === "deferred-active-task" || normalizedResult === "deferred-active-turn") return "正在保护当前任务";
+      if (normalizedResult === "boundary-confirmed") return "安全边界已确认";
       if (normalizedResult.startsWith("trigger:")) return "自动切换已触发";
       if (/fail|失败|error/.test(normalizedResult)) return "自动切换失败";
       return "自动切换检查";
     }
+    if (action === "usage-refresh-batch") return /fail|失败|error|failed:[1-9]/i.test(result) ? "批量额度刷新有失败" : "批量额度刷新完成";
+    if (action === "usage-refresh") return /fail|失败|error/i.test(result) ? "额度刷新失败" : "额度已刷新";
+    if (action === "usage-refresh-settings") return "额度刷新方式已更新";
     if (action.includes("switch")) return /fail|失败|error/i.test(result) ? "切换失败" : "账号已切换";
     if (action.includes("import") || /added|updated|failed/i.test(result)) return "账号已更新";
     if (action.includes("usage")) return "额度已刷新";
@@ -22,6 +27,7 @@
     const result = String(item?.result || "");
     const metadata = item?.metadata || {};
     const trigger = auditTriggerText(item, metadata);
+    if (item?.action === "auto-switch-check" && result.toLowerCase() === "error" && metadata.error) return metadata.error;
     if (metadata.reason && metadata.target) return `${metadata.reason} -> ${metadata.target}`;
     if (metadata.reason && metadata.detail) return `${metadata.reason} · ${metadata.detail}`;
     if (metadata.summary) return [trigger ? `触发：${trigger}` : "", metadata.summary].filter(Boolean).join(" · ");
@@ -30,6 +36,21 @@
       return [trigger ? `触发：${trigger}` : "", candidateText].filter(Boolean).join(" · ");
     }
     if (trigger) return `触发：${trigger}`;
+    if (item?.action === "usage-refresh") {
+      const sources = {
+        helper: "本机 Helper",
+        "cloud-worker": "云端 Worker",
+        "auto-helper": "自动选择 / 本机 Helper",
+        "auto-cloud-fallback": "自动选择 / 云端回退",
+      };
+      const source = sources[metadata.source] || metadata.source || "";
+      return [source ? `执行通道：${source}` : "", metadata.error || ""].filter(Boolean).join(" · ") || result || "已完成";
+    }
+    if (item?.action === "usage-refresh-batch") {
+      const matchBatch = result.match(/ok:(\d+),failed:(\d+)/i);
+      return matchBatch ? `成功 ${matchBatch[1]}，失败 ${matchBatch[2]}` : (result || "已完成");
+    }
+    if (item?.action === "usage-refresh-settings") return `执行通道：${usageRefreshModeLabel(result || "helper")}`;
     if (metadata.trigger && metadata.reason) return `${metadata.trigger} · ${metadata.reason}`;
     const match = result.match(/added:(\d+),updated:(\d+),failed:(\d+)/i);
     if (match) {
@@ -46,6 +67,14 @@
     const match = result.match(/^trigger:(.+)$/i);
     if (match) return match[1].trim();
     return "";
+  }
+
+  function usageRefreshModeLabel(mode) {
+    const normalized = String(mode || "").toLowerCase();
+    if (normalized === "cloud") return "云端 Worker";
+    if (normalized === "auto") return "自动选择";
+    if (normalized === "manual") return "仅手动刷新";
+    return "本机 Helper";
   }
 
   function formatCandidateDiagnostics(candidates) {
@@ -74,6 +103,7 @@
     auditDescription,
     auditTriggerText,
     formatCandidateDiagnostics,
+    usageRefreshModeLabel,
   });
 
   root.CodexAuditCore = api;

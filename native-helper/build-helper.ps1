@@ -15,10 +15,52 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 $exe = Join-Path $outDir "CodexDockHelper.exe"
 $source = Join-Path $PSScriptRoot "CodexPlusLocalHelper.cs"
+$iconPath = Join-Path $outDir "CodexDockHelper.ico"
+
+Add-Type -AssemblyName System.Drawing
+$bitmap = [System.Drawing.Bitmap]::new(64, 64)
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+$graphics.Clear([System.Drawing.Color]::Transparent)
+$top = [System.Drawing.Drawing2D.GraphicsPath]::new()
+$top.AddArc(11, 13, 8, 8, 180, 90)
+$top.AddArc(45, 13, 8, 8, 270, 90)
+$top.AddArc(45, 21, 8, 8, 0, 90)
+$top.AddArc(11, 21, 8, 8, 90, 90)
+$top.CloseFigure()
+$bottom = [System.Drawing.Drawing2D.GraphicsPath]::new()
+$bottom.AddArc(11, 35, 8, 8, 180, 90)
+$bottom.AddArc(45, 35, 8, 8, 270, 90)
+$bottom.AddArc(45, 43, 8, 8, 0, 90)
+$bottom.AddArc(11, 43, 8, 8, 90, 90)
+$bottom.CloseFigure()
+$stroke = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(35, 44, 51), 4)
+$stroke.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+$dot = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(20, 181, 141))
+$graphics.DrawPath($stroke, $top)
+$graphics.DrawPath($stroke, $bottom)
+$graphics.FillEllipse($dot, 18, 19, 5, 5)
+$graphics.FillEllipse($dot, 18, 41, 5, 5)
+$hIcon = $bitmap.GetHicon()
+$icon = [System.Drawing.Icon]::FromHandle($hIcon)
+$stream = [System.IO.File]::Open($iconPath, [System.IO.FileMode]::Create)
+try {
+  $icon.Save($stream)
+} finally {
+  $stream.Dispose()
+  $dot.Dispose()
+  $stroke.Dispose()
+  $bottom.Dispose()
+  $top.Dispose()
+  $graphics.Dispose()
+  $bitmap.Dispose()
+}
+
 $args = @(
   "/nologo",
   "/target:winexe",
   "/optimize+",
+  "/win32icon:$iconPath",
   "/reference:System.dll",
   "/reference:System.Core.dll",
   "/reference:System.Drawing.dll",

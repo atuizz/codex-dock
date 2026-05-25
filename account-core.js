@@ -132,6 +132,7 @@
       five_hour: null,
       one_week: null,
       credits: null,
+      refresh_source: "",
       status: "未刷新",
       error: "",
     };
@@ -150,6 +151,7 @@
       five_hour: normalizeUsageWindow(raw.five_hour || raw.fiveHour || raw.short_window || raw.shortWindow),
       one_week: normalizeUsageWindow(raw.one_week || raw.oneWeek || raw.long_window || raw.longWindow),
       credits: raw.credits || null,
+      refresh_source: raw.refresh_source || raw.refreshSource || "",
       status: error ? "刷新失败" : (raw.status || (refreshedAt ? "已刷新" : "未刷新")),
       error,
     };

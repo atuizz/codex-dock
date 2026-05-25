@@ -55,7 +55,7 @@ export function normalizeAutoSwitchSettings(input = {}, base = DEFAULT_AUTO_SWIT
     avoidLow7d: boolValue(next.avoidLow7d, DEFAULT_AUTO_SWITCH_SETTINGS.avoidLow7d),
     cooldownMinutes: clampNumber(next.cooldownMinutes, DEFAULT_AUTO_SWITCH_SETTINGS.cooldownMinutes, 0, 240),
     globalCooldownSeconds: clampNumber(next.globalCooldownSeconds, DEFAULT_AUTO_SWITCH_SETTINGS.globalCooldownSeconds, 30, 1800),
-    onlyWhenIdle: boolValue(next.onlyWhenIdle, DEFAULT_AUTO_SWITCH_SETTINGS.onlyWhenIdle),
+    onlyWhenIdle: true,
     idleSeconds: clampNumber(next.idleSeconds, DEFAULT_AUTO_SWITCH_SETTINGS.idleSeconds, 10, 1800),
     activityQuietSeconds: clampNumber(next.activityQuietSeconds, DEFAULT_AUTO_SWITCH_SETTINGS.activityQuietSeconds, 30, 1800),
     cpuQuietSeconds: clampNumber(next.cpuQuietSeconds, DEFAULT_AUTO_SWITCH_SETTINGS.cpuQuietSeconds, 15, 600),

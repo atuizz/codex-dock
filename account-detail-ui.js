@@ -41,11 +41,11 @@
       return `
         <div class="auth-acquire-panel compact rt-update-panel">
           <div>
-            <strong>导入该账号的 RT auth</strong>
-            <span>这个账号当前只有 AT，不能用于 Codex。请只导入这个邮箱对应的 Codex auth.json 或 OAuth 授权结果；不要用当前本机 auth 覆盖它。</span>
+            <strong>通过 OAuth 登录补 RT</strong>
+            <span>这个账号当前只有 AT，不能用于 Codex。请用这个邮箱打开 OAuth 网页登录，Helper 会自动接收回调并导入 RT；不要用当前本机 auth 覆盖它。</span>
           </div>
           <div class="auth-acquire-actions">
-            <button type="button" data-auth-action="open-import-file">导入 RT auth</button>
+            <button type="button" data-auth-action="open-import-oauth-login">补 RT</button>
           </div>
         </div>
       `;

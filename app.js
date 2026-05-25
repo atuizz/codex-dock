@@ -12,6 +12,7 @@ const oauthClientId = "app_EMoamEEZ73f0CkXaXp7hrann";
 const oauthRedirectUri = "http://localhost:1455/auth/callback";
 const oauthPkceStorage = "codex-dock-oauth-pkce-v1";
 const oauthPkceHistoryStorage = "codex-dock-oauth-pkce-history-v1";
+const oauthFlowDurationMs = 3 * 60 * 1000;
 const { auditTitle, auditDescription } = window.CodexAuditCore;
 const {
   escapeHtml,
@@ -91,6 +92,17 @@ const defaultAutoSwitchSettings = {
   cpuBusyPercent: 3,
 };
 
+const defaultUsageRefreshSettings = {
+  usageRefreshMode: "helper",
+  cloudUsageRefreshEnabled: false,
+  helperFallbackToCloud: false,
+  usageRefreshConcurrency: 1,
+  usageRefreshIntervalMs: 1500,
+  lastUsageRefreshSource: "",
+  lastUsageRefreshAt: "",
+};
+const minimumHelperVersion = "0.4.0";
+
 const state = {
   user: null,
   authResolved: false,
@@ -118,6 +130,7 @@ const state = {
   selectedBulkIds: new Set(),
   smartSwitchSettings: { ...defaultSmartSwitchSettings },
   autoSwitchSettings: { ...defaultAutoSwitchSettings },
+  usageRefreshSettings: { ...defaultUsageRefreshSettings },
   autoSwitchStatus: {
     helperAuthorized: false,
     lastCheck: "",
@@ -158,6 +171,17 @@ const state = {
   oauthState: "",
   oauthCallbackPoll: null,
   lastOauthCallbackUrl: "",
+  oauthFlowTimer: null,
+  oauthFlow: {
+    active: false,
+    phase: "idle",
+    state: "",
+    authUrl: "",
+    startedAt: 0,
+    expiresAt: 0,
+    error: "",
+    summary: "",
+  },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -288,6 +312,16 @@ function helperClient() {
   return createHelperClient(state.helperBase);
 }
 
+function helperAuthorizedForCurrentConsole(helper = state.helperInfo) {
+  const autoSwitch = helper?.auto_switch || helper?.autoSwitch || {};
+  if (!autoSwitch.authorized || !autoSwitch.cloud_base) return false;
+  try {
+    return new URL(autoSwitch.cloud_base).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
 function toast(message) {
   const el = $("toast");
   el.textContent = message;
@@ -304,6 +338,189 @@ function showImportResult(result) {
   el.hidden = false;
   el.innerHTML = importUi.renderImportResult(result);
   renderImportPreview();
+}
+
+function formatCountdown(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function oauthFlowView(flow = state.oauthFlow) {
+  const now = Date.now();
+  const remaining = Math.max(0, Number(flow.expiresAt || 0) - now);
+  const elapsed = Math.max(0, now - Number(flow.startedAt || now));
+  const total = Math.max(1, Number(flow.expiresAt || 0) - Number(flow.startedAt || 0));
+  const waitProgress = Math.min(42, Math.max(4, Math.round((elapsed / total) * 42)));
+  const phase = flow.phase || "idle";
+  const views = {
+    opening: {
+      iconClass: "busy",
+      title: "正在打开授权页面",
+      detail: "请在新打开的浏览器页面完成登录授权。",
+      hint: "本页正在监听授权回调。",
+      busy: true,
+      progress: 8,
+      showCountdown: true,
+      showCancel: true,
+      showRetry: false,
+      showDone: false,
+    },
+    waiting: {
+      iconClass: "busy",
+      title: "等待授权中",
+      detail: "请在新打开的浏览器页面完成登录。授权完成后，本页会自动接收回调。",
+      hint: "完成后会自动换取 RT 并导入账号。",
+      busy: true,
+      progress: waitProgress,
+      showCountdown: true,
+      showCancel: true,
+      showRetry: true,
+      showDone: false,
+    },
+    received: {
+      iconClass: "busy",
+      title: "已收到授权回调",
+      detail: "正在校验授权结果。",
+      hint: "请保持本页打开。",
+      busy: true,
+      progress: 55,
+      showCountdown: true,
+      showCancel: false,
+      showRetry: false,
+      showDone: false,
+    },
+    exchanging: {
+      iconClass: "busy",
+      title: "正在换取 RT",
+      detail: "已收到 OAuth code，正在换取可用于 Codex 的 refresh token。",
+      hint: "这一步通常只需要几秒。",
+      busy: true,
+      progress: 72,
+      showCountdown: false,
+      showCancel: false,
+      showRetry: false,
+      showDone: false,
+    },
+    importing: {
+      iconClass: "busy",
+      title: "正在导入账号",
+      detail: "RT 已获取，正在写入账号池并同步云端。",
+      hint: "导入完成后会自动刷新账号状态。",
+      busy: true,
+      progress: 90,
+      showCountdown: false,
+      showCancel: false,
+      showRetry: false,
+      showDone: false,
+    },
+    success: {
+      iconClass: "success",
+      title: "导入成功",
+      detail: flow.summary || "账号已导入账号池，可用于 Codex。",
+      hint: "可以继续导入其它账号，或关闭导入窗口。",
+      busy: false,
+      progress: 100,
+      showCountdown: false,
+      showCancel: false,
+      showRetry: false,
+      showDone: true,
+    },
+    expired: {
+      iconClass: "warning",
+      title: "授权等待已过期",
+      detail: "本次授权监听已超过有效时间。旧回调可能无法再使用，请重新打开授权页面。",
+      hint: "倒计时按真实时间计算，页面后台或系统卡顿不会延长有效期。",
+      busy: false,
+      progress: 100,
+      showCountdown: false,
+      showCancel: true,
+      showRetry: true,
+      showDone: false,
+    },
+    error: {
+      iconClass: "error",
+      title: "导入失败",
+      detail: flow.error || "授权或导入过程中出现错误。",
+      hint: "请重新打开授权页面，不要复用旧回调。",
+      busy: false,
+      progress: 100,
+      showCountdown: false,
+      showCancel: true,
+      showRetry: true,
+      showDone: false,
+    },
+  };
+  return { remaining, ...(views[phase] || views.waiting) };
+}
+
+function renderOauthFlow() {
+  const overlay = $("oauthFlowOverlay");
+  if (!overlay) return;
+  const flow = state.oauthFlow || {};
+  overlay.hidden = !flow.active;
+  if (!flow.active) return;
+  const view = oauthFlowView(flow);
+  $("oauthFlowIcon").textContent = "";
+  $("oauthFlowIcon").className = `oauth-flow-icon ${view.iconClass || ""}`.trim();
+  $("oauthFlowTitle").textContent = view.title;
+  $("oauthFlowDetail").textContent = view.detail;
+  $("oauthFlowCountdown").textContent = view.showCountdown ? `剩余 ${formatCountdown(view.remaining)}` : "";
+  $("oauthFlowHint").textContent = view.hint;
+  $("oauthFlowMeter").style.width = `${view.progress}%`;
+  $("oauthFlowCancelBtn").hidden = !view.showCancel;
+  $("oauthFlowRetryBtn").hidden = !view.showRetry;
+  $("oauthFlowDoneBtn").hidden = !view.showDone;
+}
+
+function stopOauthFlowTimer() {
+  if (state.oauthFlowTimer) {
+    clearInterval(state.oauthFlowTimer);
+    state.oauthFlowTimer = null;
+  }
+}
+
+function setOauthFlow(patch = {}) {
+  state.oauthFlow = { ...state.oauthFlow, ...patch };
+  renderOauthFlow();
+  const phase = state.oauthFlow.phase;
+  if (!state.oauthFlow.active || ["success", "error", "expired"].includes(phase)) stopOauthFlowTimer();
+}
+
+function startOauthFlowTimer() {
+  stopOauthFlowTimer();
+  state.oauthFlowTimer = setInterval(() => {
+    const flow = state.oauthFlow;
+    if (!flow.active) {
+      stopOauthFlowTimer();
+      return;
+    }
+    if (["opening", "waiting"].includes(flow.phase) && Date.now() >= Number(flow.expiresAt || 0)) {
+      stopOauthCallbackPolling();
+      setOauthFlow({ phase: "expired" });
+      return;
+    }
+    renderOauthFlow();
+  }, 1000);
+  renderOauthFlow();
+}
+
+function cancelOauthFlow(options = {}) {
+  stopOauthCallbackPolling();
+  stopOauthFlowTimer();
+  state.oauthFlow = {
+    active: false,
+    phase: "idle",
+    state: "",
+    authUrl: "",
+    startedAt: 0,
+    expiresAt: 0,
+    error: "",
+    summary: "",
+  };
+  renderOauthFlow();
+  if (!options.silent) toast("已取消 OAuth 导入。");
 }
 
 function randomBase64Url(byteLength = 32) {
@@ -430,7 +647,48 @@ async function currentOauthAuthorizeUrl(options = {}) {
   return refreshOauthAuthorizeUrl();
 }
 
+async function beginOauthAuthorization(options = {}) {
+  setImportMode("oauth");
+  const authUrl = await currentOauthAuthorizeUrl({ fresh: true });
+  const pkce = oauthPkce();
+  const now = Date.now();
+  setOauthFlow({
+    active: true,
+    phase: options.copyOnly ? "waiting" : "opening",
+    state: pkce.state || state.oauthState || "",
+    authUrl,
+    startedAt: now,
+    expiresAt: now + oauthFlowDurationMs,
+    error: "",
+    summary: "",
+  });
+  startOauthFlowTimer();
+  startOauthCallbackPolling();
+  if (options.copyOnly) {
+    await navigator.clipboard.writeText(authUrl);
+    toast("授权链接已复制，本页正在等待回调。");
+    return;
+  }
+  const popup = window.open(authUrl, "_blank");
+  if (!popup) {
+    setOauthFlow({
+      phase: "error",
+      error: "浏览器拦截了授权页面弹窗。请允许弹窗后重新打开授权页面，或复制授权链接手动打开。",
+    });
+    return;
+  }
+  setOauthFlow({ phase: "waiting" });
+  toast(state.helperReady ? "授权页面已打开，本页正在等待回调。" : "授权页面已打开；Helper 未连接时可能需要手动粘贴回调。");
+}
+
 async function handleAuthAcquireAction(action) {
+  if (action === "open-import-oauth-login") {
+    closeModal("accountDetailModal");
+    setDrawer(true);
+    setImportMode("oauth");
+    await beginOauthAuthorization();
+    return;
+  }
   if (action === "open-import-session" || action === "open-import-oauth" || action === "open-import-file") {
     closeModal("accountDetailModal");
     setDrawer(true);
@@ -458,15 +716,11 @@ async function handleAuthAcquireAction(action) {
     return;
   }
   if (action === "open-oauth-login") {
-    window.open(await currentOauthAuthorizeUrl({ fresh: true }), "_blank");
-    startOauthCallbackPolling();
-    toast(state.helperReady ? "授权完成后会自动返回，无需复制链接。" : "Helper 未连接时需要手动粘贴回调链接。");
+    await beginOauthAuthorization();
     return;
   }
   if (action === "copy-oauth-url") {
-    await navigator.clipboard.writeText(await currentOauthAuthorizeUrl({ fresh: true }));
-    startOauthCallbackPolling();
-    toast("OAuth 授权链接已复制。");
+    await beginOauthAuthorization({ copyOnly: true });
     return;
   }
   if (action === "sync-local-auth") {
@@ -519,6 +773,7 @@ function setImportMode(mode) {
 }
 
 function clearImportWorkflow() {
+  cancelOauthFlow({ silent: true });
   state.pendingImportItems = [];
   state.importCompleted = false;
   $("sessionInput").value = "";
@@ -581,6 +836,7 @@ function renderToolbarState(filtered = visibleAccounts()) {
     filtered,
     selectedBulkIds: state.selectedBulkIds,
     helperReady: state.helperReady,
+    canRefreshUsage: canRefreshAccountUsage,
   });
   $("bulkCount").textContent = view.bulkText;
   $("bulkBar").classList.toggle("has-selection", view.hasSelection);
@@ -689,6 +945,7 @@ async function parseOauthCallbackToPreview(rawCallback = null) {
       if (!pkce.verifier) throw new Error("OAuth code 已收到，但找不到对应授权链接的 PKCE 记录。请点“打开授权页面”重新授权，不要复用旧回调。");
       let token;
       try {
+        if (state.oauthFlow.active) setOauthFlow({ phase: "exchanging" });
         token = await exchangeOauthCode(code, pkce);
       } catch (error) {
         const detail = String(error.message || "换取 token 失败");
@@ -706,6 +963,9 @@ async function parseOauthCallbackToPreview(rawCallback = null) {
     if (!accessToken && !idToken && !refreshToken) {
       throw new Error(usedOauthCode ? "OAuth code 已收到，但没有换到 token，请重新打开授权页面。" : "回调链接里没有 token 或 code。");
     }
+    if (state.oauthFlow.active && !refreshToken) {
+      throw new Error("授权已返回 token，但没有 refresh_token，不能用于 Codex。请重新打开授权页面。");
+    }
     const authJson = {
       auth_mode: "chatgpt",
       OPENAI_API_KEY: null,
@@ -721,6 +981,7 @@ async function parseOauthCallbackToPreview(rawCallback = null) {
     state.importCompleted = false;
     $("importResult").hidden = true;
     renderImportPreview();
+    return true;
   } catch (error) {
     state.pendingImportItems = [{
       id: crypto.randomUUID(),
@@ -732,7 +993,31 @@ async function parseOauthCallbackToPreview(rawCallback = null) {
     }];
     state.importCompleted = false;
     renderImportPreview();
+    if (state.oauthFlow.active) setOauthFlow({ phase: "error", error: error.message || "回调解析失败" });
+    return false;
   }
+}
+
+async function handleOauthCallbackUrl(url, options = {}) {
+  if ($("oauthCallbackInput")) $("oauthCallbackInput").value = url;
+  if (state.oauthFlow.active) setOauthFlow({ phase: "received" });
+  const ok = await parseOauthCallbackToPreview(url);
+  if (!ok) return false;
+  toast("已自动接收 OAuth 回调。");
+  if (options.autoImport) {
+    if (state.oauthFlow.active) setOauthFlow({ phase: "importing" });
+    try {
+      const result = await performPendingImport({ throwOnError: true, source: "oauth" });
+      if (result && state.oauthFlow.active) {
+        const summary = `新增 ${result.added || 0} · 更新 ${result.updated || 0} · 失败 ${result.failed || 0}`;
+        setOauthFlow({ phase: "success", summary });
+      }
+    } catch (error) {
+      if (state.oauthFlow.active) setOauthFlow({ phase: "error", error: error.message || "导入失败" });
+      return false;
+    }
+  }
+  return true;
 }
 
 function stopOauthCallbackPolling() {
@@ -753,36 +1038,39 @@ async function latestOauthCallbackAny() {
 
 function startOauthCallbackPolling() {
   stopOauthCallbackPolling();
-  const pkce = oauthPkce();
-  const startedAt = Date.now();
+  const flow = state.oauthFlow || {};
+  const stateValue = flow.state || state.oauthState || oauthPkce().state || "";
+  const startedAt = Number(flow.startedAt || Date.now());
+  const expiresAt = Number(flow.expiresAt || startedAt + oauthFlowDurationMs);
   state.oauthCallbackPoll = setInterval(async () => {
     if (!state.helperReady || !state.helperBase) return;
-    if (Date.now() - startedAt > 3 * 60 * 1000) {
+    if (Date.now() >= expiresAt) {
       stopOauthCallbackPolling();
-      toast("未检测到 OAuth 回调，可手动粘贴回调链接解析。");
+      if (state.oauthFlow.active && ["opening", "waiting"].includes(state.oauthFlow.phase)) {
+        setOauthFlow({ phase: "expired" });
+      } else {
+        toast("未检测到 OAuth 回调，可手动粘贴回调链接解析。");
+      }
       return;
     }
     try {
-      const result = await helperClient().oauthCallbackLatest(pkce.state || state.oauthState || "");
+      const result = await helperClient().oauthCallbackLatest(stateValue);
       if (result?.pending) {
         const latest = await latestOauthCallbackAny();
         const receivedAt = latest?.receivedAt ? new Date(latest.receivedAt).getTime() : 0;
         if (latest && !latest.pending && latest.url && receivedAt >= startedAt - 3000) {
-          if ($("oauthCallbackInput")) $("oauthCallbackInput").value = latest.url;
           stopOauthCallbackPolling();
-          await parseOauthCallbackToPreview(latest.url);
-          toast("已自动接收 OAuth 回调。");
+          await handleOauthCallbackUrl(latest.url, { autoImport: true });
         }
         return;
       }
       stopOauthCallbackPolling();
       if (result.error) {
+        setOauthFlow({ phase: "error", error: `OAuth 授权失败：${result.error}` });
         toast(`OAuth 授权失败：${result.error}`);
         return;
       }
-      if (result.url && $("oauthCallbackInput")) $("oauthCallbackInput").value = result.url;
-      await parseOauthCallbackToPreview(result.url || `?code=${encodeURIComponent(result.code || "")}&state=${encodeURIComponent(result.state || "")}`);
-      toast("已自动接收 OAuth 回调。");
+      await handleOauthCallbackUrl(result.url || `?code=${encodeURIComponent(result.code || "")}&state=${encodeURIComponent(result.state || "")}`, { autoImport: true });
     } catch {
       stopOauthCallbackPolling();
     }
@@ -800,9 +1088,12 @@ async function handleOauthCallbackMessage(event) {
   if (state.lastOauthCallbackUrl === data.url) return;
   state.lastOauthCallbackUrl = data.url;
   stopOauthCallbackPolling();
-  if ($("oauthCallbackInput")) $("oauthCallbackInput").value = data.url;
-  await parseOauthCallbackToPreview(data.url);
-  toast("已自动接收 OAuth 回调。");
+  try {
+    event.source?.postMessage?.({ type: "codex-dock-oauth-received" }, event.origin);
+  } catch {
+    // Best-effort acknowledgement so the callback tab can close itself.
+  }
+  await handleOauthCallbackUrl(data.url, { autoImport: true });
 }
 
 async function parseImportFilesToPreview(fileList) {
@@ -1002,6 +1293,7 @@ function loadLocalStore() {
     state.accountSort = store.accountSort || "updated";
     state.smartSwitchSettings = { ...defaultSmartSwitchSettings, ...(store.smartSwitchSettings || {}) };
     state.autoSwitchSettings = { ...defaultAutoSwitchSettings, ...(store.autoSwitchSettings || {}) };
+    state.usageRefreshSettings = { ...defaultUsageRefreshSettings, ...(store.usageRefreshSettings || {}) };
     state.selectedBulkIds = new Set(Array.isArray(store.selectedBulkIds) ? store.selectedBulkIds : []);
     if (migrated) {
       saveLocalStore();
@@ -1047,6 +1339,7 @@ function saveLocalStore() {
     accountSort: state.accountSort,
     smartSwitchSettings: state.smartSwitchSettings,
     autoSwitchSettings: state.autoSwitchSettings,
+    usageRefreshSettings: state.usageRefreshSettings,
     selectedBulkIds: [...state.selectedBulkIds],
     accounts: state.localAccounts.map(accountForStorage),
   }));
@@ -1064,6 +1357,15 @@ function setSyncMode(mode) {
 
 function cloudBackupEnabled() {
   return Boolean(state.user && syncMode() !== "local-only");
+}
+
+function canRefreshAccountUsage(account) {
+  const settings = state.usageRefreshSettings || defaultUsageRefreshSettings;
+  const cloudAvailable = Boolean(state.user && account?.cloudId && settings.cloudUsageRefreshEnabled);
+  if (settings.usageRefreshMode === "helper") return state.helperReady;
+  if (settings.usageRefreshMode === "cloud") return cloudAvailable;
+  if (settings.usageRefreshMode === "auto") return state.helperReady || Boolean(settings.helperFallbackToCloud && cloudAvailable);
+  return state.helperReady || cloudAvailable;
 }
 
 function readMigratedLocalStorage(currentKey, previousKey) {
@@ -1520,6 +1822,7 @@ function renderAccounts() {
     selectedBulkIds: state.selectedBulkIds,
     userPresent: Boolean(state.user),
     helperReady: state.helperReady,
+    canRefreshUsage: canRefreshAccountUsage,
     operationActive: state.operationProgress.active,
   });
   $("accountGrid").className = rendered.className;
@@ -1564,8 +1867,24 @@ async function saveSelectedDetails() {
   toast("账号信息已保存。");
 }
 
+function auditMatchesAccount(item, account) {
+  if (!item || !account) return false;
+  if (String(item.action || "").toLowerCase() === "auto-switch-check") return false;
+  const auditAccountId = String(item.accountId || item.account_id || "").trim();
+  if (auditAccountId && account.cloudId && auditAccountId === account.cloudId) return true;
+  const metadata = item.metadata || {};
+  const target = String(metadata.target || metadata.account || metadata.email || "").trim().toLowerCase();
+  if (!auditAccountId && target) {
+    return target === String(account.email || "").trim().toLowerCase()
+      || target === String(account.name || "").trim().toLowerCase();
+  }
+  return false;
+}
+
 function renderAudit() {
-  $("auditList").innerHTML = panelsUi.renderAudit(state.audit);
+  const account = selectedAccount();
+  const audit = account ? state.audit.filter((item) => auditMatchesAccount(item, account)) : state.audit;
+  $("auditList").innerHTML = panelsUi.renderAudit(audit);
 }
 
 function renderDevice() {
@@ -1599,11 +1918,21 @@ function renderSettings() {
   const codex = state.codexStatus || {};
   $("settingsAccountState").innerHTML = settingsUi.renderAccountState({ user: state.user });
   $("changePasswordForm").hidden = !state.user;
-  $("settingsHelperState").innerHTML = settingsUi.renderHelperState({ helperReady: state.helperReady, codex });
+  $("settingsHelperState").innerHTML = settingsUi.renderHelperState({
+    helperReady: state.helperReady,
+    helper: state.helperInfo || {},
+    codex,
+    minimumHelperVersion,
+  });
   $("backupCloudState").innerHTML = settingsUi.renderBackupCloudState({
     user: state.user,
     localAccountCount: state.localAccounts.length,
     cloudBackupEnabled: cloudBackupEnabled(),
+  });
+  $("usageRefreshState").innerHTML = settingsUi.renderUsageRefreshSettings({
+    user: state.user,
+    helperReady: state.helperReady,
+    usageSettings: state.usageRefreshSettings,
   });
   renderSmartSwitchSettings();
 }
@@ -1639,6 +1968,7 @@ function renderAdmin() {
   $("adminSummary").innerHTML = rendered.summaryHtml;
   $("adminUsers").innerHTML = rendered.usersHtml;
   $("adminSelectAllBtn").textContent = rendered.selectAllLabel;
+  $("adminDevices").innerHTML = rendered.devicesHtml;
   $("adminAudit").innerHTML = rendered.auditHtml;
 }
 
@@ -1658,7 +1988,7 @@ async function checkHelper() {
         state.helperInfo = result;
         state.codexProxy = result.codex_proxy || result.codexProxy || null;
         state.codexStatus = result.codex_status || result.codexStatus || null;
-        state.autoSwitchStatus.helperAuthorized = Boolean(result.auto_switch?.authorized);
+        state.autoSwitchStatus.helperAuthorized = helperAuthorizedForCurrentConsole(result);
         state.autoSwitchStatus.lastCheck = result.auto_switch?.last_check || "";
         state.autoSwitchStatus.lastSwitch = result.auto_switch?.last_switch || "";
         state.autoSwitchStatus.lastReason = result.auto_switch?.last_reason || "";
@@ -1696,7 +2026,7 @@ async function refreshHelperRuntimeStatus() {
     state.helperInfo = result;
     state.codexProxy = result.codex_proxy || result.codexProxy || state.codexProxy;
     state.codexStatus = result.codex_status || result.codexStatus || state.codexStatus;
-    state.autoSwitchStatus.helperAuthorized = Boolean(result.auto_switch?.authorized);
+    state.autoSwitchStatus.helperAuthorized = helperAuthorizedForCurrentConsole(result);
     state.autoSwitchStatus.lastCheck = result.auto_switch?.last_check || "";
     state.autoSwitchStatus.lastSwitch = result.auto_switch?.last_switch || "";
     state.autoSwitchStatus.lastReason = result.auto_switch?.last_reason || "";
@@ -1804,13 +2134,15 @@ async function loadCloudData() {
     render();
     return;
   }
-  const [accountsResult, auditResult, autoResult] = await Promise.all([
+  const [accountsResult, auditResult, autoResult, usageResult] = await Promise.all([
     api("/api/accounts"),
     api("/api/audit"),
     api("/api/settings/auto-switch").catch(() => ({ settings: { ...defaultAutoSwitchSettings } })),
+    api("/api/settings/usage-refresh").catch(() => ({ settings: { ...defaultUsageRefreshSettings } })),
   ]);
   state.cloudAccounts = (accountsResult.accounts || []).map(normalizeCloudAccount);
   state.autoSwitchSettings = { ...defaultAutoSwitchSettings, ...(autoResult.settings || {}) };
+  state.usageRefreshSettings = { ...defaultUsageRefreshSettings, ...(usageResult.settings || {}) };
   state.audit = (auditResult.audit || []).map((item) => ({
     at: item.createdAt || item.created_at,
     accountId: item.accountId || item.account_id,
@@ -1860,6 +2192,8 @@ async function registerDevice() {
         name: navigator.platform || "Browser",
         helperOnline: state.helperReady,
         helperBase: state.helperBase,
+        helperVersion: state.helperInfo?.version || "",
+        helperBuildDate: state.helperInfo?.build_date || "",
       },
     });
     if (state.helperReady) {
@@ -1898,11 +2232,53 @@ async function saveAutoSwitchSettings(patch = {}) {
   }
 }
 
+async function saveUsageRefreshSettings(patch = {}) {
+  const next = { ...state.usageRefreshSettings, ...patch };
+  state.usageRefreshSettings = next;
+  saveLocalStore();
+  if (!state.user) {
+    render();
+    return;
+  }
+  try {
+    const result = await api("/api/settings/usage-refresh", {
+      method: "PATCH",
+      body: { settings: next },
+    });
+    state.usageRefreshSettings = { ...defaultUsageRefreshSettings, ...(result.settings || next) };
+    saveLocalStore();
+    render();
+  } catch (error) {
+    toast(error.message || "保存额度刷新设置失败。");
+    renderSettings();
+  }
+}
+
+async function noteUsageRefreshSource(source) {
+  const at = new Date().toISOString();
+  state.usageRefreshSettings = {
+    ...state.usageRefreshSettings,
+    lastUsageRefreshSource: source,
+    lastUsageRefreshAt: at,
+  };
+  saveLocalStore();
+  if (state.user) {
+    const result = await api("/api/settings/usage-refresh/recent", {
+      method: "POST",
+      body: { source, at },
+    }).catch(() => null);
+    if (result?.settings) {
+      state.usageRefreshSettings = { ...defaultUsageRefreshSettings, ...result.settings };
+      saveLocalStore();
+    }
+  }
+}
+
 async function configureHelperAutoSwitch(config) {
   if (!state.helperReady) throw new Error("Dock Helper 未连接");
   const result = await helperClient().configureAutoSwitch(config);
   state.helperInfo = { ...(state.helperInfo || {}), auto_switch: result.auto_switch || result.autoSwitch || {} };
-  state.autoSwitchStatus.helperAuthorized = Boolean(state.helperInfo.auto_switch?.authorized);
+  state.autoSwitchStatus.helperAuthorized = helperAuthorizedForCurrentConsole(state.helperInfo);
   state.autoSwitchStatus.lastCheck = state.helperInfo.auto_switch?.last_check || "";
   state.autoSwitchStatus.lastSwitch = state.helperInfo.auto_switch?.last_switch || "";
   state.autoSwitchStatus.lastReason = state.helperInfo.auto_switch?.last_reason || "";
@@ -1928,6 +2304,8 @@ async function authorizeAutoSwitchHelper() {
         deviceKey: state.deviceKey,
         name: "Dock Helper",
         helperBase: state.helperBase,
+        helperVersion: state.helperInfo?.version || "",
+        helperBuildDate: state.helperInfo?.build_date || "",
       },
     });
     const settings = { ...defaultAutoSwitchSettings, ...(tokenResult.settings || state.autoSwitchSettings), enabled: true };
@@ -2155,40 +2533,119 @@ async function applySelectedAccount() {
   }
 }
 
+function cloudUsageRefreshAvailable(account) {
+  return Boolean(state.user && account?.cloudId && state.usageRefreshSettings.cloudUsageRefreshEnabled);
+}
+
+function configuredUsageRefreshChannel(account) {
+  const settings = state.usageRefreshSettings || defaultUsageRefreshSettings;
+  if (settings.usageRefreshMode === "helper") {
+    if (!state.helperReady) throw new Error("本机 Helper 未连接，请启动 Helper 或更改额度刷新方式。");
+    return { channel: "helper", source: "helper" };
+  }
+  if (settings.usageRefreshMode === "cloud") {
+    if (!cloudUsageRefreshAvailable(account)) throw new Error("云端刷新未授权，或该账号尚未同步到云端。");
+    return { channel: "cloud", source: "cloud-worker" };
+  }
+  if (settings.usageRefreshMode === "auto") {
+    if (state.helperReady) return { channel: "helper", source: "auto-helper" };
+    if (settings.helperFallbackToCloud && cloudUsageRefreshAvailable(account)) {
+      return { channel: "cloud", source: "auto-cloud-fallback", autoFallback: true };
+    }
+    throw new Error("自动刷新未找到可用通道：请启动 Helper，或开启云端回退。");
+  }
+  if (state.helperReady) return { channel: "helper", source: "helper" };
+  if (cloudUsageRefreshAvailable(account)) return { channel: "cloud", source: "cloud-worker" };
+  throw new Error("仅手动模式下仍需要在线 Helper，或已授权的云端刷新通道。");
+}
+
+async function refreshUsageThroughHelper(account, route, options = {}) {
+  const authJson = await fetchSwitchPayload(account, false);
+  const result = await helperClient().previewUsage({ authJson, deviceKey: state.deviceKey });
+  const snapshot = result.usage_snapshot || result.usage || {};
+  const normalized = normalizeUsage({ ...snapshot, refresh_source: route.source }, accountPlan(account));
+  normalized.plan_type = bestPlan(accountPlan(account), normalized.plan_type);
+  normalized.refresh_source = route.source;
+  if (!result.ok) {
+    normalized.error = explainError(result.error || normalized.error || "刷新失败");
+    normalized.status = "刷新失败";
+    normalized.refreshed_at = normalized.refreshed_at || new Date().toISOString();
+  }
+  if (state.user && account.cloudId) {
+    await api(`/api/accounts/${encodeURIComponent(account.cloudId)}/usage`, {
+      method: "POST",
+      body: {
+        usage: normalized,
+        source: route.source,
+        batch: Boolean(options.batch),
+        ok: Boolean(result.ok),
+        error: result.ok ? "" : (result.error || "刷新失败"),
+      },
+    }).catch(() => {});
+    if (!options.batch) {
+      await api("/api/audit", {
+        method: "POST",
+        body: {
+          accountId: account.cloudId,
+          action: "usage-refresh",
+          result: result.ok ? "ok" : "error",
+          metadata: { source: route.source },
+        },
+      }).catch(() => {});
+    }
+  }
+  return { ok: Boolean(result.ok), usage: normalized, source: route.source };
+}
+
+async function refreshUsageThroughCloud(account, route, options = {}) {
+  const result = await api(`/api/accounts/${encodeURIComponent(account.cloudId)}/usage/refresh-cloud`, {
+    method: "POST",
+    body: { autoFallback: Boolean(route.autoFallback), batch: Boolean(options.batch), audit: !options.batch },
+  });
+  return {
+    ok: true,
+    usage: normalizeUsage({ ...(result.usage || {}), refresh_source: result.source || route.source }, accountPlan(account)),
+    source: result.source || route.source,
+  };
+}
+
+async function executeConfiguredUsageRefresh(account, options = {}) {
+  const route = configuredUsageRefreshChannel(account);
+  if (route.channel === "cloud") return refreshUsageThroughCloud(account, route, options);
+  try {
+    const result = await refreshUsageThroughHelper(account, route, options);
+    if (result.ok || state.usageRefreshSettings.usageRefreshMode !== "auto") return result;
+    if (!state.usageRefreshSettings.helperFallbackToCloud || !cloudUsageRefreshAvailable(account)) return result;
+    return refreshUsageThroughCloud(account, { channel: "cloud", source: "auto-cloud-fallback", autoFallback: true }, options);
+  } catch (error) {
+    if (state.usageRefreshSettings.usageRefreshMode === "auto"
+      && state.usageRefreshSettings.helperFallbackToCloud
+      && cloudUsageRefreshAvailable(account)) {
+      return refreshUsageThroughCloud(account, { channel: "cloud", source: "auto-cloud-fallback", autoFallback: true }, options);
+    }
+    throw error;
+  }
+}
+
 async function refreshAccountUsage(id, options = {}) {
   const account = state.accounts.find((item) => item.id === id);
   if (!account) return false;
-  if (!state.helperReady) {
-    if (!options.silent) toast("Helper 未连接，不能刷新额度。");
-    return false;
-  }
   try {
     account.usage = { ...normalizeUsage(account.usage, accountPlan(account)), status: "刷新中", error: "" };
     renderAccounts();
     renderSelected();
-    const authJson = await fetchSwitchPayload(account, false);
-    const result = await helperClient().previewUsage({ authJson, deviceKey: state.deviceKey });
-    const snapshot = result.usage_snapshot || result.usage || {};
-    const normalized = normalizeUsage(snapshot, accountPlan(account));
-    normalized.plan_type = bestPlan(accountPlan(account), normalized.plan_type);
-    if (!result.ok) {
-      normalized.error = explainError(result.error || normalized.error || "刷新失败");
-      normalized.status = "刷新失败";
-      normalized.refreshed_at = normalized.refreshed_at || new Date().toISOString();
-    }
-    account.usage = normalized;
-    account.planType = bestPlan(account.planType, normalized.plan_type);
+    const result = await executeConfiguredUsageRefresh(account, options);
+    account.usage = result.usage;
+    account.planType = bestPlan(account.planType, result.usage.plan_type);
     updateLocalAccount(account);
-    if (state.user && account.cloudId) {
-      await api(`/api/accounts/${encodeURIComponent(account.cloudId)}/usage`, {
-        method: "POST",
-        body: { usage: normalized, ok: Boolean(result.ok), error: result.ok ? "" : (result.error || "刷新失败") },
-      }).catch(() => {});
-      await loadCloudData();
-    } else {
-      render();
+    if (!options.batch) await noteUsageRefreshSource(result.source);
+    if (state.user && account.cloudId && !options.batch) await loadCloudData();
+    else render();
+    if (!options.silent) {
+      toast(result.ok
+        ? `已通过 ${result.source} 刷新 ${account.name} 的额度。`
+        : `${account.name} 额度刷新失败：${result.usage.error || "刷新失败"}`);
     }
-    if (!options.silent) toast(result.ok ? `已刷新 ${account.name} 的额度。` : `${account.name} 额度刷新失败：${normalized.error || "刷新失败"}`);
     return Boolean(result.ok);
   } catch (error) {
     const message = explainError(error.message || "刷新失败");
@@ -2205,31 +2662,57 @@ async function refreshAccountUsage(id, options = {}) {
   }
 }
 
-async function refreshAllUsage() {
-  if (!state.helperReady) {
-    toast("Helper 未连接，不能刷新额度。");
-    return;
-  }
-  if (!state.accounts.length || state.refreshingUsage) return;
+async function refreshAccountsInBatches(accounts, title) {
+  if (!accounts.length || state.refreshingUsage) return;
   state.refreshingUsage = true;
   renderShell();
-  const accounts = [...state.accounts];
-  openProgress("刷新额度", accounts.map((account) => ({ label: account.email || account.name })));
+  openProgress(title, accounts.map((account) => ({ label: account.email || account.name })));
+  const concurrency = Math.max(1, Math.min(3, Number(state.usageRefreshSettings.usageRefreshConcurrency || 1)));
+  const interval = Math.max(1000, Number(state.usageRefreshSettings.usageRefreshIntervalMs || 1500));
   let ok = 0;
-  for (const [index, account] of accounts.entries()) {
-    updateProgressItem(index, "刷新中");
-    const success = await refreshAccountUsage(account.id, { silent: true });
-    if (success) {
-      ok++;
-      updateProgressItem(index, "已完成");
-    } else {
-      updateProgressItem(index, "失败", "额度刷新失败");
+  const sources = {};
+  for (let start = 0; start < accounts.length; start += concurrency) {
+    const group = accounts.slice(start, start + concurrency);
+    const outcomes = await Promise.all(group.map(async (account, offset) => {
+      const index = start + offset;
+      updateProgressItem(index, "刷新中");
+      const success = await refreshAccountUsage(account.id, { silent: true, batch: true });
+      const source = account.usage?.refresh_source || "";
+      updateProgressItem(index, success ? "已完成" : "失败", source || (success ? "" : "额度刷新失败"));
+      return { success, source };
+    }));
+    for (const outcome of outcomes) {
+      if (outcome.success) ok++;
+      if (outcome.source) sources[outcome.source] = (sources[outcome.source] || 0) + 1;
     }
+    if (start + concurrency < accounts.length) await wait(interval);
   }
   state.refreshingUsage = false;
+  if (state.user) {
+    await api("/api/audit", {
+      method: "POST",
+      body: {
+        action: "usage-refresh-batch",
+        result: `ok:${ok},failed:${accounts.length - ok}`,
+        metadata: { sources, total: accounts.length },
+      },
+    }).catch(() => {});
+  }
+  const lastSource = Object.keys(sources).length === 1 ? Object.keys(sources)[0] : (Object.keys(sources).length ? "mixed" : "");
+  if (lastSource) await noteUsageRefreshSource(lastSource);
+  if (state.user) await loadCloudData().catch(() => {});
   render();
   finishProgress(`额度刷新完成：${ok}/${accounts.length}`);
-  toast(`额度刷新完成：${ok}/${state.accounts.length}`);
+  toast(`额度刷新完成：${ok}/${accounts.length}`);
+}
+
+async function refreshAllUsage() {
+  const accounts = state.accounts.filter((account) => canUseAccount(account) && canRefreshAccountUsage(account));
+  if (!accounts.length) {
+    toast("当前没有可通过已配置通道刷新的账号。");
+    return;
+  }
+  await refreshAccountsInBatches(accounts, "刷新额度");
 }
 
 async function smartSwitchBestAccount() {
@@ -2337,17 +2820,21 @@ async function importParsedEntries(entries, defaults = {}) {
   return { added: result.added, updated: result.updated, skipped: 0, failed, total: entries.length, cloud, atOnly };
 }
 
-async function confirmPendingImport() {
+async function performPendingImport(options = {}) {
   const importable = state.pendingImportItems.filter((item) => item.ok && item.account);
   const failed = state.pendingImportItems.filter((item) => item.status === "无法解析").length;
   if (!importable.length) {
     showImportResult({ message: "没有可导入账号。请先解析有效 JSON。", failed });
-    return;
+    const error = new Error("没有可导入账号。请先解析有效 JSON。");
+    if (options.throwOnError) throw error;
+    return null;
   }
   const button = $("confirmImportBtn");
-  const originalText = button.textContent;
-  button.disabled = true;
-  button.textContent = cloudBackupEnabled() ? "正在导入并备份..." : "正在导入...";
+  const originalText = button?.textContent || "";
+  if (button) {
+    button.disabled = true;
+    button.textContent = cloudBackupEnabled() ? "正在导入并备份..." : "正在导入...";
+  }
   showImportResult({ message: cloudBackupEnabled() ? "正在写入账号池并备份到云端..." : "正在写入本地账号池..." });
   try {
     const accounts = importable.map((item) => item.account);
@@ -2377,13 +2864,20 @@ async function confirmPendingImport() {
     toast(atOnly
       ? `导入完成：${atOnly} 个 AT-only 当前不支持 Codex。`
       : `导入完成：新增 ${result.added}，更新 ${result.updated}。`);
+    return { ...result, failed, total: state.pendingImportItems.length, cloud, atOnly };
   } catch (error) {
     state.importCompleted = false;
     showImportResult({ failed: failed + 1, message: error.message || "导入失败。" });
+    if (options.throwOnError) throw error;
+    return null;
   } finally {
-    button.textContent = originalText;
+    if (button) button.textContent = originalText;
     renderImportPreview();
   }
+}
+
+async function confirmPendingImport() {
+  await performPendingImport();
 }
 
 async function refreshImportedAccounts(importedAccounts) {
@@ -2592,7 +3086,12 @@ function syncStats() {
 
 function openSyncModal() {
   if (!state.user) return;
-  $("syncStats").innerHTML = dialogUi.renderSyncStats(syncStats());
+  const stats = syncStats();
+  if (stats.local === 0 && stats.cloud === 0) {
+    setSyncMode("merge");
+    return;
+  }
+  $("syncStats").innerHTML = dialogUi.renderSyncStats(stats);
   openModal("syncModal");
 }
 
@@ -2654,6 +3153,9 @@ function setDrawer(open) {
   if (open) {
     $("importResult").hidden = true;
     refreshOauthAuthorizeUrl().catch(() => toast("OAuth 授权链接生成失败。"));
+    renderOauthFlow();
+  } else {
+    cancelOauthFlow({ silent: true });
   }
 }
 
@@ -2837,21 +3339,12 @@ async function bulkDeleteAccounts() {
 }
 
 async function bulkRefreshAccounts() {
-  const accounts = selectedBulkAccounts().filter(canUseAccount);
-  if (!accounts.length || !state.helperReady) return;
-  startProgress("批量刷新额度", accounts.map((account) => ({ label: account.name || account.email, status: "等待" })));
-  let ok = 0;
-  for (let index = 0; index < accounts.length; index++) {
-    updateProgressItem(index, "刷新中");
-    const success = await refreshAccountUsage(accounts[index].id, { silent: true });
-    if (success) {
-      ok++;
-      updateProgressItem(index, "已完成");
-    } else {
-      updateProgressItem(index, "失败");
-    }
+  const accounts = selectedBulkAccounts().filter((account) => canUseAccount(account) && canRefreshAccountUsage(account));
+  if (!accounts.length) {
+    toast("所选账号没有可用的额度刷新通道。");
+    return;
   }
-  finishProgress(`额度刷新完成：${ok}/${accounts.length}`);
+  await refreshAccountsInBatches(accounts, "批量刷新额度");
 }
 
 function bulkExportAccounts() {
@@ -2960,6 +3453,12 @@ function bindEvents() {
   $("openOauthAuthBtn").addEventListener("click", () => handleAuthAcquireAction("open-oauth-login"));
   $("copyOauthUrlBtn").addEventListener("click", () => handleAuthAcquireAction("copy-oauth-url"));
   $("parseOauthCallbackBtn").addEventListener("click", () => parseOauthCallbackToPreview());
+  $("oauthFlowCancelBtn").addEventListener("click", () => cancelOauthFlow());
+  $("oauthFlowRetryBtn").addEventListener("click", () => beginOauthAuthorization());
+  $("oauthFlowDoneBtn").addEventListener("click", () => {
+    cancelOauthFlow({ silent: true });
+    setDrawer(false);
+  });
   $("previewImportBtn").addEventListener("click", parseImportTextToPreview);
   $("jsonFileInput").addEventListener("change", async () => {
     await parseImportFilesToPreview($("jsonFileInput").files);
@@ -3090,6 +3589,20 @@ function bindEvents() {
       toast("已关闭自动备份。");
     }
   });
+  $("usageRefreshState").addEventListener("change", async (event) => {
+    const input = event.target.closest("[data-usage-refresh-setting]");
+    if (!input) return;
+    const key = input.dataset.usageRefreshSetting;
+    const value = input.type === "checkbox"
+      ? input.checked
+      : (["usageRefreshConcurrency", "usageRefreshIntervalMs"].includes(key) ? Number(input.value) : input.value);
+    const patch = { [key]: value };
+    if (key === "cloudUsageRefreshEnabled" && !value) {
+      patch.helperFallbackToCloud = false;
+      if (["cloud", "auto"].includes(state.usageRefreshSettings.usageRefreshMode)) patch.usageRefreshMode = "helper";
+    }
+    await saveUsageRefreshSettings(patch);
+  });
   $("refreshAllUsageBtn").addEventListener("click", refreshAllUsage);
   $("quickSwitchBtn").addEventListener("click", parseCommandFilesToPreview);
   $("switchBtn").addEventListener("click", applySelectedAccount);
@@ -3186,7 +3699,7 @@ function bindEvents() {
         saveLocalStore();
         render();
         openModal("accountDetailModal");
-        toast("请导入这个账号自己的 RT auth，不要用当前本机 auth 覆盖。");
+        toast("请通过 OAuth 网页登录补充这个账号自己的 RT。");
       }
       if (button.dataset.accountAction === "refresh-usage") await refreshAccountUsage(id);
       if (button.dataset.accountAction === "delete") await deleteAccount(id);

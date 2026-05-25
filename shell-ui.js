@@ -44,14 +44,17 @@
       };
     }
 
-    function toolbarState({ filtered = [], selectedBulkIds, helperReady = false } = {}) {
+    function toolbarState({ filtered = [], selectedBulkIds, helperReady = false, canRefreshUsage } = {}) {
       const selected = filtered.filter((account) => selectedSetHas(selectedBulkIds, account.id));
+      const refreshAvailable = selected.some((account) => (
+        typeof canRefreshUsage === "function" ? canRefreshUsage(account) : helperReady
+      ));
       return {
         selectedCount: selected.length,
         resultCount: filtered.length,
         bulkText: selected.length ? `已选择 ${selected.length} 个账号` : `当前结果 ${filtered.length} 个`,
         hasSelection: selected.length > 0,
-        refreshDisabled: !selected.length || !helperReady,
+        refreshDisabled: !selected.length || !refreshAvailable,
         exportDisabled: !selected.length,
         deleteDisabled: !selected.length,
         priorityDisabled: !selected.length,
@@ -98,7 +101,7 @@
         admin: "查看用户、设备和最近操作。",
       };
       const autoEnabled = Boolean(state.autoSwitchSettings?.enabled);
-      const autoAuthorized = Boolean(state.autoSwitchStatus?.helperAuthorized || state.helperInfo?.auto_switch?.authorized);
+      const autoAuthorized = Boolean(state.autoSwitchStatus?.helperAuthorized);
       const autoRuntimeLabel = codexStatus.state === "idle"
         ? "自动切换已开启 · 当前空闲"
         : codexStatus.state === "active" ? "自动切换已开启 · 等待任务结束"
@@ -118,6 +121,16 @@
       const helperLabel = state.currentAuthChecking ? "确认 auth" : (state.helperReady ? "Helper 在线" : "Helper 离线");
       const cloudSynced = Boolean(state.user && cloudBackupEnabled());
       const commandState = commandShellState({ files: state.commandFiles || [], accounts });
+      const usageSettings = state.usageRefreshSettings || {};
+      const mode = usageSettings.usageRefreshMode || "helper";
+      const cloudAvailable = Boolean(state.user && usageSettings.cloudUsageRefreshEnabled);
+      const canRefreshUsage = (account) => {
+        const cloudForAccount = Boolean(cloudAvailable && account.cloudId);
+        if (mode === "helper") return Boolean(state.helperReady);
+        if (mode === "cloud") return cloudForAccount;
+        if (mode === "auto") return Boolean(state.helperReady || (usageSettings.helperFallbackToCloud && cloudForAccount));
+        return Boolean(state.helperReady || cloudForAccount);
+      };
 
       return {
         viewSubtitle: subtitles[state.currentView] || "",
@@ -147,7 +160,7 @@
         sidebarCollapsed: Boolean(state.sidebarCollapsed),
         sidebarExpanded: String(!state.sidebarCollapsed),
         sidebarToggleLabel: state.sidebarCollapsed ? "展开侧边栏" : "隐藏侧边栏",
-        refreshAllUsageDisabled: !state.helperReady || !accounts.some(canUseAccount) || Boolean(state.refreshingUsage),
+        refreshAllUsageDisabled: !accounts.some((account) => canUseAccount(account) && canRefreshUsage(account)) || Boolean(state.refreshingUsage),
         importLocalAuthDisabled: !state.helperReady,
         commandState,
       };

@@ -78,6 +78,34 @@ assert.equal(shell.codexPillClass, "status-pill ready");
 assert.equal(shell.adminOnlyHidden, false);
 assert.equal(shell.refreshAllUsageDisabled, false);
 
+const cloudShell = ui.shellViewModel({
+  authResolved: true,
+  accounts: [{ usable: true, cloudId: "cloud-account" }],
+  user: { email: "user@example.com" },
+  helperReady: false,
+  usageRefreshSettings: { usageRefreshMode: "cloud", cloudUsageRefreshEnabled: true },
+});
+assert.equal(cloudShell.refreshAllUsageDisabled, false);
+
+const cloudToolbar = ui.toolbarState({
+  filtered: [{ id: "cloud-account", cloudId: "cloud-account" }],
+  selectedBulkIds: new Set(["cloud-account"]),
+  helperReady: false,
+  canRefreshUsage: (account) => Boolean(account.cloudId),
+});
+assert.equal(cloudToolbar.refreshDisabled, false);
+
+const foreignAuthorizationShell = ui.shellViewModel({
+  authResolved: true,
+  accounts: [],
+  user: { email: "preview@example.com" },
+  helperReady: true,
+  helperInfo: { auto_switch: { authorized: true } },
+  autoSwitchSettings: { enabled: true },
+  autoSwitchStatus: { helperAuthorized: false },
+});
+assert.match(foreignAuthorizationShell.autoSwitchPillHtml, /自动切换待授权/);
+
 cloudBackup = false;
 currentId = "";
 const localShell = ui.shellViewModel({

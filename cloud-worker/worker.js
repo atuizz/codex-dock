@@ -33,6 +33,9 @@ import {
 import {
   handleUserRoutes,
 } from "./worker-user.js";
+import {
+  handleUsageRoutes,
+} from "./worker-usage.js";
 
 async function handleApi(request, env, requestContext) {
   const url = new URL(request.url);
@@ -60,6 +63,7 @@ async function handleApi(request, env, requestContext) {
 
   return (await handleUserRoutes(request, env, user, path, { writeAudit }))
     || (await handleAdmin(request, env, user, path))
+    || (await handleUsageRoutes(request, env, user, path, { writeAudit }))
     || (await handleAccounts(request, env, user, path, { writeAudit }))
     || (await handleDeviceRoutes(request, env, user, path, { writeAudit }))
     || (await handleAudit(request, env, user, path))

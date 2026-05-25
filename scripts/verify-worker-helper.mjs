@@ -134,12 +134,14 @@ class FakeStatement {
       return { success: true };
     }
     if (sql.includes("INSERT INTO devices")) {
-      const [id, userId, deviceKey, name, helperOnline, helperBase, createdAt, lastSeenAt] = this.params;
+      const [id, userId, deviceKey, name, helperOnline, helperBase, helperVersion, helperBuildDate, createdAt, lastSeenAt] = this.params;
       const existing = this.db.devices.find((item) => item.user_id === userId && item.device_key === deviceKey);
       if (existing) {
         existing.name = name;
         existing.helper_online = helperOnline;
         existing.helper_base = helperBase;
+        existing.helper_version = helperVersion;
+        existing.helper_build_date = helperBuildDate;
         existing.last_seen_at = lastSeenAt;
       } else {
         this.db.devices.push({
@@ -149,6 +151,8 @@ class FakeStatement {
           name,
           helper_online: helperOnline,
           helper_base: helperBase,
+          helper_version: helperVersion,
+          helper_build_date: helperBuildDate,
           created_at: createdAt,
           last_seen_at: lastSeenAt,
         });
@@ -256,6 +260,8 @@ const issue = await handleDeviceRoutes(request("/api/devices/auto-switch-token",
   deviceKey: "desktop-1",
   name: "Dock Helper",
   helperBase: "http://127.0.0.1:18766",
+  helperVersion: "0.4.0",
+  helperBuildDate: "2026-05-26",
 }), env, user, "/api/devices/auto-switch-token", { writeAudit });
 assert.equal(issue.status, 200);
 const issueBody = await issue.json();
@@ -264,6 +270,7 @@ assert.match(issueBody.deviceToken, /^cdh_/);
 assert.equal(issueBody.heartbeatSeconds, HELPER_HEARTBEAT_SECONDS);
 assert.equal(issueBody.settings.enabled, true);
 assert.equal(env.DB.devices.length, 1);
+assert.equal(env.DB.devices[0].helper_version, "0.4.0");
 assert.equal(env.DB.deviceTokens.length, 1);
 assert.equal(audits.at(-1).result, "issued");
 
@@ -312,6 +319,9 @@ const next = await handleHelperAutoSwitch(request("/api/helper/auto-switch/next"
   force: true,
   triggerType: "quota",
   triggerReason: "额度耗尽，任务结束后切换",
+  boundaryConfirmed: true,
+  runtimeState: "idle",
+  boundaryEvidence: "连续 15 秒没有任务类日志",
 }, authHeaders(configBody.replacementDeviceToken)), env, "/api/helper/auto-switch/next", { requestId: "req-next" }, { writeAudit });
 assert.equal(next.status, 200);
 const nextBody = await next.json();
@@ -324,6 +334,14 @@ assert.equal(audits.at(-1).result, "no-candidate");
 assert.equal(audits.at(-1).metadata.trigger, "额度耗尽，任务结束后切换");
 assert.equal(audits.at(-1).metadata.candidateCount, 0);
 assert.equal(audits.at(-1).metadata.eligibleCount, 0);
+assert.equal(audits.at(-1).metadata.boundaryConfirmed, true);
+
+const held = await handleHelperAutoSwitch(request("/api/helper/auto-switch/next", {
+  force: true,
+  triggerType: "quota",
+  triggerReason: "额度耗尽，当前轮仍在执行",
+}, authHeaders(configBody.replacementDeviceToken)), env, "/api/helper/auto-switch/next", { requestId: "req-held" }, { writeAudit });
+assert.equal((await held.json()).reason, "等待 Helper 确认安全轮次边界");
 
 const expiredToken = await insertDeviceToken(env, "user-1", "desktop-expired", "Dock Helper", new Date(Date.now() - 1000).toISOString());
 env.DB.devices.push({

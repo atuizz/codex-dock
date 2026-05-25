@@ -3,6 +3,7 @@ const {
   auditTitle,
   auditDescription,
   formatCandidateDiagnostics,
+  usageRefreshModeLabel,
 } = require("../audit-core.js");
 
 const cases = [
@@ -29,14 +30,49 @@ const cases = [
     description: "触发：当前账号不可用或已限流 · 避开当前账号 1；切换冷却 10 分钟内 2",
   },
   {
-    item: { action: "auto-switch-helper", result: "deferred-active-task", metadata: { reason: "5H 剩余 4%", detail: "Codex 未稳定空闲" } },
-    title: "自动切换等待空闲",
+    item: { action: "auto-switch-helper", result: "deferred-active-turn", metadata: { reason: "5H 剩余 4%", detail: "Codex 未稳定空闲" } },
+    title: "正在保护当前任务",
     description: "5H 剩余 4% · Codex 未稳定空闲",
+  },
+  {
+    item: { action: "auto-switch-helper", result: "boundary-confirmed", metadata: { reason: "5H 剩余 4%", detail: "连续 15 秒没有任务类日志" } },
+    title: "安全边界已确认",
+    description: "5H 剩余 4% · 连续 15 秒没有任务类日志",
+  },
+  {
+    item: { action: "auto-switch-check", result: "error", metadata: { error: "https://chatgpt.com/backend-api/wham/usage -> 操作超时" } },
+    title: "额度检查异常",
+    description: "https://chatgpt.com/backend-api/wham/usage -> 操作超时",
   },
   {
     item: { action: "auto-switch-check", result: "trigger:5H 剩余 3%", metadata: {} },
     title: "自动切换已触发",
     description: "触发：5H 剩余 3%",
+  },
+  {
+    item: { action: "usage-refresh", result: "ok", metadata: { source: "auto-cloud-fallback" } },
+    title: "额度已刷新",
+    description: "执行通道：自动选择 / 云端回退",
+  },
+  {
+    item: { action: "usage-refresh", result: "error", metadata: { source: "cloud-worker", error: "操作超时" } },
+    title: "额度刷新失败",
+    description: "执行通道：云端 Worker · 操作超时",
+  },
+  {
+    item: { action: "usage-refresh-batch", result: "ok:3,failed:1", metadata: {} },
+    title: "批量额度刷新有失败",
+    description: "成功 3，失败 1",
+  },
+  {
+    item: { action: "usage-refresh-settings", result: "helper", metadata: {} },
+    title: "额度刷新方式已更新",
+    description: "执行通道：本机 Helper",
+  },
+  {
+    item: { action: "usage-refresh-settings", result: "auto", metadata: {} },
+    title: "额度刷新方式已更新",
+    description: "执行通道：自动选择",
   },
 ];
 
@@ -54,5 +90,8 @@ assert.match(candidateText, /避开当前账号 1/);
 assert.match(candidateText, /切换冷却 10 分钟内 1/);
 assert.match(candidateText, /可用 1/);
 assert.match(candidateText, /current@example\.com：避开当前账号，5H 2% \/ 7D 88%/);
+
+assert.equal(usageRefreshModeLabel("cloud"), "云端 Worker");
+assert.equal(usageRefreshModeLabel("manual"), "仅手动刷新");
 
 console.log("audit-core verification passed");

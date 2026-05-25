@@ -186,6 +186,7 @@ export function normalizeUsage(raw, fallbackPlan = "") {
       five_hour: null,
       one_week: null,
       credits: null,
+      refresh_source: "",
       status: "未刷新",
       error: "",
     };
@@ -197,6 +198,7 @@ export function normalizeUsage(raw, fallbackPlan = "") {
     five_hour: raw.five_hour || raw.fiveHour || raw.short_window || raw.shortWindow || null,
     one_week: raw.one_week || raw.oneWeek || raw.long_window || raw.longWindow || null,
     credits: raw.credits || null,
+    refresh_source: raw.refresh_source || raw.refreshSource || "",
     status: raw.status || "已刷新",
     error: raw.error || "",
   };
@@ -679,12 +681,17 @@ export async function handleAccounts(request, env, user, path, options = {}) {
   if (request.method === "POST" && action === "usage") {
     const body = await readJson(request);
     const usage = normalizeUsage(body.usage || body.usage_snapshot, account.plan_type || "");
+    const source = String(body.source || body.refreshSource || usage.refresh_source || "helper").slice(0, 40);
+    const kind = body.batch ? "batch" : "manual";
+    usage.refresh_source = source;
     usage.plan_type = bestPlan(account.plan_type, usage.plan_type);
     if (body.error) usage.error = body.error;
     if (body.ok === false) usage.status = "刷新失败";
     await env.DB.prepare(
-      "INSERT INTO usage_snapshots (id, account_id, user_id, usage_json, ok, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-    ).bind(crypto.randomUUID(), accountId, user.id, JSON.stringify(usage), body.ok === false ? 0 : 1, body.error || "", nowIso()).run();
+      `INSERT INTO usage_snapshots
+       (id, account_id, user_id, usage_json, ok, error, refresh_source, refresh_kind, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(crypto.randomUUID(), accountId, user.id, JSON.stringify(usage), body.ok === false ? 0 : 1, body.error || "", source, kind, nowIso()).run();
     await env.DB.prepare("UPDATE accounts SET plan_type = COALESCE(?, plan_type), updated_at = ? WHERE id = ? AND user_id = ?")
       .bind(usage.plan_type || null, nowIso(), accountId, user.id).run();
     return json({ ok: true, usage });

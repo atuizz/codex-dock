@@ -57,6 +57,7 @@
       const switchSafety = codex.safe_to_switch ? "可安全切换" : "暂不切换";
       const rows = [
         ["连接", helperReady ? "在线" : "未连接"],
+        ["Helper 版本", helperReady ? (helper.version ? `v${helper.version}${helper.build_date ? ` · ${helper.build_date}` : ""}` : "旧版未上报") : "未连接"],
         ["地址", helperReady ? helperBase || "本机" : "未探测到"],
         ["端口", helper.port || "未识别"],
         ["Codex 状态", helperReady ? (codex.label || "确认中") : "未探测"],

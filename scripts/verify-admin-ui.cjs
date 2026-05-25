@@ -24,11 +24,19 @@ const summaryHtml = ui.renderSummary({
   onlineSessions: 4,
   imports24h: 5,
   switches24h: 6,
-}, [{ id: "device-a" }, { id: "device-b" }]);
+}, [{ id: "device-a", helperVersion: "0.4.0" }, { id: "device-b", helperVersion: "0.3.1" }]);
 assert.match(summaryHtml, /用户数/);
 assert.match(summaryHtml, /<strong>3<\/strong>/);
 assert.match(summaryHtml, /设备数/);
 assert.match(summaryHtml, /<strong>2<\/strong>/);
+assert.match(summaryHtml, /待升级 Helper/);
+
+const devicesHtml = ui.renderDevices([
+  { id: "device-a", name: "Desk", userEmail: "ops@example.com", helperOnline: true, helperVersion: "0.4.0", lastSeenAt: "now" },
+  { id: "device-b", name: "Old", userEmail: "old@example.com", helperOnline: false, helperVersion: "0.3.1", lastSeenAt: "then" },
+]);
+assert.match(devicesHtml, /0\.4\.0/);
+assert.match(devicesHtml, /0\.3\.1 · 待升级/);
 
 const users = [
   {

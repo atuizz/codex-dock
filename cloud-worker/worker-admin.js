@@ -163,6 +163,8 @@ export async function adminDevices(env) {
     name: row.name || "",
     helperOnline: Boolean(row.helper_online),
     helperBase: row.helper_base || "",
+    helperVersion: row.helper_version || "",
+    helperBuildDate: row.helper_build_date || "",
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
   }));

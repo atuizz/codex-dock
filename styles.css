@@ -2170,6 +2170,11 @@ label span {
   border-bottom: 1px solid var(--border-soft);
 }
 
+.warning-text {
+  color: var(--danger-text, #ad3131);
+  font-weight: 600;
+}
+
 .settings-section-title {
   margin-top: 4px;
   color: var(--text-secondary);
@@ -2353,6 +2358,137 @@ label span {
   transition: transform 140ms ease, opacity 140ms ease;
 }
 
+.oauth-flow-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  padding: 20px;
+}
+
+.oauth-flow-card {
+  width: min(460px, 100%);
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border-control);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: var(--dialog-shadow);
+  padding: 18px;
+}
+
+.oauth-flow-topline {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.oauth-flow-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-primary);
+  transform: translateY(1px);
+}
+
+.oauth-flow-icon::before,
+.oauth-flow-icon::after {
+  content: "";
+  display: block;
+}
+
+.oauth-flow-icon.busy::before {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(17, 17, 17, 0.18);
+  border-top-color: #111111;
+  border-radius: 999px;
+  animation: oauth-spin 850ms linear infinite;
+}
+
+.oauth-flow-icon.success::before {
+  width: 16px;
+  height: 9px;
+  border-left: 3px solid #111111;
+  border-bottom: 3px solid #111111;
+  transform: rotate(-45deg) translate(1px, -1px);
+}
+
+.oauth-flow-icon.warning::before,
+.oauth-flow-icon.error::before {
+  width: 3px;
+  height: 17px;
+  border-radius: 999px;
+  background: #111111;
+}
+
+.oauth-flow-icon.warning::after,
+.oauth-flow-icon.error::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  margin-top: 2px;
+  border-radius: 999px;
+  background: #111111;
+}
+
+.oauth-flow-topline strong,
+.oauth-flow-topline span {
+  display: block;
+  min-width: 0;
+}
+
+.oauth-flow-topline strong {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.oauth-flow-topline span,
+.oauth-flow-meta {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.oauth-flow-meter {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--bg-hover);
+}
+
+.oauth-flow-meter i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: #111111;
+  transition: width 160ms ease;
+}
+
+.oauth-flow-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.oauth-flow-actions {
+  justify-content: flex-end;
+}
+
+@keyframes oauth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .import-drawer.open .drawer-panel {
   transform: translate(-50%, -50%);
   opacity: 1;
@@ -2410,6 +2546,68 @@ label span {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.oauth-primary-action {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+
+.oauth-primary-action button {
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.oauth-primary-action span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.oauth-fallback-panel {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 8px;
+}
+
+.oauth-fallback-panel summary {
+  width: fit-content;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+  padding: 5px 0;
+}
+
+.oauth-fallback-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.oauth-fallback-panel summary::after {
+  content: "展开";
+  margin-left: 8px;
+  color: var(--text-tertiary);
+}
+
+.oauth-fallback-panel[open] summary::after {
+  content: "收起";
+}
+
+.oauth-fallback-body {
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+}
+
+.oauth-fallback-panel:not([open]) .oauth-fallback-body {
+  display: none;
+}
+
+.oauth-fallback-body textarea {
+  min-height: 160px;
 }
 
 .auth-acquire-actions {

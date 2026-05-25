@@ -100,13 +100,14 @@ assert.equal(settingsGet.status, 200);
 assert.equal((await settingsGet.json()).settings.enabled, false);
 
 const settingsPatch = await handleUserRoutes(request("/api/settings/auto-switch", "PATCH", {
-  settings: { enabled: true, idleSeconds: 1, cooldownMinutes: 3 },
+  settings: { enabled: true, idleSeconds: 1, cooldownMinutes: 3, onlyWhenIdle: false },
 }), env, user, "/api/settings/auto-switch", { writeAudit });
 assert.equal(settingsPatch.status, 200);
 const settingsPatchBody = await settingsPatch.json();
 assert.equal(settingsPatchBody.settings.enabled, true);
 assert.equal(settingsPatchBody.settings.idleSeconds, 10);
 assert.equal(settingsPatchBody.settings.cooldownMinutes, 3);
+assert.equal(settingsPatchBody.settings.onlyWhenIdle, true);
 assert.equal(audits.at(-1).action, "auto-switch-settings");
 assert.equal(audits.at(-1).result, "enabled");
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
 using System.Management;
@@ -20,18 +21,50 @@ namespace CodexPlusLocalHelper
         [STAThread]
         private static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
+            Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+            Application.ThreadException += delegate (object sender, ThreadExceptionEventArgs e)
+            {
+                WriteUnhandledException("ui-thread", e.Exception);
+            };
+            AppDomain.CurrentDomain.UnhandledException += delegate (object sender, UnhandledExceptionEventArgs e)
+            {
+                WriteUnhandledException("app-domain", e.ExceptionObject as Exception);
+            };
+
+            try
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.Run(new MainForm());
+            }
+            catch (Exception ex)
+            {
+                WriteUnhandledException("main-loop", ex);
+            }
+        }
+
+        private static void WriteUnhandledException(string source, Exception ex)
+        {
+            try
+            {
+                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CodexDock");
+                Directory.CreateDirectory(dir);
+                var message = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) + "] [unhandled:" + source + "] "
+                    + (ex == null ? "unknown exception" : ex.ToString());
+                File.AppendAllText(Path.Combine(dir, "helper.log"), message + Environment.NewLine, new UTF8Encoding(false));
+            }
+            catch { }
         }
     }
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.3.0";
-        private const string HelperBuildDate = "2026-05-25";
+        private const string HelperVersion = "0.4.0";
+        private const string HelperBuildDate = "2026-05-26";
         private const int HelperLogMaxBytes = 1024 * 1024;
         private const int HelperLogBackups = 5;
+        private const int HelperUiLogLineLimit = 400;
+        private const int HelperUiLogMaxCharacters = 160000;
         private const int AutoSwitchRepeatedLogSeconds = 300;
         private static readonly object HelperLogFileLock = new object();
         private int _port = 18766;
@@ -39,17 +72,29 @@ namespace CodexPlusLocalHelper
         private readonly DateTime _startedAtUtc = DateTime.UtcNow;
         private readonly Label _statusLabel;
         private readonly Label _authLabel;
-        private readonly TextBox _logBox;
-        private readonly Button _startButton;
-        private readonly Button _stopButton;
-        private readonly Button _openButton;
-        private readonly Button _folderButton;
-        private readonly Button _refreshAuthButton;
-        private readonly Button _importAuthButton;
-        private readonly Button _backupAuthButton;
-        private readonly Button _launchCodexButton;
+        private readonly RichTextBox _logBox;
+        private readonly Font _logRegularFont;
+        private readonly Font _logBoldFont;
+        private readonly SoftButton _startButton;
+        private readonly SoftButton _stopButton;
+        private readonly SoftButton _openButton;
+        private readonly SoftButton _folderButton;
+        private readonly SoftButton _refreshAuthButton;
+        private readonly SoftButton _importAuthButton;
+        private readonly SoftButton _backupAuthButton;
+        private readonly SoftButton _launchCodexButton;
+        private readonly Label _serviceBadgeLabel;
+        private readonly InfoBox _portLabel;
+        private readonly Label _runtimeLabel;
+        private readonly Label _runtimeDetailLabel;
+        private readonly Label _autoSwitchLabel;
+        private readonly Label _autoSwitchDetailLabel;
+        private readonly Label _uptimeLabel;
+        private readonly System.Windows.Forms.Timer _dashboardTimer;
+        private readonly Icon _appIcon;
         private readonly NotifyIcon _trayIcon;
         private readonly ContextMenuStrip _trayMenu;
+        private ToolStripMenuItem _trayStatusItem;
         private HttpListener _listener;
         private HttpListener _oauthCallbackListener;
         private Thread _oauthCallbackThread;
@@ -58,6 +103,10 @@ namespace CodexPlusLocalHelper
         private volatile bool _running;
         private bool _allowExit;
         private bool _trayTipShown;
+        private volatile bool _applicationClosing;
+        private readonly object _recentLogLock = new object();
+        private readonly Queue<string> _recentLogLines = new Queue<string>();
+        private bool _logViewNeedsReload = true;
         private readonly object _autoSwitchLock = new object();
         private Thread _autoSwitchThread;
         private volatile bool _autoSwitchStop;
@@ -68,6 +117,8 @@ namespace CodexPlusLocalHelper
         private string _lastAutoSwitchResult = "";
         private string _lastAutoSwitchLogKey = "";
         private DateTime _lastAutoSwitchLogAt = DateTime.MinValue;
+        private string _lastAutoSwitchAuditKey = "";
+        private DateTime _lastAutoSwitchAuditAt = DateTime.MinValue;
         private readonly object _authSyncLock = new object();
         private string _lastSyncedAuthFingerprint = "";
         private DateTime _lastSyncedAuthWriteAt = DateTime.MinValue;
@@ -112,6 +163,9 @@ namespace CodexPlusLocalHelper
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern IntPtr SendMessageTimeout(IntPtr hWnd, int msg, IntPtr wParam, string lParam, int flags, int timeout, out IntPtr result);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool DestroyIcon(IntPtr hIcon);
+
         private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);
         private const int WM_SETTINGCHANGE = 0x001A;
         private const int SMTO_ABORTIFHUNG = 0x0002;
@@ -121,213 +175,379 @@ namespace CodexPlusLocalHelper
             _root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             _autoSwitchConfig = LoadAutoSwitchConfig();
 
+            _appIcon = CreateAppIcon();
+            _logRegularFont = new Font("Consolas", 9.5F, FontStyle.Regular);
+            _logBoldFont = new Font("Consolas", 9.5F, FontStyle.Bold);
+
             Text = "Codex Dock Helper";
-            Width = 900;
-            Height = 620;
-            MinimumSize = new Size(820, 560);
+            Icon = _appIcon;
+            Width = 1180;
+            Height = 800;
+            MinimumSize = new Size(1000, 680);
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Microsoft YaHei UI", 9F);
-            BackColor = Color.FromArgb(12, 15, 11);
-            ForeColor = Color.FromArgb(243, 241, 232);
+            BackColor = Color.FromArgb(246, 246, 243);
+            ForeColor = Color.FromArgb(24, 26, 27);
 
             var root = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 BackColor = BackColor,
-                Padding = new Padding(22),
-                RowCount = 3,
+                Padding = new Padding(28, 24, 28, 24),
+                RowCount = 4,
                 ColumnCount = 1,
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 184));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 132));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 284));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             Controls.Add(root);
 
             var header = new Panel
             {
                 Dock = DockStyle.Fill,
-                BackColor = Color.FromArgb(18, 22, 15),
-                Padding = new Padding(18),
+                BackColor = BackColor,
             };
             root.Controls.Add(header, 0, 0);
 
-            var brand = new Label
-            {
-                Text = "Dock",
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = new Font("Segoe UI", 15F, FontStyle.Bold),
-                ForeColor = Color.FromArgb(229, 255, 106),
-                BackColor = Color.FromArgb(31, 38, 24),
-                Location = new Point(18, 20),
-                Size = new Size(54, 54),
-            };
-            header.Controls.Add(brand);
-
-            var title = MakeLabel("Codex Dock Helper", 19F, FontStyle.Bold, Color.FromArgb(243, 241, 232));
-            title.Location = new Point(88, 17);
-            title.Size = new Size(360, 34);
+            var title = MakeLabel("Codex Dock Helper", 24F, FontStyle.Bold, Color.FromArgb(0, 0, 0));
+            title.Location = new Point(0, 26);
+            title.Size = new Size(390, 42);
             header.Controls.Add(title);
 
-            var subtitle = MakeLabel("安装后即可自动写入 auth 并重启 Codex。", 9.5F, FontStyle.Regular, Color.FromArgb(169, 176, 158));
-            subtitle.Location = new Point(90, 54);
-            subtitle.Size = new Size(620, 24);
+            var version = MakeLabel("v" + HelperVersion, 10F, FontStyle.Regular, Color.FromArgb(145, 145, 145));
+            version.Location = new Point(338, 37);
+            version.Size = new Size(120, 24);
+            header.Controls.Add(version);
+            version.BringToFront();
+
+            var subtitle = MakeLabel("安装后自动注入授权并重启 Codex。", 10F, FontStyle.Regular, Color.FromArgb(48, 55, 64));
+            subtitle.Location = new Point(0, 72);
+            subtitle.Size = new Size(660, 26);
             header.Controls.Add(subtitle);
 
             _statusLabel = new Label
             {
-                Text = "未启动",
+                Text = "● 正在启动",
                 Font = new Font("Microsoft YaHei UI", 9.5F, FontStyle.Bold),
-                ForeColor = Color.FromArgb(86, 218, 197),
-                BackColor = Color.FromArgb(24, 32, 26),
+                ForeColor = Color.FromArgb(5, 130, 96),
+                BackColor = Color.FromArgb(251, 251, 250),
                 TextAlign = ContentAlignment.MiddleCenter,
                 AutoSize = false,
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(650, 22),
-                Size = new Size(170, 34),
+                Location = new Point(886, 34),
+                Size = new Size(202, 34),
             };
             header.Controls.Add(_statusLabel);
+            RoundControl(_statusLabel, 16);
+
+            _uptimeLabel = MakeLabel("运行时间 0 分钟", 9F, FontStyle.Regular, Color.FromArgb(112, 117, 121));
+            _uptimeLabel.TextAlign = ContentAlignment.MiddleRight;
+            _uptimeLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _uptimeLabel.Location = new Point(764, 76);
+            _uptimeLabel.Size = new Size(324, 24);
+            header.Controls.Add(_uptimeLabel);
+            header.Resize += delegate
+            {
+                _statusLabel.Left = Math.Max(540, header.ClientSize.Width - _statusLabel.Width);
+                _uptimeLabel.Left = Math.Max(460, header.ClientSize.Width - _uptimeLabel.Width);
+            };
+
+            var divider = new Panel
+            {
+                Height = 1,
+                BackColor = Color.FromArgb(226, 226, 222),
+                Dock = DockStyle.Bottom,
+            };
+            header.Controls.Add(divider);
 
             var cards = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 BackColor = BackColor,
-                Padding = new Padding(0, 16, 0, 14),
-                ColumnCount = 2,
+                Padding = new Padding(0, 8, 0, 14),
+                ColumnCount = 3,
                 RowCount = 1,
             };
-            cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 53));
-            cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 47));
+            cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+            cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
+            cards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
             root.Controls.Add(cards, 0, 1);
 
             var serviceCard = MakeCard();
-            serviceCard.Margin = new Padding(0, 0, 8, 0);
+            serviceCard.Margin = new Padding(0, 0, 10, 0);
             cards.Controls.Add(serviceCard, 0, 0);
 
-            var serviceTitle = MakeLabel("本地服务", 12F, FontStyle.Bold, Color.FromArgb(243, 241, 232));
-            serviceTitle.Location = new Point(18, 16);
-            serviceTitle.Size = new Size(160, 24);
-            serviceCard.Controls.Add(serviceTitle);
+            var serviceLayout = MakeCardLayout(5);
+            serviceCard.Controls.Add(serviceLayout);
+            serviceLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            serviceLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            serviceLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
+            serviceLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            serviceLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
 
-            var serviceCopy = MakeLabel("只监听 127.0.0.1，网页通过本机接口触发稳定切换。", 9F, FontStyle.Regular, Color.FromArgb(169, 176, 158));
-            serviceCopy.Location = new Point(18, 44);
-            serviceCopy.Size = new Size(380, 22);
-            serviceCard.Controls.Add(serviceCopy);
+            var serviceTitle = MakeLabel("服务状态", 15F, FontStyle.Bold, Color.FromArgb(0, 0, 0));
+            serviceTitle.Dock = DockStyle.Fill;
+            serviceLayout.Controls.Add(serviceTitle, 0, 0);
+            serviceLayout.SetColumnSpan(serviceTitle, 3);
 
-            _openButton = MakeButton("打开云端控制台", true);
-            _openButton.Location = new Point(18, 88);
-            _openButton.Size = new Size(170, 42);
-            serviceCard.Controls.Add(_openButton);
+            _serviceBadgeLabel = new Label
+            {
+                Text = "离线",
+                Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold),
+                ForeColor = Color.FromArgb(16, 126, 84),
+                BackColor = Color.FromArgb(212, 247, 229),
+                TextAlign = ContentAlignment.MiddleCenter,
+                AutoSize = false,
+                Size = new Size(48, 30),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            };
+            serviceCard.Controls.Add(_serviceBadgeLabel);
+            RoundControl(_serviceBadgeLabel, 6);
+            _serviceBadgeLabel.BringToFront();
+            serviceCard.Layout += delegate
+            {
+                _serviceBadgeLabel.Left = Math.Max(10, serviceCard.ClientSize.Width - _serviceBadgeLabel.Width - 18);
+                _serviceBadgeLabel.Top = 20;
+            };
 
-            _startButton = MakeButton("启动服务", false);
-            _startButton.Location = new Point(200, 88);
-            _startButton.Size = new Size(104, 42);
-            serviceCard.Controls.Add(_startButton);
+            var serviceCopy = MakeLabel("监听端口与本地授权写入服务。", 9.5F, FontStyle.Regular, Color.FromArgb(40, 48, 58));
+            serviceCopy.Dock = DockStyle.Fill;
+            serviceLayout.Controls.Add(serviceCopy, 0, 1);
+            serviceLayout.SetColumnSpan(serviceCopy, 3);
 
-            _stopButton = MakeButton("停止", false);
-            _stopButton.Location = new Point(314, 88);
-            _stopButton.Size = new Size(82, 42);
+            _portLabel = new InfoBox
+            {
+                Text = "Local API: 未启动\r\nOAuth: http://localhost:1455/auth/callback\r\nCloud: codex.woai.pro",
+                ForeColor = Color.FromArgb(40, 48, 58),
+                BackColor = Color.FromArgb(250, 250, 248),
+                Dock = DockStyle.Fill,
+            };
+            _portLabel.Font = new Font("Consolas", 9.2F, FontStyle.Regular);
+            serviceLayout.Controls.Add(_portLabel, 0, 2);
+            serviceLayout.SetColumnSpan(_portLabel, 3);
+
+            var serviceButtons = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent,
+                ColumnCount = 2,
+                RowCount = 1,
+            };
+            serviceButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            serviceButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 62));
+            serviceLayout.Controls.Add(serviceButtons, 0, 4);
+            serviceLayout.SetColumnSpan(serviceButtons, 3);
+
+            _startButton = MakeButton("重启服务", true);
+            _startButton.Dock = DockStyle.Fill;
+            _startButton.Margin = new Padding(0, 3, 10, 3);
+            serviceButtons.Controls.Add(_startButton, 0, 0);
+
+            _stopButton = MakeIconButton("停止");
+            _stopButton.Dock = DockStyle.Fill;
+            _stopButton.Margin = new Padding(0, 3, 0, 3);
             _stopButton.Enabled = false;
-            serviceCard.Controls.Add(_stopButton);
+            serviceButtons.Controls.Add(_stopButton, 1, 0);
 
             var authCard = MakeCard();
-            authCard.Margin = new Padding(8, 0, 0, 0);
+            authCard.Margin = new Padding(0, 0, 10, 0);
             cards.Controls.Add(authCard, 1, 0);
 
-            var authTitle = MakeLabel("当前 Codex 授权", 12F, FontStyle.Bold, Color.FromArgb(243, 241, 232));
-            authTitle.Location = new Point(18, 16);
-            authTitle.Size = new Size(190, 24);
-            authCard.Controls.Add(authTitle);
+            var authLayout = MakeCardLayout(5);
+            authCard.Controls.Add(authLayout);
+            authLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            authLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104));
+            authLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            authLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            authLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 1));
+
+            var authTitle = MakeLabel("授权生命周期", 15F, FontStyle.Bold, Color.FromArgb(0, 0, 0));
+            authTitle.Dock = DockStyle.Fill;
+            authLayout.Controls.Add(authTitle, 0, 0);
+            authLayout.SetColumnSpan(authTitle, 3);
 
             _authLabel = new Label
             {
                 Text = "当前 auth：未检测",
-                Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular),
-                ForeColor = Color.FromArgb(215, 221, 198),
+                Font = new Font("Consolas", 9.2F, FontStyle.Regular),
+                ForeColor = Color.FromArgb(40, 48, 58),
                 BackColor = Color.Transparent,
                 AutoSize = false,
-                Location = new Point(18, 44),
-                Width = 330,
-                Height = 42,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                Dock = DockStyle.Fill,
             };
-            authCard.Controls.Add(_authLabel);
+            authLayout.Controls.Add(_authLabel, 0, 1);
+            authLayout.SetColumnSpan(_authLabel, 3);
 
-            _refreshAuthButton = MakeButton("刷新", false);
-            _refreshAuthButton.Location = new Point(18, 96);
-            _refreshAuthButton.Size = new Size(82, 36);
-            authCard.Controls.Add(_refreshAuthButton);
-
-            _folderButton = MakeButton("Codex 目录", false);
-            _folderButton.Location = new Point(110, 96);
-            _folderButton.Size = new Size(110, 36);
-            authCard.Controls.Add(_folderButton);
-
-            _backupAuthButton = MakeButton("备份 auth", false);
-            _backupAuthButton.Location = new Point(230, 96);
-            _backupAuthButton.Size = new Size(104, 36);
-            authCard.Controls.Add(_backupAuthButton);
-
-            var lower = new TableLayoutPanel
+            var authButtons = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                BackColor = BackColor,
-                ColumnCount = 2,
+                BackColor = Color.Transparent,
+                ColumnCount = 3,
                 RowCount = 1,
             };
-            lower.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
-            lower.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            root.Controls.Add(lower, 0, 2);
+            authButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+            authButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+            authButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34F));
+            authLayout.Controls.Add(authButtons, 0, 3);
+            authLayout.SetColumnSpan(authButtons, 3);
 
-            var quickCard = MakeCard();
-            quickCard.Margin = new Padding(0, 0, 8, 0);
-            lower.Controls.Add(quickCard, 0, 0);
+            _refreshAuthButton = MakeButton("刷新", false);
+            _refreshAuthButton.Text = "刷新状态";
+            _refreshAuthButton.Dock = DockStyle.Fill;
+            _refreshAuthButton.Margin = new Padding(0, 3, 7, 3);
+            authButtons.Controls.Add(_refreshAuthButton, 0, 0);
 
-            var quickTitle = MakeLabel("应急操作", 12F, FontStyle.Bold, Color.FromArgb(243, 241, 232));
-            quickTitle.Location = new Point(18, 18);
-            quickTitle.Size = new Size(150, 24);
-            quickCard.Controls.Add(quickTitle);
+            _folderButton = MakeButton("Codex 目录", false);
+            _folderButton.Dock = DockStyle.Fill;
+            _folderButton.Margin = new Padding(0, 3, 7, 3);
+            authButtons.Controls.Add(_folderButton, 1, 0);
 
-            var quickCopy = MakeLabel("日常请在云端网页操作，这里只保留本地兜底能力。", 9F, FontStyle.Regular, Color.FromArgb(169, 176, 158));
-            quickCopy.Location = new Point(18, 50);
-            quickCopy.Size = new Size(184, 48);
-            quickCard.Controls.Add(quickCopy);
+            _backupAuthButton = MakeButton("备份 auth", false);
+            _backupAuthButton.Dock = DockStyle.Fill;
+            _backupAuthButton.Margin = new Padding(0, 3, 0, 3);
+            authButtons.Controls.Add(_backupAuthButton, 2, 0);
 
-            _importAuthButton = MakeButton("导入 auth.json", false);
-            _importAuthButton.Location = new Point(18, 116);
-            _importAuthButton.Size = new Size(176, 40);
-            quickCard.Controls.Add(_importAuthButton);
+            var runtimeCard = MakeCard();
+            runtimeCard.Margin = new Padding(0);
+            cards.Controls.Add(runtimeCard, 2, 0);
+
+            var runtimeLayout = MakeCardLayout(5);
+            runtimeCard.Controls.Add(runtimeLayout);
+            runtimeLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            runtimeLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            runtimeLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
+            runtimeLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            runtimeLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+
+            var runtimeTitle = MakeLabel("Codex 守护进程", 15F, FontStyle.Bold, Color.FromArgb(0, 0, 0));
+            runtimeTitle.Dock = DockStyle.Fill;
+            runtimeLayout.Controls.Add(runtimeTitle, 0, 0);
+            runtimeLayout.SetColumnSpan(runtimeTitle, 3);
+
+            _runtimeLabel = MakeLabel("尚未探测", 15F, FontStyle.Bold, Color.FromArgb(28, 42, 50));
+            _runtimeLabel.Dock = DockStyle.Fill;
+            runtimeLayout.Controls.Add(_runtimeLabel, 0, 1);
+            runtimeLayout.SetColumnSpan(_runtimeLabel, 3);
+
+            _runtimeDetailLabel = MakeLabel("等待状态监控启动。", 9F, FontStyle.Regular, Color.FromArgb(95, 101, 105));
+            _runtimeDetailLabel.Dock = DockStyle.Fill;
+            runtimeLayout.Controls.Add(_runtimeDetailLabel, 0, 2);
+            runtimeLayout.SetColumnSpan(_runtimeDetailLabel, 3);
 
             _launchCodexButton = MakeButton("启动 Codex", false);
-            _launchCodexButton.Location = new Point(18, 166);
-            _launchCodexButton.Size = new Size(176, 40);
-            quickCard.Controls.Add(_launchCodexButton);
+            _launchCodexButton.Text = "▷ 启动";
+            _launchCodexButton.Width = 126;
+            _launchCodexButton.Height = 42;
+            runtimeLayout.Controls.Add(_launchCodexButton, 0, 4);
+
+            var actionCard = MakeCard();
+            actionCard.Margin = new Padding(0, 0, 0, 14);
+            actionCard.Padding = new Padding(18, 10, 18, 10);
+            root.Controls.Add(actionCard, 0, 2);
+
+            var actionLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent,
+                ColumnCount = 3,
+                RowCount = 1,
+            };
+            actionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            actionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 156));
+            actionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 156));
+            actionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            actionCard.Controls.Add(actionLayout);
+
+            var autoPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            actionLayout.Controls.Add(autoPanel, 0, 0);
+
+            _autoSwitchLabel = MakeLabel("智能切换：未开启", 11F, FontStyle.Bold, Color.FromArgb(18, 18, 18));
+            _autoSwitchLabel.Location = new Point(0, 0);
+            _autoSwitchLabel.Size = new Size(240, 22);
+            autoPanel.Controls.Add(_autoSwitchLabel);
+
+            _autoSwitchDetailLabel = MakeLabel("在控制台开启后，助手会按云端策略保护额度。", 9F, FontStyle.Regular, Color.FromArgb(95, 101, 105));
+            _autoSwitchDetailLabel.Location = new Point(0, 24);
+            _autoSwitchDetailLabel.Size = new Size(520, 21);
+            _autoSwitchDetailLabel.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
+            autoPanel.Controls.Add(_autoSwitchDetailLabel);
+
+            _importAuthButton = MakeButton("导入 auth.json", false);
+            _importAuthButton.Dock = DockStyle.Fill;
+            _importAuthButton.Margin = new Padding(8, 6, 8, 6);
+            actionLayout.Controls.Add(_importAuthButton, 1, 0);
+
+            _openButton = MakeButton("打开控制台", true);
+            _openButton.Dock = DockStyle.Fill;
+            _openButton.Margin = new Padding(8, 4, 8, 4);
+            actionLayout.Controls.Add(_openButton, 2, 0);
 
             var logCard = MakeCard();
-            logCard.Margin = new Padding(8, 0, 0, 0);
-            lower.Controls.Add(logCard, 1, 0);
+            logCard.Margin = new Padding(0);
+            logCard.BackColor = Color.FromArgb(28, 28, 28);
+            root.Controls.Add(logCard, 0, 3);
 
-            var logTitle = MakeLabel("执行日志", 12F, FontStyle.Bold, Color.FromArgb(243, 241, 232));
-            logTitle.Location = new Point(18, 16);
-            logTitle.Size = new Size(180, 24);
-            logCard.Controls.Add(logTitle);
+            var logLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent,
+                ColumnCount = 1,
+                RowCount = 2,
+            };
+            logLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            logLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            logCard.Controls.Add(logLayout);
 
-            _logBox = new TextBox
+            var logHeader = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            logLayout.Controls.Add(logHeader, 0, 0);
+
+            var logTitle = MakeLabel("执行日志", 15F, FontStyle.Bold, Color.White);
+            logTitle.Location = new Point(0, 0);
+            logTitle.Size = new Size(160, 32);
+            logHeader.Controls.Add(logTitle);
+
+            var clearLogButton = MakeButton("清空显示", false);
+            clearLogButton.Width = 102;
+            clearLogButton.Height = 32;
+            clearLogButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            clearLogButton.Location = new Point(logHeader.ClientSize.Width - clearLogButton.Width, 0);
+            logHeader.Controls.Add(clearLogButton);
+            logHeader.Resize += delegate
+            {
+                clearLogButton.Left = Math.Max(0, logHeader.ClientSize.Width - clearLogButton.Width);
+            };
+
+            _logBox = new SafeLogRichTextBox(delegate (Exception ex)
+            {
+                _logViewNeedsReload = true;
+                RecordLogViewFailure("handle-created", ex);
+            })
             {
                 Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Vertical,
+                ScrollBars = RichTextBoxScrollBars.Vertical,
                 BorderStyle = BorderStyle.None,
-                Font = new Font("Consolas", 9.5F),
+                Font = _logRegularFont,
                 ForeColor = Color.FromArgb(223, 233, 212),
-                BackColor = Color.FromArgb(9, 12, 8),
-                Location = new Point(18, 52),
-                Width = 560,
-                Height = 240,
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                BackColor = Color.FromArgb(28, 28, 28),
+                DetectUrls = false,
+                Dock = DockStyle.Fill,
             };
-            logCard.Controls.Add(_logBox);
+            logLayout.Controls.Add(_logBox, 0, 1);
 
-            _startButton.Click += delegate { StartServer(); };
+            _startButton.Click += delegate
+            {
+                if (_running)
+                {
+                    StopServer();
+                    StartServer();
+                }
+                else
+                {
+                    StartServer();
+                }
+            };
             _stopButton.Click += delegate { StopServer(); };
             _openButton.Click += delegate { OpenManagementPage(); };
             _folderButton.Click += delegate { OpenCodexFolder(); };
@@ -335,15 +555,19 @@ namespace CodexPlusLocalHelper
             _importAuthButton.Click += delegate { ImportAndApplyAuthJson(); };
             _backupAuthButton.Click += delegate { BackupCurrentAuth(); };
             _launchCodexButton.Click += delegate { LaunchCodexWithLog(); };
+            clearLogButton.Click += delegate { ClearVisibleLogs(); };
             _trayMenu = BuildTrayMenu();
             _trayIcon = new NotifyIcon
             {
-                Icon = SystemIcons.Application,
-                Text = "Codex Dock Helper",
+                Icon = _appIcon,
+                Text = "Codex Dock Helper 正在准备",
                 Visible = true,
                 ContextMenuStrip = _trayMenu
             };
             _trayIcon.DoubleClick += delegate { ShowFromTray(); };
+            _dashboardTimer = new System.Windows.Forms.Timer { Interval = 1500 };
+            _dashboardTimer.Tick += delegate { RefreshDashboardUi(); };
+            _dashboardTimer.Start();
             FormClosing += MainForm_FormClosing;
             Resize += delegate
             {
@@ -354,11 +578,14 @@ namespace CodexPlusLocalHelper
             };
             Shown += delegate
             {
+                LoadRecentLogHistory();
+                RestoreRecentLogView("主窗口首次显示");
                 RefreshAuthStatus();
                 RepairCodexStartupChain();
                 StartServer();
                 StartCodexStatusMonitor();
                 StartAutoSwitchService();
+                RefreshDashboardUi();
             };
         }
 
@@ -388,18 +615,42 @@ namespace CodexPlusLocalHelper
             };
         }
 
-        private static Panel MakeCard()
+        private static TableLayoutPanel MakeCardLayout(int rows)
         {
-            return new Panel
+            var layout = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                BackColor = Color.FromArgb(25, 30, 22),
-                BorderStyle = BorderStyle.FixedSingle,
-                Padding = new Padding(14),
+                BackColor = Color.Transparent,
+                ColumnCount = 3,
+                RowCount = rows,
+            };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
+            return layout;
+        }
+
+        private static Panel MakeCard()
+        {
+            return new SurfacePanel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.White,
+                Padding = new Padding(18),
             };
         }
 
-        private static Button MakeButton(string text, bool primary)
+        private static SoftButton MakeButton(string text, bool primary)
+        {
+            return new SoftButton(primary)
+            {
+                Text = text,
+                Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold),
+                Cursor = Cursors.Hand,
+            };
+        }
+
+        private static Button MakeNativeButton(string text, bool primary)
         {
             var button = new Button
             {
@@ -408,44 +659,169 @@ namespace CodexPlusLocalHelper
                 Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Bold),
                 Cursor = Cursors.Hand,
                 UseVisualStyleBackColor = false,
-                BackColor = primary ? Color.FromArgb(229, 255, 106) : Color.FromArgb(20, 25, 18),
-                ForeColor = primary ? Color.FromArgb(18, 21, 14) : Color.FromArgb(243, 241, 232),
+                BackColor = primary ? Color.FromArgb(10, 10, 10) : Color.FromArgb(252, 252, 251),
+                ForeColor = primary ? Color.White : Color.FromArgb(35, 37, 39),
             };
-            button.FlatAppearance.BorderColor = primary ? Color.FromArgb(229, 255, 106) : Color.FromArgb(61, 70, 56);
-            button.FlatAppearance.MouseOverBackColor = primary ? Color.FromArgb(237, 255, 132) : Color.FromArgb(31, 38, 28);
-            button.FlatAppearance.MouseDownBackColor = primary ? Color.FromArgb(211, 238, 80) : Color.FromArgb(13, 17, 12);
+            button.FlatAppearance.BorderSize = 1;
+            button.FlatAppearance.BorderColor = primary ? Color.FromArgb(10, 10, 10) : Color.FromArgb(156, 164, 172);
+            button.FlatAppearance.MouseOverBackColor = primary ? Color.FromArgb(34, 34, 34) : Color.FromArgb(244, 246, 247);
+            button.FlatAppearance.MouseDownBackColor = primary ? Color.Black : Color.FromArgb(233, 235, 237);
             return button;
+        }
+
+        private static SoftButton MakeIconButton(string text)
+        {
+            var button = MakeButton(text, false);
+            button.Font = new Font("Segoe UI Symbol", 11F, FontStyle.Bold);
+            button.Text = "";
+            button.Glyph = SoftButtonGlyph.Stop;
+            return button;
+        }
+
+        private static void RoundControl(Control control, int radius)
+        {
+            Action update = delegate
+            {
+                if (control.Width <= 0 || control.Height <= 0) return;
+                using (var path = RoundedRectangle(new Rectangle(0, 0, control.Width - 1, control.Height - 1), radius))
+                {
+                    var next = new Region(path);
+                    var previous = control.Region;
+                    control.Region = next;
+                    if (previous != null) previous.Dispose();
+                }
+            };
+            control.Resize += delegate { update(); };
+            update();
+        }
+
+        private static Icon CreateAppIcon()
+        {
+            try
+            {
+                return CreateGeneratedAppIcon();
+            }
+            catch
+            {
+                return (Icon)SystemIcons.Application.Clone();
+            }
+        }
+
+        private static Icon CreateGeneratedAppIcon()
+        {
+            using (var bitmap = new Bitmap(64, 64))
+            using (var graphics = Graphics.FromImage(bitmap))
+            {
+                graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                graphics.Clear(Color.Transparent);
+                using (var stroke = new Pen(Color.FromArgb(35, 44, 51), 4))
+                using (var dot = new SolidBrush(Color.FromArgb(20, 181, 141)))
+                {
+                    stroke.LineJoin = LineJoin.Round;
+                    using (var top = RoundedRectangle(new Rectangle(11, 13, 42, 16), 4))
+                    using (var bottom = RoundedRectangle(new Rectangle(11, 35, 42, 16), 4))
+                    {
+                        graphics.DrawPath(stroke, top);
+                        graphics.DrawPath(stroke, bottom);
+                    }
+                    graphics.FillEllipse(dot, 18, 19, 5, 5);
+                    graphics.FillEllipse(dot, 18, 41, 5, 5);
+                }
+
+                var handle = bitmap.GetHicon();
+                try
+                {
+                    return (Icon)Icon.FromHandle(handle).Clone();
+                }
+                finally
+                {
+                    DestroyIcon(handle);
+                }
+            }
+        }
+
+        private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
+        {
+            var diameter = radius * 2;
+            var path = new GraphicsPath();
+            path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        private static Color ResolveControlBackColor(Control control, Color fallback)
+        {
+            var current = control == null ? null : control.Parent;
+            while (current != null)
+            {
+                if (current.BackColor != Color.Transparent && current.BackColor.A > 0) return current.BackColor;
+                current = current.Parent;
+            }
+            return fallback;
         }
 
         private ContextMenuStrip BuildTrayMenu()
         {
-            var menu = new ContextMenuStrip();
-            menu.Items.Add("显示 Dock Helper", null, delegate { ShowFromTray(); });
-            menu.Items.Add("打开 Codex Dock", null, delegate { OpenManagementPage(); });
-            menu.Items.Add("打开本地状态页", null, delegate { OpenLocalStatusPage(); });
-            menu.Items.Add("打开 Codex 目录", null, delegate { OpenCodexFolder(); });
+            var menu = new RoundedTrayMenu
+            {
+                Font = new Font("Microsoft YaHei UI", 9F),
+                BackColor = Color.FromArgb(255, 255, 255),
+                ForeColor = Color.FromArgb(30, 32, 34),
+                ShowImageMargin = false,
+            };
+            _trayStatusItem = new ToolStripMenuItem("状态：准备启动") { Enabled = false };
+            menu.Items.Add(_trayStatusItem);
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("显示主窗口", null, delegate { ShowFromTray(); });
+            menu.Items.Add("打开控制台", null, delegate { OpenManagementPage(); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("重启本地服务", null, delegate
             {
                 StopServer();
                 StartServer();
             });
+            menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("退出助手", null, delegate { ExitApplication(); });
+            foreach (ToolStripItem item in menu.Items)
+            {
+                if (!(item is ToolStripSeparator)) item.Padding = new Padding(12, 7, 22, 7);
+            }
+            menu.Opening += delegate { RefreshTrayMenu(); };
             return menu;
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            if (!_allowExit && e.CloseReason == CloseReason.UserClosing)
+            if (ShouldHideToTrayOnClose(e.CloseReason))
             {
+                WriteLifecycleLog("FormClosing " + e.CloseReason + " -> tray; visible=" + Visible + ", handle=" + IsHandleCreated + ", disposing=" + Disposing);
                 e.Cancel = true;
                 HideToTray();
                 return;
             }
 
+            _applicationClosing = true;
+            WriteLifecycleLog("FormClosing exit; reason=" + e.CloseReason + ", visible=" + Visible + ", handle=" + IsHandleCreated + ", disposing=" + Disposing);
             StopServer();
             StopAutoSwitchService();
             StopCodexStatusMonitor();
+            lock (_operationProgressLock)
+            {
+                if (_operationProgressForm != null && !_operationProgressForm.IsDisposed)
+                {
+                    _operationProgressForm.Close();
+                    _operationProgressForm.Dispose();
+                }
+                _operationProgressForm = null;
+            }
+            if (_dashboardTimer != null)
+            {
+                _dashboardTimer.Stop();
+                _dashboardTimer.Dispose();
+            }
             if (_trayIcon != null)
             {
                 _trayIcon.Visible = false;
@@ -455,15 +831,46 @@ namespace CodexPlusLocalHelper
             {
                 _trayMenu.Dispose();
             }
+            if (_appIcon != null)
+            {
+                _appIcon.Dispose();
+            }
+            if (_logRegularFont != null)
+            {
+                _logRegularFont.Dispose();
+            }
+            if (_logBoldFont != null)
+            {
+                _logBoldFont.Dispose();
+            }
+        }
+
+        private bool ShouldHideToTrayOnClose(CloseReason reason)
+        {
+            if (_allowExit) return false;
+            if (reason == CloseReason.WindowsShutDown) return false;
+            if (reason == CloseReason.ApplicationExitCall) return false;
+            return reason == CloseReason.UserClosing
+                || reason == CloseReason.TaskManagerClosing
+                || reason == CloseReason.None;
         }
 
         private void HideToTray()
         {
+            WriteLifecycleLog("主窗口收起到托盘; visible=" + Visible + ", handle=" + IsHandleCreated + ", disposing=" + Disposing);
+            ResetVisibleLogBox("收起到托盘");
             Hide();
             ShowInTaskbar = false;
             if (!_trayTipShown && _trayIcon != null)
             {
-                _trayIcon.ShowBalloonTip(2500, "Codex Dock Helper", "Helper 仍在系统托盘运行。右键图标可以退出。", ToolTipIcon.Info);
+                try
+                {
+                    _trayIcon.ShowBalloonTip(2500, "Codex Dock Helper", "助手已收起到托盘。右键图标可打开控制台、重启服务或退出。", ToolTipIcon.Info);
+                }
+                catch (Exception ex)
+                {
+                    WriteLifecycleLog("托盘提示显示失败：" + ex.Message);
+                }
                 _trayTipShown = true;
             }
         }
@@ -474,10 +881,108 @@ namespace CodexPlusLocalHelper
             Show();
             WindowState = FormWindowState.Normal;
             Activate();
+            WriteLifecycleLog("托盘恢复主窗口; visible=" + Visible + ", handle=" + IsHandleCreated + ", disposing=" + Disposing);
+            RestoreRecentLogView("托盘恢复");
+        }
+
+        private void RefreshDashboardUi()
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke(new Action(RefreshDashboardUi));
+                return;
+            }
+
+            _uptimeLabel.Text = "运行时间 " + FormatDuration(DateTime.UtcNow - _startedAtUtc);
+            _statusLabel.Text = _running ? "● 助手在线" : "● 服务未启动";
+            _statusLabel.ForeColor = _running ? Color.FromArgb(5, 130, 96) : Color.FromArgb(137, 91, 0);
+            _serviceBadgeLabel.Text = _running ? "在线" : "离线";
+            _serviceBadgeLabel.ForeColor = _running ? Color.FromArgb(16, 126, 84) : Color.FromArgb(137, 91, 0);
+            _serviceBadgeLabel.BackColor = _running ? Color.FromArgb(212, 247, 229) : Color.FromArgb(255, 241, 205);
+            _portLabel.Text = _running
+                ? "Local API: " + BaseUrl + "\r\nOAuth: http://localhost:1455/auth/callback\r\nCloud: " + CloudConsoleUrl.TrimEnd('/')
+                : "Local API: 未启动\r\nOAuth: http://localhost:1455/auth/callback\r\nCloud: " + CloudConsoleUrl.TrimEnd('/');
+            _portLabel.ForeColor = Color.FromArgb(40, 48, 58);
+            _startButton.Text = _running ? "重启服务" : "启动服务";
+            _startButton.Enabled = true;
+            _stopButton.Enabled = _running;
+
+            var runtime = CurrentCodexStatus();
+            _runtimeLabel.Text = string.IsNullOrWhiteSpace(runtime.Label) ? "状态未知" : runtime.Label;
+            _runtimeLabel.ForeColor = RuntimeColor(runtime.State);
+            var runtimeDetail = string.IsNullOrWhiteSpace(runtime.Detail) ? "等待状态更新。" : runtime.Detail;
+            if (runtime.RunningProcessCount > 0)
+            {
+                runtimeDetail += " · 进程 " + runtime.RunningProcessCount.ToString(CultureInfo.InvariantCulture);
+            }
+            _runtimeDetailLabel.Text = ShortNonEmpty(runtimeDetail, 104);
+
+            var auto = GetAutoSwitchConfig();
+            var authorized = !string.IsNullOrEmpty(auto.DeviceToken);
+            if (auto.Enabled && authorized)
+            {
+                _autoSwitchLabel.Text = "智能切换：已开启";
+                _autoSwitchLabel.ForeColor = Color.FromArgb(5, 130, 96);
+            }
+            else if (auto.Enabled)
+            {
+                _autoSwitchLabel.Text = "智能切换：待授权";
+                _autoSwitchLabel.ForeColor = Color.FromArgb(137, 91, 0);
+            }
+            else
+            {
+                _autoSwitchLabel.Text = "智能切换：未开启";
+                _autoSwitchLabel.ForeColor = Color.FromArgb(89, 94, 99);
+            }
+
+            var autoDetail = _lastAutoSwitchResult;
+            if (string.IsNullOrWhiteSpace(autoDetail))
+            {
+                autoDetail = auto.Enabled ? "等待云端策略和 Helper token。" : "在控制台开启后，助手会按云端策略保护额度。";
+            }
+            _autoSwitchDetailLabel.Text = ShortNonEmpty(autoDetail, 110);
+            RefreshTrayMenu();
+        }
+
+        private void RefreshTrayMenu()
+        {
+            if (_trayStatusItem == null) return;
+            _trayStatusItem.Text = _running ? "状态：服务运行中 · 127.0.0.1:" + _port.ToString(CultureInfo.InvariantCulture) : "状态：服务已停止";
+        }
+
+        private static Color RuntimeColor(string state)
+        {
+            if (string.Equals(state, "idle", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(5, 130, 96);
+            if (string.Equals(state, "active", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(21, 101, 192);
+            if (string.Equals(state, "waiting", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(137, 91, 0);
+            if (string.Equals(state, "not_running", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(128, 73, 0);
+            if (string.Equals(state, "cooling", StringComparison.OrdinalIgnoreCase)) return Color.FromArgb(137, 91, 0);
+            return Color.FromArgb(89, 94, 99);
+        }
+
+        private static string FormatDuration(TimeSpan span)
+        {
+            if (span.TotalDays >= 1)
+            {
+                return ((int)span.TotalDays).ToString(CultureInfo.InvariantCulture) + "天 " + span.Hours.ToString(CultureInfo.InvariantCulture) + "小时";
+            }
+            if (span.TotalHours >= 1)
+            {
+                return ((int)span.TotalHours).ToString(CultureInfo.InvariantCulture) + "小时 " + span.Minutes.ToString(CultureInfo.InvariantCulture) + "分钟";
+            }
+            return Math.Max(1, span.Minutes).ToString(CultureInfo.InvariantCulture) + "分钟";
+        }
+
+        private static string ShortNonEmpty(string value, int max)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "";
+            return value.Length <= max ? value : value.Substring(0, Math.Max(1, max - 3)) + "...";
         }
 
         private void ExitApplication()
         {
+            WriteLifecycleLog("托盘请求退出助手");
+            _applicationClosing = true;
             _allowExit = true;
             Close();
         }
@@ -522,13 +1027,15 @@ namespace CodexPlusLocalHelper
                 SetStatus("运行中：" + BaseUrl);
                 Log("服务已启动：" + BaseUrl + " · Helper " + HelperVersion + " (" + HelperBuildDate + ")");
                 RefreshAuthStatus();
-                _startButton.Enabled = false;
+                _startButton.Enabled = true;
                 _stopButton.Enabled = true;
+                RefreshDashboardUi();
             }
             catch (Exception ex)
             {
                 Log("启动失败：" + ex.Message);
                 SetStatus("启动失败");
+                RefreshDashboardUi();
             }
         }
 
@@ -551,6 +1058,7 @@ namespace CodexPlusLocalHelper
             Log("服务已停止");
             _startButton.Enabled = true;
             _stopButton.Enabled = false;
+            RefreshDashboardUi();
         }
 
         private void ServerLoop()
@@ -690,7 +1198,7 @@ namespace CodexPlusLocalHelper
 
             if (request.HttpMethod == "GET" && path == "/api/health")
             {
-                SendJson(context.Response, 200, "{\"ok\":true,\"mode\":\"native-helper\",\"port\":" + _port + ",\"cloud_console_url\":\"" + JsonEscape(CloudConsoleUrl) + "\",\"auto_switch\":" + AutoSwitchStatusJson() + ",\"codex_proxy\":" + CodexProxyStatusJson() + ",\"codex_status\":" + CodexStatusJson() + "}");
+                SendJson(context.Response, 200, "{\"ok\":true,\"mode\":\"native-helper\",\"version\":\"" + JsonEscape(HelperVersion) + "\",\"build_date\":\"" + JsonEscape(HelperBuildDate) + "\",\"port\":" + _port + ",\"cloud_console_url\":\"" + JsonEscape(CloudConsoleUrl) + "\",\"auto_switch\":" + AutoSwitchStatusJson() + ",\"codex_proxy\":" + CodexProxyStatusJson() + ",\"codex_status\":" + CodexStatusJson() + "}");
                 return true;
             }
 
@@ -1398,7 +1906,39 @@ namespace CodexPlusLocalHelper
 
         private void RefreshAuthStatus()
         {
-            SetAuthStatus(CurrentAuthSummaryText());
+            SetAuthStatus(CurrentAuthPanelText());
+        }
+
+        private static string CurrentAuthPanelText()
+        {
+            try
+            {
+                var target = CurrentAuthPath();
+                if (!File.Exists(target))
+                {
+                    return "ID:    未发现授权文件\r\n类型:  --\r\n状态:  请从控制台导入授权";
+                }
+                var raw = File.ReadAllText(target, Encoding.UTF8);
+                var email = MatchJsonString(raw, "email");
+                var accountId = MatchJsonString(raw, "account_id");
+                var accessToken = MatchJsonString(raw, "access_token");
+                var refreshToken = MatchJsonString(raw, "refresh_token");
+                var identity = ShortText(!string.IsNullOrEmpty(email) ? email : accountId, 30);
+                var hasRefresh = !string.IsNullOrEmpty(refreshToken)
+                    && refreshToken != accessToken
+                    && !string.Equals(refreshToken, "rt_mock_token", StringComparison.OrdinalIgnoreCase);
+                var expires = JwtExpiry(accessToken);
+                var expiresText = expires.HasValue
+                    ? expires.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                    : "未知";
+                return "ID:    " + identity
+                    + "\r\n类型:  " + (hasRefresh ? "RT Present" : "RT 不可用")
+                    + "\r\nAT 到期: " + expiresText;
+            }
+            catch (Exception ex)
+            {
+                return "ID:    读取失败\r\n状态:  " + ShortNonEmpty(ex.Message, 34);
+            }
         }
 
         private static string CurrentAuthSummaryText()
@@ -2645,9 +3185,37 @@ namespace CodexPlusLocalHelper
             }
             catch (Exception ex)
             {
-                SetAutoSwitchResult("云端保活失败：" + ex.Message, "cloud-keepalive-failed:" + ShortText(ex.Message, 80));
+                var accountHint = CurrentAuthAccountHint();
+                var deviceHint = ShortDeviceKey(config.DeviceKey);
+                SetAutoSwitchResult(
+                    "云端配置同步失败：GET /api/helper/auto-switch/config 超时或无响应；设备 " + deviceHint + "；当前账号 " + accountHint + "；" + ex.Message,
+                    "cloud-config-sync-failed:" + deviceHint + ":" + accountHint + ":" + ShortText(ex.Message, 80));
             }
             return config;
+        }
+
+        private static string CurrentAuthAccountHint()
+        {
+            try
+            {
+                var path = CurrentAuthPath();
+                if (!File.Exists(path)) return "未找到 auth";
+                var raw = File.ReadAllText(path, Encoding.UTF8);
+                var email = EmailFromAuthJson(raw);
+                if (!string.IsNullOrWhiteSpace(email)) return ShortText(email, 48);
+                var accountId = MatchJsonString(raw, "account_id");
+                return string.IsNullOrWhiteSpace(accountId) ? "未知账号" : ShortText(accountId, 18);
+            }
+            catch
+            {
+                return "读取失败";
+            }
+        }
+
+        private static string ShortDeviceKey(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "未绑定";
+            return value.Length <= 8 ? value : value.Substring(0, 8) + "...";
         }
 
         private static bool AutoSwitchConfigEquivalent(AutoSwitchConfig a, AutoSwitchConfig b)
@@ -2878,11 +3446,14 @@ namespace CodexPlusLocalHelper
             string idleReason;
             if (!IsSafeToAutoSwitch(config, triggerType, out idleReason))
             {
-                SetAutoSwitchResult("已触发但等待空闲：" + idleReason + "；触发源 " + triggerLabel, "waiting-idle:" + triggerType + ":" + trigger);
-                TryPostHelperAudit(config, "deferred-active-task", triggerLabel, idleReason);
+                SetAutoSwitchResult("额度已触发，正在保护当前任务：" + idleReason + "；触发源 " + triggerLabel, "waiting-boundary:" + triggerType + ":" + trigger);
+                TryPostHelperAudit(config, "deferred-active-turn", triggerLabel, idleReason);
                 return;
             }
 
+            var boundaryStatus = CurrentCodexStatus();
+            SetAutoSwitchResult("任务已结束，正在安全切换：" + triggerLabel, "boundary-confirmed:" + triggerType + ":" + trigger);
+            TryPostHelperAudit(config, "boundary-confirmed", triggerLabel, boundaryStatus.Detail);
             var forceCloudTrigger = IsHardAutoSwitchTrigger(triggerType);
             try { MaybeSyncCurrentAuth(config, true, "pre-switch-check"); }
             catch (Exception ex) { Log("切换前 auth 比对跳过：" + ShortText(ex.Message, 120)); }
@@ -2893,6 +3464,9 @@ namespace CodexPlusLocalHelper
                 + "\"triggerReason\":\"" + JsonEscape(trigger) + "\","
                 + "\"triggerType\":\"" + JsonEscape(triggerType) + "\","
                 + "\"triggerSource\":\"" + JsonEscape(triggerSource) + "\","
+                + "\"boundaryConfirmed\":true,"
+                + "\"runtimeState\":\"" + JsonEscape(boundaryStatus.State) + "\","
+                + "\"boundaryEvidence\":\"" + JsonEscape(boundaryStatus.Detail) + "\","
                 + "\"currentUsageSummary\":\"" + JsonEscape(usageSummary) + "\","
                 + "\"force\":" + (forceCloudTrigger ? "true" : "false") + ","
                 + "\"error\":\"" + JsonEscape(error) + "\","
@@ -2928,7 +3502,7 @@ namespace CodexPlusLocalHelper
             if (!switched)
             {
                 SetAutoSwitchResult("自动切换失败：" + ShortText(targetName, 48), "switch-failed:" + ShortText(targetName, 48));
-                TryPostHelperAudit(config, "switch-failed", trigger, "target=" + targetName);
+                TryPostHelperAudit(config, "switch-failed", trigger, "target=" + targetName, targetCloudId);
                 return;
             }
             _lastAutoSwitchAt = DateTime.UtcNow;
@@ -2981,13 +3555,8 @@ namespace CodexPlusLocalHelper
         private bool IsSafeToAutoSwitch(AutoSwitchConfig config, string triggerType, out string reason)
         {
             reason = "";
-            if (!config.OnlyWhenIdle) return true;
 
             var runtimeStatus = CurrentCodexStatus();
-            if (IsHardAutoSwitchTrigger(triggerType) && runtimeStatus.State == "cooling")
-            {
-                return true;
-            }
             if (runtimeStatus.State == "idle" && runtimeStatus.SafeToSwitch)
             {
                 if (runtimeStatus.StableSeconds >= 0 && runtimeStatus.StableSeconds < config.IdleSeconds)
@@ -3158,9 +3727,28 @@ namespace CodexPlusLocalHelper
 
         private void TryPostHelperAudit(AutoSwitchConfig config, string result, string trigger, string detail)
         {
+            TryPostHelperAudit(config, result, trigger, detail, "");
+        }
+
+        private void TryPostHelperAudit(AutoSwitchConfig config, string result, string trigger, string detail, string accountId)
+        {
             try
             {
+                var key = (result ?? "") + ":" + (trigger ?? "") + ":" + (detail ?? "") + ":" + (accountId ?? "");
+                lock (_autoSwitchLock)
+                {
+                    var now = DateTime.UtcNow;
+                    if (string.Equals(key, _lastAutoSwitchAuditKey, StringComparison.Ordinal)
+                        && _lastAutoSwitchAuditAt != DateTime.MinValue
+                        && (now - _lastAutoSwitchAuditAt).TotalSeconds < AutoSwitchRepeatedLogSeconds)
+                    {
+                        return;
+                    }
+                    _lastAutoSwitchAuditKey = key;
+                    _lastAutoSwitchAuditAt = now;
+                }
                 PostHelperJson(config, "/api/helper/auto-switch/audit", "{"
+                    + "\"accountId\":\"" + JsonEscape(accountId ?? "") + "\","
                     + "\"result\":\"" + JsonEscape(result) + "\","
                     + "\"metadata\":{\"reason\":\"" + JsonEscape(trigger) + "\",\"detail\":\"" + JsonEscape(detail) + "\"}"
                     + "}");
@@ -3619,7 +4207,7 @@ namespace CodexPlusLocalHelper
             var ok = string.IsNullOrEmpty(error);
             var title = ok ? "授权已接收" : "授权失败";
             var detail = ok
-                ? "Codex Dock 正在自动解析回调，可以关闭这个页面。"
+                ? "Codex Dock 正在自动解析回调，此页面会尝试自动关闭。"
                 : "授权服务返回错误：" + error;
             return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
                 + "<title>" + HtmlEscape(title) + "</title>"
@@ -3627,7 +4215,7 @@ namespace CodexPlusLocalHelper
                 + ".card{width:min(480px,calc(100vw - 32px));background:#fff;border:1px solid #ddd;border-radius:16px;padding:24px;box-shadow:0 18px 60px rgba(0,0,0,.12)}"
                 + "h1{font-size:22px;margin:0 0 8px}p{margin:0;color:#666;line-height:1.6}button{margin-top:18px;height:36px;border:1px solid #ddd;border-radius:999px;background:#111;color:#fff;padding:0 18px;font:inherit;cursor:pointer}</style>"
                 + "</head><body><main class=\"card\"><h1>" + HtmlEscape(title) + "</h1><p>" + HtmlEscape(detail) + "</p><button onclick=\"window.close()\">关闭页面</button></main>"
-                + "<script>(function(){var msg={type:'codex-dock-oauth-callback',url:" + JsString(callbackUrl) + "};function send(){try{if(window.opener&&!window.opener.closed)window.opener.postMessage(msg,'*');}catch(e){}}send();setTimeout(send,500);setTimeout(send,1500);})();</script>"
+                + "<script>(function(){var closed=false;var msg={type:'codex-dock-oauth-callback',url:" + JsString(callbackUrl) + "};function closeSoon(){if(closed)return;closed=true;setTimeout(function(){try{window.close();}catch(e){}},180);}function send(){try{if(window.opener&&!window.opener.closed)window.opener.postMessage(msg,'*');}catch(e){}}window.addEventListener('message',function(e){if(e&&e.data&&e.data.type==='codex-dock-oauth-received')closeSoon();});send();setTimeout(send,500);setTimeout(send,1500);setTimeout(closeSoon,2600);})();</script>"
                 + "</body></html>";
         }
 
@@ -3749,12 +4337,18 @@ namespace CodexPlusLocalHelper
                 BeginInvoke(new Action<string>(SetStatus), text);
                 return;
             }
-            _statusLabel.Text = text;
+            _statusLabel.Text = ContainsIgnoreCase(text, "失败")
+                ? "● 服务异常"
+                : (_running ? "● 助手在线" : "● 服务未启动");
+            _statusLabel.ForeColor = ContainsIgnoreCase(text, "失败")
+                ? Color.FromArgb(180, 45, 45)
+                : (_running ? Color.FromArgb(5, 130, 96) : Color.FromArgb(137, 91, 0));
             if (_trayIcon != null)
             {
                 var tip = "Codex Dock Helper - " + text;
                 _trayIcon.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
             }
+            RefreshTrayMenu();
         }
 
         private void SetAuthStatus(string text)
@@ -3769,22 +4363,238 @@ namespace CodexPlusLocalHelper
 
         private void Log(string text)
         {
+            var safeText = text ?? "";
+            var now = DateTime.Now;
+            var display = ClassifyLogMessage(safeText);
+            WriteHelperLogLine("[" + now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + safeText);
+            AddRecentLogLine("[" + now.ToString("HH:mm:ss") + "] [" + display.Label + "] " + safeText);
+            if (_applicationClosing) return;
             if (InvokeRequired)
             {
-                BeginInvoke(new Action<string>(Log), text);
+                try
+                {
+                    BeginInvoke(new Action(delegate { RenderLogMessage(now, safeText, display); }));
+                }
+                catch (Exception ex)
+                {
+                    RecordLogViewFailure("dispatch", ex);
+                }
                 return;
             }
-            var now = DateTime.Now;
-            var uiLine = "[" + now.ToString("HH:mm:ss") + "] " + text;
-            WriteHelperLogLine("[" + now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + text);
-            _logBox.AppendText(uiLine + Environment.NewLine);
+            RenderLogMessage(now, safeText, display);
+        }
+
+        private void RenderLogMessage(DateTime now, string text, LogDisplayStyle display)
+        {
+            if (!CanRenderLogView())
+            {
+                _logViewNeedsReload = true;
+                return;
+            }
+            if (_logViewNeedsReload)
+            {
+                RestoreRecentLogView("待显示日志恢复");
+                return;
+            }
+            try
+            {
+            AppendLogText("[" + now.ToString("HH:mm:ss") + "] ", Color.FromArgb(136, 150, 165), FontStyle.Regular);
+            AppendLogText("[" + display.Label + "] ", display.TagColor, FontStyle.Bold);
+            AppendLogText(text + Environment.NewLine, display.TextColor, FontStyle.Regular);
+            _logBox.SelectionStart = _logBox.TextLength;
+            _logBox.ScrollToCaret();
+                if (_logBox.TextLength > HelperUiLogMaxCharacters) RestoreRecentLogView("显示行数上限");
+            }
+            catch (ArgumentException ex)
+            {
+                RecoverLogView("render-argument", ex);
+            }
+            catch (ObjectDisposedException ex)
+            {
+                RecordLogViewFailure("render-disposed", ex);
+                _logViewNeedsReload = true;
+            }
+            catch (InvalidOperationException ex)
+            {
+                RecoverLogView("render-invalid-operation", ex);
+            }
+        }
+
+        private void AppendLogText(string text, Color color, FontStyle style)
+        {
+            _logBox.SelectionStart = _logBox.TextLength;
+            _logBox.SelectionLength = 0;
+            _logBox.SelectionColor = color;
+            _logBox.SelectionFont = style == FontStyle.Bold ? _logBoldFont : _logRegularFont;
+            _logBox.AppendText(text);
+        }
+
+        private bool CanRenderLogView()
+        {
+            return !_applicationClosing
+                && Visible
+                && !IsDisposed
+                && !Disposing
+                && _logBox != null
+                && !_logBox.IsDisposed
+                && !_logBox.Disposing
+                && _logBox.IsHandleCreated;
+        }
+
+        private void AddRecentLogLine(string line)
+        {
+            lock (_recentLogLock)
+            {
+                _recentLogLines.Enqueue(line ?? "");
+                while (_recentLogLines.Count > HelperUiLogLineLimit) _recentLogLines.Dequeue();
+            }
+        }
+
+        private void LoadRecentLogHistory()
+        {
+            try
+            {
+                var path = HelperLogPath();
+                if (!File.Exists(path)) return;
+                var lines = File.ReadAllLines(path, Encoding.UTF8);
+                lock (_recentLogLock)
+                {
+                    _recentLogLines.Clear();
+                    var first = Math.Max(0, lines.Length - HelperUiLogLineLimit);
+                    for (var index = first; index < lines.Length; index++)
+                    {
+                        _recentLogLines.Enqueue(lines[index]);
+                    }
+                }
+                _logViewNeedsReload = true;
+            }
+            catch (Exception ex)
+            {
+                RecordLogViewFailure("history-load", ex);
+            }
+        }
+
+        private void RestoreRecentLogView(string reason)
+        {
+            if (!CanRenderLogView())
+            {
+                _logViewNeedsReload = true;
+                return;
+            }
+            string text;
+            int count;
+            lock (_recentLogLock)
+            {
+                var lines = _recentLogLines.ToArray();
+                count = lines.Length;
+                text = string.Join(Environment.NewLine, lines);
+                if (text.Length > 0) text += Environment.NewLine;
+            }
+            try
+            {
+                ResetVisibleLogBox("恢复前清理");
+                _logBox.SelectionColor = Color.FromArgb(223, 233, 212);
+                _logBox.SelectionFont = _logRegularFont;
+                _logBox.AppendText(text);
+                _logBox.SelectionStart = _logBox.TextLength;
+                _logBox.ScrollToCaret();
+                _logViewNeedsReload = false;
+                WriteLifecycleLog("日志视图已恢复; reason=" + reason + ", lines=" + count.ToString(CultureInfo.InvariantCulture));
+            }
+            catch (Exception ex)
+            {
+                _logViewNeedsReload = true;
+                RecordLogViewFailure("restore-" + reason, ex);
+            }
+        }
+
+        private void RecoverLogView(string stage, Exception ex)
+        {
+            _logViewNeedsReload = true;
+            RecordLogViewFailure(stage, ex);
+            RestoreRecentLogView("渲染故障恢复");
+        }
+
+        private void ResetVisibleLogBox(string reason)
+        {
+            try
+            {
+                if (_logBox == null || _logBox.IsDisposed) return;
+                _logBox.Clear();
+                _logBox.Text = "";
+                _logBox.SelectionStart = 0;
+                _logBox.SelectionLength = 0;
+                _logBox.SelectionColor = Color.FromArgb(223, 233, 212);
+                _logBox.SelectionFont = _logRegularFont;
+                _logViewNeedsReload = true;
+            }
+            catch (Exception ex)
+            {
+                _logViewNeedsReload = true;
+                RecordLogViewFailure("reset-" + reason, ex);
+            }
+        }
+
+        private void ClearVisibleLogs()
+        {
+            lock (_recentLogLock)
+            {
+                _recentLogLines.Clear();
+            }
+            _logViewNeedsReload = false;
+            try
+            {
+                if (_logBox != null && !_logBox.IsDisposed) _logBox.Clear();
+            }
+            catch (Exception ex)
+            {
+                RecordLogViewFailure("clear-visible", ex);
+                _logViewNeedsReload = true;
+            }
+            WriteLifecycleLog("用户清空可见日志缓冲; 持久日志文件保留");
+        }
+
+        private static void RecordLogViewFailure(string stage, Exception ex)
+        {
+            WriteLifecycleLog("日志视图故障; stage=" + stage + ", type=" + ex.GetType().Name + ", message=" + ShortNonEmpty(ex.Message, 160));
+        }
+
+        private static void WriteLifecycleLog(string text)
+        {
+            WriteHelperLogLine("[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] [lifecycle] " + (text ?? ""));
+        }
+
+        private static LogDisplayStyle ClassifyLogMessage(string text)
+        {
+            var value = text ?? "";
+            if (Regex.IsMatch(value, "失败|异常|错误|失效|未启动", RegexOptions.IgnoreCase))
+            {
+                return new LogDisplayStyle("错误", Color.FromArgb(255, 107, 107), Color.FromArgb(255, 178, 178));
+            }
+            if (Regex.IsMatch(value, "等待|冷却|触发|额度|用量", RegexOptions.IgnoreCase))
+            {
+                return new LogDisplayStyle("提醒", Color.FromArgb(255, 193, 74), Color.FromArgb(255, 214, 128));
+            }
+            if (Regex.IsMatch(value, "auth|OAuth|授权|备份|导入", RegexOptions.IgnoreCase))
+            {
+                return new LogDisplayStyle("授权", Color.FromArgb(144, 173, 255), Color.FromArgb(219, 229, 255));
+            }
+            if (Regex.IsMatch(value, "自动切换|检查正常|云端", RegexOptions.IgnoreCase))
+            {
+                return new LogDisplayStyle("切换", Color.FromArgb(32, 221, 151), Color.FromArgb(167, 242, 210));
+            }
+            if (Regex.IsMatch(value, "Codex|进程|窗口", RegexOptions.IgnoreCase))
+            {
+                return new LogDisplayStyle("Codex", Color.FromArgb(101, 185, 255), Color.FromArgb(193, 224, 255));
+            }
+            return new LogDisplayStyle("系统", Color.FromArgb(125, 184, 255), Color.FromArgb(224, 230, 236));
         }
 
         private void RunOnUi(Action action)
         {
             try
             {
-                if (IsDisposed) return;
+                if (_applicationClosing || IsDisposed || Disposing) return;
                 if (InvokeRequired)
                 {
                     BeginInvoke(action);
@@ -3906,49 +4716,535 @@ namespace CodexPlusLocalHelper
             catch { }
         }
 
+        private sealed class LogDisplayStyle
+        {
+            public readonly string Label;
+            public readonly Color TagColor;
+            public readonly Color TextColor;
+
+            public LogDisplayStyle(string label, Color tagColor, Color textColor)
+            {
+                Label = label;
+                TagColor = tagColor;
+                TextColor = textColor;
+            }
+        }
+
+        private sealed class RoundedTrayMenu : ContextMenuStrip
+        {
+            public RoundedTrayMenu()
+            {
+                Padding = new Padding(8, 10, 8, 10);
+                Renderer = new TrayMenuRenderer();
+                DropShadowEnabled = true;
+            }
+
+            protected override void OnSizeChanged(EventArgs e)
+            {
+                base.OnSizeChanged(e);
+                if (Width <= 0 || Height <= 0) return;
+                using (var path = RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), 12))
+                {
+                    var old = Region;
+                    Region = new Region(path);
+                    if (old != null) old.Dispose();
+                }
+            }
+        }
+
+        private sealed class TrayMenuRenderer : ToolStripProfessionalRenderer
+        {
+            public TrayMenuRenderer() : base(new TrayMenuColorTable())
+            {
+                RoundedEdges = true;
+            }
+
+            protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var pen = new Pen(Color.FromArgb(220, 224, 227)))
+                using (var path = RoundedRectangle(new Rectangle(0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1), 12))
+                {
+                    e.Graphics.DrawPath(pen, path);
+                }
+            }
+
+            protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+            {
+                if (!e.Item.Selected || !e.Item.Enabled) return;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var brush = new SolidBrush(Color.FromArgb(239, 248, 245)))
+                using (var path = RoundedRectangle(new Rectangle(5, 2, e.Item.Width - 10, e.Item.Height - 4), 9))
+                {
+                    e.Graphics.FillPath(brush, path);
+                }
+            }
+
+            protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+            {
+                using (var pen = new Pen(Color.FromArgb(235, 237, 238)))
+                {
+                    e.Graphics.DrawLine(pen, 10, e.Item.Height / 2, e.Item.Width - 10, e.Item.Height / 2);
+                }
+            }
+        }
+
+        private sealed class TrayMenuColorTable : ProfessionalColorTable
+        {
+            public override Color ToolStripDropDownBackground { get { return Color.White; } }
+            public override Color MenuItemBorder { get { return Color.Transparent; } }
+            public override Color MenuItemSelected { get { return Color.FromArgb(242, 247, 246); } }
+            public override Color ImageMarginGradientBegin { get { return Color.White; } }
+            public override Color ImageMarginGradientMiddle { get { return Color.White; } }
+            public override Color ImageMarginGradientEnd { get { return Color.White; } }
+            public override Color SeparatorDark { get { return Color.FromArgb(235, 237, 238); } }
+            public override Color SeparatorLight { get { return Color.FromArgb(235, 237, 238); } }
+        }
+
+        private sealed class SurfacePanel : Panel
+        {
+            public SurfacePanel()
+            {
+                DoubleBuffered = true;
+                ResizeRedraw = true;
+            }
+
+            protected override void OnResize(EventArgs eventargs)
+            {
+                base.OnResize(eventargs);
+                if (Width <= 0 || Height <= 0) return;
+                using (var path = RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), 12))
+                {
+                    var previous = Region;
+                    Region = new Region(path);
+                    if (previous != null) previous.Dispose();
+                }
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                base.OnPaint(e);
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var border = new Pen(BackColor == Color.FromArgb(28, 28, 28) ? Color.FromArgb(28, 28, 28) : Color.FromArgb(220, 223, 225)))
+                using (var path = RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), 12))
+                {
+                    e.Graphics.DrawPath(border, path);
+                }
+            }
+        }
+
+        private sealed class InfoBox : Control
+        {
+            public InfoBox()
+            {
+                DoubleBuffered = true;
+                TabStop = false;
+                SetStyle(
+                    ControlStyles.UserPaint
+                    | ControlStyles.AllPaintingInWmPaint
+                    | ControlStyles.OptimizedDoubleBuffer
+                    | ControlStyles.ResizeRedraw
+                    | ControlStyles.SupportsTransparentBackColor,
+                    true);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var fill = new SolidBrush(BackColor))
+                using (var border = new Pen(Color.FromArgb(222, 226, 229), 1F))
+                using (var path = RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), 8))
+                {
+                    e.Graphics.FillPath(fill, path);
+                    e.Graphics.DrawPath(border, path);
+                }
+
+                var textRect = new Rectangle(10, 9, Math.Max(0, Width - 20), Math.Max(0, Height - 18));
+                TextRenderer.DrawText(
+                    e.Graphics,
+                    Text,
+                    Font,
+                    textRect,
+                    ForeColor,
+                    TextFormatFlags.Left | TextFormatFlags.Top | TextFormatFlags.NoPadding | TextFormatFlags.WordBreak);
+            }
+        }
+
+        private enum SoftButtonGlyph
+        {
+            None,
+            Stop
+        }
+
+        private sealed class SoftButton : Control
+        {
+            private readonly bool _primary;
+            private bool _hover;
+            private bool _pressed;
+            public SoftButtonGlyph Glyph { get; set; }
+
+            public SoftButton(bool primary)
+            {
+                _primary = primary;
+                BackColor = primary ? Color.FromArgb(10, 10, 10) : Color.FromArgb(252, 252, 251);
+                ForeColor = primary ? Color.White : Color.FromArgb(35, 37, 39);
+                DoubleBuffered = true;
+                TabStop = false;
+                SetStyle(
+                    ControlStyles.UserPaint
+                    | ControlStyles.AllPaintingInWmPaint
+                    | ControlStyles.OptimizedDoubleBuffer
+                    | ControlStyles.ResizeRedraw
+                    | ControlStyles.SupportsTransparentBackColor,
+                    true);
+                SetStyle(ControlStyles.Selectable, false);
+            }
+
+            protected override void OnResize(EventArgs e)
+            {
+                base.OnResize(e);
+                Invalidate();
+            }
+
+            protected override void OnPaintBackground(PaintEventArgs pevent)
+            {
+                var background = ResolveControlBackColor(this, Color.FromArgb(246, 246, 243));
+                using (var brush = new SolidBrush(background))
+                {
+                    pevent.Graphics.FillRectangle(brush, ClientRectangle);
+                }
+            }
+
+            protected override void OnMouseEnter(EventArgs e)
+            {
+                _hover = true;
+                Invalidate();
+                base.OnMouseEnter(e);
+            }
+
+            protected override void OnMouseLeave(EventArgs e)
+            {
+                _hover = false;
+                _pressed = false;
+                Invalidate();
+                base.OnMouseLeave(e);
+            }
+
+            protected override void OnMouseDown(MouseEventArgs mevent)
+            {
+                if (mevent.Button == MouseButtons.Left) _pressed = true;
+                Invalidate();
+                base.OnMouseDown(mevent);
+            }
+
+            protected override void OnMouseUp(MouseEventArgs mevent)
+            {
+                _pressed = false;
+                Invalidate();
+                base.OnMouseUp(mevent);
+            }
+
+            protected override void OnPaint(PaintEventArgs pevent)
+            {
+                pevent.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                pevent.Graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                var fillColor = _primary
+                    ? (_pressed ? Color.FromArgb(0, 0, 0) : (_hover ? Color.FromArgb(34, 34, 34) : Color.FromArgb(10, 10, 10)))
+                    : (_pressed ? Color.FromArgb(236, 239, 241) : (_hover ? Color.FromArgb(244, 246, 247) : Color.FromArgb(252, 252, 251)));
+                if (!Enabled) fillColor = _primary ? Color.FromArgb(166, 166, 166) : Color.FromArgb(250, 250, 249);
+                var borderColor = _primary
+                    ? (_hover ? Color.FromArgb(46, 46, 46) : Color.FromArgb(10, 10, 10))
+                    : (_hover ? Color.FromArgb(146, 156, 164) : Color.FromArgb(190, 197, 203));
+
+                using (var borderFill = new SolidBrush(borderColor))
+                using (var fill = new SolidBrush(fillColor))
+                using (var outer = RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), 10))
+                using (var inner = RoundedRectangle(new Rectangle(1, 1, Width - 3, Height - 3), 9))
+                {
+                    pevent.Graphics.FillPath(borderFill, outer);
+                    pevent.Graphics.FillPath(fill, inner);
+                }
+
+                if (Glyph == SoftButtonGlyph.Stop)
+                {
+                    var size = 10;
+                    var left = (Width - size) / 2;
+                    var top = (Height - size) / 2;
+                    using (var stop = new SolidBrush(Enabled ? Color.FromArgb(255, 91, 64) : Color.FromArgb(210, 154, 141)))
+                    using (var path = RoundedRectangle(new Rectangle(left, top, size, size), 2))
+                    {
+                        pevent.Graphics.FillPath(stop, path);
+                    }
+                    return;
+                }
+
+                var color = Enabled ? ForeColor : Color.FromArgb(154, 157, 159);
+                TextRenderer.DrawText(
+                    pevent.Graphics,
+                    Text,
+                    Font,
+                    new Rectangle(8, 0, Math.Max(0, Width - 16), Height),
+                    color,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
+            }
+        }
+
+        private sealed class CloseGlyphButton : Control
+        {
+            private bool _hover;
+            private bool _pressed;
+
+            public CloseGlyphButton()
+            {
+                Cursor = Cursors.Hand;
+                TabStop = false;
+                DoubleBuffered = true;
+                SetStyle(
+                    ControlStyles.UserPaint
+                    | ControlStyles.AllPaintingInWmPaint
+                    | ControlStyles.OptimizedDoubleBuffer
+                    | ControlStyles.ResizeRedraw
+                    | ControlStyles.SupportsTransparentBackColor,
+                    true);
+            }
+
+            protected override void OnMouseEnter(EventArgs e)
+            {
+                _hover = true;
+                Invalidate();
+                base.OnMouseEnter(e);
+            }
+
+            protected override void OnMouseLeave(EventArgs e)
+            {
+                _hover = false;
+                _pressed = false;
+                Invalidate();
+                base.OnMouseLeave(e);
+            }
+
+            protected override void OnMouseDown(MouseEventArgs e)
+            {
+                if (e.Button == MouseButtons.Left) _pressed = true;
+                Invalidate();
+                base.OnMouseDown(e);
+            }
+
+            protected override void OnMouseUp(MouseEventArgs e)
+            {
+                _pressed = false;
+                Invalidate();
+                base.OnMouseUp(e);
+            }
+
+            protected override void OnPaintBackground(PaintEventArgs pevent)
+            {
+                var background = ResolveControlBackColor(this, Color.FromArgb(251, 252, 251));
+                using (var brush = new SolidBrush(background))
+                {
+                    pevent.Graphics.FillRectangle(brush, ClientRectangle);
+                }
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                if (_hover || _pressed)
+                {
+                    using (var brush = new SolidBrush(_pressed ? Color.FromArgb(226, 231, 233) : Color.FromArgb(238, 242, 243)))
+                    using (var path = RoundedRectangle(new Rectangle(2, 2, Width - 5, Height - 5), 9))
+                    {
+                        e.Graphics.FillPath(brush, path);
+                    }
+                }
+
+                using (var pen = new Pen(Color.FromArgb(40, 48, 54), 1.55F))
+                {
+                    pen.StartCap = LineCap.Round;
+                    pen.EndCap = LineCap.Round;
+                    var left = Width / 2F - 4.5F;
+                    var right = Width / 2F + 4.5F;
+                    var top = Height / 2F - 4.5F;
+                    var bottom = Height / 2F + 4.5F;
+                    e.Graphics.DrawLine(pen, left, top, right, bottom);
+                    e.Graphics.DrawLine(pen, right, top, left, bottom);
+                }
+            }
+        }
+
+        private sealed class RoundedProgressBar : Control
+        {
+            private int _value;
+            public bool Failed { get; set; }
+
+            public int Value
+            {
+                get { return _value; }
+                set
+                {
+                    _value = Math.Max(0, Math.Min(100, value));
+                    Invalidate();
+                }
+            }
+
+            public RoundedProgressBar()
+            {
+                DoubleBuffered = true;
+                SetStyle(
+                    ControlStyles.UserPaint
+                    | ControlStyles.AllPaintingInWmPaint
+                    | ControlStyles.OptimizedDoubleBuffer
+                    | ControlStyles.ResizeRedraw
+                    | ControlStyles.SupportsTransparentBackColor,
+                    true);
+            }
+
+            protected override void OnPaintBackground(PaintEventArgs pevent)
+            {
+                var background = ResolveControlBackColor(this, Color.White);
+                using (var brush = new SolidBrush(background))
+                {
+                    pevent.Graphics.FillRectangle(brush, ClientRectangle);
+                }
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var track = new SolidBrush(Color.FromArgb(233, 237, 238)))
+                using (var path = RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), Height / 2))
+                {
+                    e.Graphics.FillPath(track, path);
+                }
+                var fillWidth = Math.Max(Height, (int)Math.Round((Width - 1) * (_value / 100D)));
+                fillWidth = Math.Min(Width - 1, fillWidth);
+                using (var fill = new SolidBrush(Failed ? Color.FromArgb(221, 74, 74) : Color.FromArgb(20, 181, 141)))
+                using (var path = RoundedRectangle(new Rectangle(0, 0, fillWidth, Height - 1), Height / 2))
+                {
+                    e.Graphics.FillPath(fill, path);
+                }
+            }
+        }
+
+        private sealed class SafeLogRichTextBox : RichTextBox
+        {
+            private readonly Action<Exception> _faultHandler;
+
+            public SafeLogRichTextBox(Action<Exception> faultHandler)
+            {
+                _faultHandler = faultHandler;
+            }
+
+            protected override void OnHandleCreated(EventArgs e)
+            {
+                try
+                {
+                    base.OnHandleCreated(e);
+                }
+                catch (ArgumentException ex)
+                {
+                    RecoverRichTextState(ex);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    RecoverRichTextState(ex);
+                }
+            }
+
+            private void RecoverRichTextState(Exception ex)
+            {
+                if (_faultHandler != null) _faultHandler(ex);
+                try
+                {
+                    Clear();
+                    Text = "";
+                    SelectionStart = 0;
+                    SelectionLength = 0;
+                }
+                catch { }
+            }
+        }
+
         private sealed class OperationProgressForm : Form
         {
             private readonly Label _titleLabel;
             private readonly Label _detailLabel;
             private readonly Label _percentLabel;
-            private readonly ProgressBar _progressBar;
+            private readonly RoundedProgressBar _progressBar;
 
             public OperationProgressForm()
             {
                 Text = "Codex Dock Helper";
-                Width = 460;
-                Height = 210;
-                MinimumSize = new Size(420, 190);
-                MaximumSize = new Size(520, 240);
-                FormBorderStyle = FormBorderStyle.FixedDialog;
-                MaximizeBox = false;
-                MinimizeBox = false;
+                Icon = CreateAppIcon();
+                Width = 488;
+                Height = 196;
+                MinimumSize = new Size(448, 184);
+                MaximumSize = new Size(548, 220);
+                FormBorderStyle = FormBorderStyle.None;
                 ShowInTaskbar = false;
-                BackColor = Color.FromArgb(13, 17, 12);
-                ForeColor = Color.FromArgb(243, 241, 232);
+                BackColor = Color.FromArgb(255, 255, 255);
+                ForeColor = Color.FromArgb(24, 26, 27);
                 Font = new Font("Microsoft YaHei UI", 9F);
-                Padding = new Padding(22);
+                Padding = new Padding(1);
+                DoubleBuffered = true;
+                Paint += OperationProgressForm_Paint;
+                Resize += delegate { ApplyRoundedWindow(); };
 
-                var badge = new Label
+                var topBar = new Panel
                 {
-                    Text = "Doc",
-                    TextAlign = ContentAlignment.MiddleCenter,
-                    Font = new Font("Segoe UI", 13F, FontStyle.Bold),
-                    ForeColor = Color.FromArgb(229, 255, 106),
-                    BackColor = Color.FromArgb(31, 38, 24),
-                    Location = new Point(22, 22),
-                    Size = new Size(48, 48),
+                    BackColor = Color.FromArgb(251, 252, 251),
+                    Dock = DockStyle.Top,
+                    Height = 40,
                 };
-                Controls.Add(badge);
+                Controls.Add(topBar);
+
+                var appMark = new Label
+                {
+                    Text = "▤",
+                    Font = new Font("Segoe UI Symbol", 10F, FontStyle.Regular),
+                    ForeColor = Color.FromArgb(42, 54, 60),
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Location = new Point(14, 8),
+                    Size = new Size(22, 24),
+                };
+                topBar.Controls.Add(appMark);
+
+                var windowTitle = MakeLabel("Codex Dock Helper", 9F, FontStyle.Regular, Color.FromArgb(48, 55, 64));
+                windowTitle.Location = new Point(38, 10);
+                windowTitle.Size = new Size(180, 22);
+                topBar.Controls.Add(windowTitle);
+
+                var closeButton = new CloseGlyphButton
+                {
+                    BackColor = Color.Transparent,
+                    Location = new Point(446, 5),
+                    Size = new Size(30, 30),
+                    Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                };
+                closeButton.Click += delegate { Close(); };
+                topBar.Controls.Add(closeButton);
+                topBar.Resize += delegate
+                {
+                    closeButton.Left = Math.Max(0, topBar.ClientSize.Width - closeButton.Width - 12);
+                };
+
+                var statusDot = new Panel
+                {
+                    BackColor = Color.FromArgb(20, 181, 141),
+                    Location = new Point(25, 65),
+                    Size = new Size(8, 8),
+                };
+                RoundControl(statusDot, 4);
+                Controls.Add(statusDot);
 
                 _titleLabel = new Label
                 {
                     Text = "正在执行",
                     Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold),
-                    ForeColor = Color.FromArgb(243, 241, 232),
+                    ForeColor = Color.FromArgb(18, 18, 18),
                     BackColor = Color.Transparent,
-                    Location = new Point(86, 22),
-                    Size = new Size(320, 28),
+                    Location = new Point(43, 57),
+                    Size = new Size(398, 28),
                     AutoEllipsis = true,
                 };
                 Controls.Add(_titleLabel);
@@ -3957,10 +5253,10 @@ namespace CodexPlusLocalHelper
                 {
                     Text = "",
                     Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular),
-                    ForeColor = Color.FromArgb(181, 190, 169),
+                    ForeColor = Color.FromArgb(89, 94, 99),
                     BackColor = Color.Transparent,
-                    Location = new Point(88, 54),
-                    Size = new Size(322, 42),
+                    Location = new Point(25, 91),
+                    Size = new Size(420, 24),
                     AutoEllipsis = true,
                 };
                 Controls.Add(_detailLabel);
@@ -3969,25 +5265,60 @@ namespace CodexPlusLocalHelper
                 {
                     Text = "0%",
                     Font = new Font("Segoe UI", 10F, FontStyle.Bold),
-                    ForeColor = Color.FromArgb(86, 218, 197),
+                    ForeColor = Color.FromArgb(5, 130, 96),
                     BackColor = Color.Transparent,
                     TextAlign = ContentAlignment.MiddleRight,
-                    Location = new Point(334, 108),
+                    Location = new Point(382, 122),
                     Size = new Size(76, 22),
                 };
                 Controls.Add(_percentLabel);
 
-                _progressBar = new ProgressBar
+                _progressBar = new RoundedProgressBar
                 {
-                    Style = ProgressBarStyle.Continuous,
-                    Minimum = 0,
-                    Maximum = 100,
                     Value = 0,
-                    Location = new Point(22, 136),
-                    Size = new Size(388, 18),
-                    Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
+                    Location = new Point(25, 150),
+                    Size = new Size(432, 10),
+                    Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Top,
                 };
                 Controls.Add(_progressBar);
+                _progressBar.BringToFront();
+
+                ApplyRoundedWindow();
+            }
+
+            private void OperationProgressForm_Paint(object sender, PaintEventArgs e)
+            {
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (var outer = new Pen(Color.FromArgb(219, 223, 226)))
+                using (var divider = new Pen(Color.FromArgb(238, 240, 241)))
+                using (var path = RoundedRectangle(new Rectangle(0, 0, ClientSize.Width - 1, ClientSize.Height - 1), 14))
+                {
+                    e.Graphics.DrawPath(outer, path);
+                    e.Graphics.DrawLine(divider, 1, 40, ClientSize.Width - 2, 40);
+                }
+            }
+
+            protected override CreateParams CreateParams
+            {
+                get
+                {
+                    const int DropShadow = 0x00020000;
+                    var cp = base.CreateParams;
+                    cp.ClassStyle |= DropShadow;
+                    return cp;
+                }
+            }
+
+            private void ApplyRoundedWindow()
+            {
+                if (Width <= 0 || Height <= 0) return;
+                using (var path = RoundedRectangle(new Rectangle(0, 0, Width - 1, Height - 1), 14))
+                {
+                    var old = Region;
+                    Region = new Region(path);
+                    if (old != null) old.Dispose();
+                }
+                Invalidate();
             }
 
             public void SetStep(string title, string detail, int percent)
@@ -3995,20 +5326,20 @@ namespace CodexPlusLocalHelper
                 if (!string.IsNullOrWhiteSpace(title)) _titleLabel.Text = title;
                 _detailLabel.Text = detail ?? "";
                 var value = Math.Max(0, Math.Min(100, percent));
-                _progressBar.Style = ProgressBarStyle.Continuous;
                 _progressBar.Value = value;
+                _progressBar.Failed = false;
                 _percentLabel.Text = value.ToString(CultureInfo.InvariantCulture) + "%";
-                _percentLabel.ForeColor = Color.FromArgb(86, 218, 197);
+                _percentLabel.ForeColor = Color.FromArgb(5, 130, 96);
             }
 
             public void SetCompleted(bool success, string detail)
             {
                 _titleLabel.Text = success ? "任务已完成" : "任务失败";
                 _detailLabel.Text = detail ?? "";
-                _progressBar.Style = ProgressBarStyle.Continuous;
                 _progressBar.Value = success ? 100 : Math.Max(6, _progressBar.Value);
+                _progressBar.Failed = !success;
                 _percentLabel.Text = success ? "100%" : "失败";
-                _percentLabel.ForeColor = success ? Color.FromArgb(86, 218, 197) : Color.FromArgb(255, 116, 116);
+                _percentLabel.ForeColor = success ? Color.FromArgb(5, 130, 96) : Color.FromArgb(180, 45, 45);
             }
         }
 
@@ -4068,6 +5399,7 @@ namespace CodexPlusLocalHelper
 
             public AutoSwitchConfig Clamp()
             {
+                OnlyWhenIdle = true;
                 if (FiveHourThreshold < 1) FiveHourThreshold = 1;
                 if (FiveHourThreshold > 50) FiveHourThreshold = 50;
                 if (OneWeekThreshold < 1) OneWeekThreshold = 1;

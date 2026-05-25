@@ -30,6 +30,8 @@ assert.match(backupHtml, /checked/);
 
 const helperHtml = ui.renderHelperState({
   helperReady: true,
+  helper: { version: "0.3.1" },
+  minimumHelperVersion: "0.4.0",
   codex: {
     label: "空闲",
     detail: "连续 42 秒没有任务类日志。",
@@ -38,6 +40,35 @@ const helperHtml = ui.renderHelperState({
 });
 assert.match(helperHtml, /Codex：空闲/);
 assert.match(helperHtml, /5H 剩余 0%/);
+assert.match(helperHtml, /版本过旧/);
+
+const usageHtml = ui.renderUsageRefreshSettings({
+  user: { email: "ops@example.com" },
+  helperReady: false,
+  usageSettings: {
+    usageRefreshMode: "auto",
+    cloudUsageRefreshEnabled: true,
+    helperFallbackToCloud: true,
+    usageRefreshConcurrency: 2,
+    usageRefreshIntervalMs: 3000,
+    lastUsageRefreshSource: "auto-cloud-fallback",
+    lastUsageRefreshAt: "2026-05-26T00:00:00Z",
+  },
+});
+assert.match(usageHtml, /data-usage-refresh-setting="usageRefreshMode"/);
+assert.match(usageHtml, /value="auto" selected/);
+assert.match(usageHtml, /自动选择 \/ 云端回退/);
+assert.match(usageHtml, /data-usage-refresh-setting="cloudUsageRefreshEnabled"[^>]+checked/);
+assert.match(usageHtml, /data-usage-refresh-setting="helperFallbackToCloud"[^>]+checked/);
+assert.match(usageHtml, /value="2" selected>2/);
+assert.match(usageHtml, /value="3000" selected>3 秒/);
+
+const localUsageHtml = ui.renderUsageRefreshSettings({
+  user: null,
+  helperReady: true,
+  usageSettings: { usageRefreshMode: "helper" },
+});
+assert.match(localUsageHtml, /value="cloud"[^>]+disabled/);
 
 const smartHtml = ui.renderSmartSwitchSettings({
   user: { email: "ops@example.com" },
@@ -75,6 +106,8 @@ const smartHtml = ui.renderSmartSwitchSettings({
   },
 });
 assert.match(smartHtml, /本机 Helper 已授权/);
+assert.match(smartHtml, /任务连续性保护/);
+assert.match(smartHtml, /强制开启/);
 assert.match(smartHtml, /value="3" selected>3 分钟/);
 assert.match(smartHtml, /value="30" selected>30 秒/);
 assert.match(smartHtml, /data-smart-setting="cooldownMinutes"/);
@@ -94,5 +127,17 @@ assert.match(disabledHtml, /登录后可开启/);
 assert.match(disabledHtml, /data-auto-switch-setting="enabled"[^>]+disabled/);
 assert.doesNotMatch(disabledHtml, /data-auto-switch-setting="allowAt"/);
 assert.doesNotMatch(disabledHtml, /data-smart-setting="allowAt"/);
+
+const foreignHelperHtml = ui.renderSmartSwitchSettings({
+  user: { email: "preview@example.com" },
+  helperReady: true,
+  helperInfo: { auto_switch: { authorized: true, cloud_base: "https://production.example.com" } },
+  autoSwitchStatus: { helperAuthorized: false },
+  autoSettings: {},
+  smartSettings: {},
+  defaultAutoSwitchSettings: {},
+});
+assert.match(foreignHelperHtml, /需要授权本机 Helper/);
+assert.doesNotMatch(foreignHelperHtml, /本机 Helper 已授权/);
 
 console.log("settings-ui verification passed");

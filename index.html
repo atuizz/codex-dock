@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Codex Dock</title>
     <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="%23f9f9f9"/><path d="M9 10h14M9 16h14M9 22h14" stroke="%230d0d0d" stroke-width="2" stroke-linecap="round"/></svg>' />
-    <link rel="stylesheet" href="styles.css?v=20260525-oauth-rt2" />
+    <link rel="stylesheet" href="styles.css?v=20260525-oauth-primary2" />
   </head>
   <body>
     <div class="shell">
@@ -280,6 +280,16 @@
               <section class="account-surface">
                 <div class="surface-head">
                   <div>
+                    <h2>设备与 Helper 版本</h2>
+                    <p>识别离线设备与需要升级的桌面助手。</p>
+                  </div>
+                </div>
+                <div id="adminDevices" class="admin-table-wrap"></div>
+              </section>
+
+              <section class="account-surface">
+                <div class="surface-head">
+                  <div>
                     <h2>审计记录</h2>
                     <p>查看导入、切换和管理操作。</p>
                   </div>
@@ -413,6 +423,7 @@
             <section class="settings-panel" data-panel="data">
               <h3>数据</h3>
               <div id="backupCloudState" class="setting-box"></div>
+              <div id="usageRefreshState" class="setting-list"></div>
               <div class="setting-actions">
                 <button id="settingsImportBtn" type="button">导入 JSON</button>
                 <button id="pullCloudLocalBtn" type="button">拉取云端到本机</button>
@@ -496,21 +507,29 @@
             <div class="auth-method-panel oauth-panel">
               <div>
                 <strong>OAuth 网页登录</strong>
-                <span>Helper 在线时会自动接收回调并解析；未自动返回时再手动粘贴。</span>
+                <span>Helper 在线时会自动接收回调、换取 RT 并导入账号。手动链接只作为备用。</span>
               </div>
-              <button id="openOauthAuthBtn" type="button">打开授权页面</button>
-              <label>
-                <span>授权链接</span>
-                <input id="oauthAuthUrl" readonly />
-              </label>
-              <label>
-                <span>回调链接（备用）</span>
-                <textarea id="oauthCallbackInput" spellcheck="false" placeholder="自动接收失败时，可粘贴完整回调地址，或只粘贴 code=...&state=..."></textarea>
-              </label>
-              <div class="auth-acquire-actions">
-                <button id="copyOauthUrlBtn" type="button">复制授权链接</button>
-                <button id="parseOauthCallbackBtn" type="button">解析回调</button>
+              <div class="oauth-primary-action">
+                <button class="primary" id="openOauthAuthBtn" type="button">打开授权页面</button>
+                <span>授权完成后，本页会自动进入导入流程。</span>
               </div>
+              <details class="oauth-fallback-panel">
+                <summary>手动回调备用</summary>
+                <div class="oauth-fallback-body">
+                  <label>
+                    <span>授权链接</span>
+                    <input id="oauthAuthUrl" readonly />
+                  </label>
+                  <label>
+                    <span>回调链接（备用）</span>
+                    <textarea id="oauthCallbackInput" spellcheck="false" placeholder="自动接收失败时，可粘贴完整回调地址，或只粘贴 code=...&state=..."></textarea>
+                  </label>
+                  <div class="auth-acquire-actions">
+                    <button id="copyOauthUrlBtn" type="button">复制授权链接</button>
+                    <button id="parseOauthCallbackBtn" type="button">解析回调</button>
+                  </div>
+                </div>
+              </details>
             </div>
           </section>
 
@@ -565,6 +584,27 @@
             <button id="clearFormBtn" type="button">继续导入</button>
           </div>
         </div>
+        <div class="oauth-flow-overlay" id="oauthFlowOverlay" hidden>
+          <div class="oauth-flow-card" role="status" aria-live="polite">
+            <div class="oauth-flow-topline">
+              <span class="oauth-flow-icon" id="oauthFlowIcon">↻</span>
+              <div>
+                <strong id="oauthFlowTitle">等待授权</strong>
+                <span id="oauthFlowDetail">请在新打开的浏览器页面完成登录授权。</span>
+              </div>
+            </div>
+            <div class="oauth-flow-meter"><i id="oauthFlowMeter"></i></div>
+            <div class="oauth-flow-meta">
+              <span id="oauthFlowCountdown">剩余 03:00</span>
+              <span id="oauthFlowHint">完成后本页会自动接收并导入账号。</span>
+            </div>
+            <div class="auth-acquire-actions oauth-flow-actions">
+              <button id="oauthFlowCancelBtn" type="button">取消</button>
+              <button id="oauthFlowRetryBtn" type="button">重新打开授权页面</button>
+              <button class="primary" id="oauthFlowDoneBtn" type="button">完成</button>
+            </div>
+          </div>
+        </div>
       </aside>
     </div>
 
@@ -582,20 +622,20 @@
     </div>
 
     <div class="toast" id="toast" hidden></div>
-    <script src="account-core.js?v=20260525-oauth-rt2"></script>
-    <script src="platform-clients.js?v=20260525-oauth-rt2"></script>
-    <script src="format-core.js?v=20260525-oauth-rt2"></script>
-    <script src="progress-ui.js?v=20260525-oauth-rt2"></script>
-    <script src="shell-ui.js?v=20260525-oauth-rt2"></script>
-    <script src="dialog-ui.js?v=20260525-oauth-rt2"></script>
-    <script src="settings-ui.js?v=20260525-oauth-rt2"></script>
-    <script src="account-list-ui.js?v=20260525-oauth-rt2"></script>
-    <script src="account-detail-ui.js?v=20260525-oauth-rt2"></script>
-    <script src="audit-core.js?v=20260525-oauth-rt2"></script>
-    <script src="admin-ui.js?v=20260525-oauth-rt2"></script>
-    <script src="panels-ui.js?v=20260525-oauth-rt2"></script>
-    <script src="import-core.js?v=20260525-oauth-rt2"></script>
-    <script src="import-ui.js?v=20260525-oauth-rt2"></script>
-    <script src="app.js?v=20260525-oauth-rt2"></script>
+    <script src="account-core.js?v=20260525-oauth-primary2"></script>
+    <script src="platform-clients.js?v=20260525-oauth-primary2"></script>
+    <script src="format-core.js?v=20260525-oauth-primary2"></script>
+    <script src="progress-ui.js?v=20260525-oauth-primary2"></script>
+    <script src="shell-ui.js?v=20260525-oauth-primary2"></script>
+    <script src="dialog-ui.js?v=20260525-oauth-primary2"></script>
+    <script src="settings-ui.js?v=20260525-oauth-primary2"></script>
+    <script src="account-list-ui.js?v=20260525-oauth-primary2"></script>
+    <script src="account-detail-ui.js?v=20260525-oauth-primary2"></script>
+    <script src="audit-core.js?v=20260525-oauth-primary2"></script>
+    <script src="admin-ui.js?v=20260525-oauth-primary2"></script>
+    <script src="panels-ui.js?v=20260525-oauth-primary2"></script>
+    <script src="import-core.js?v=20260525-oauth-primary2"></script>
+    <script src="import-ui.js?v=20260525-oauth-primary2"></script>
+    <script src="app.js?v=20260525-oauth-primary2"></script>
   </body>
 </html>

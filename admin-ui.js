@@ -29,13 +29,24 @@
       `;
     }
 
+    function compareVersion(left, right) {
+      const a = String(left || "").split(".").map((part) => Number(part) || 0);
+      const b = String(right || "").split(".").map((part) => Number(part) || 0);
+      for (let index = 0; index < Math.max(a.length, b.length); index++) {
+        if ((a[index] || 0) !== (b[index] || 0)) return (a[index] || 0) - (b[index] || 0);
+      }
+      return 0;
+    }
+
     function renderSummary(summary, devices = []) {
       if (!summary) return "";
+      const outdatedHelpers = devices.filter((device) => !device.helperVersion || compareVersion(device.helperVersion, "0.4.0") < 0).length;
       return [
         ["用户数", summary.users],
         ["启用用户", summary.activeUsers],
         ["账号数", summary.accounts],
         ["设备数", devices.length],
+        ["待升级 Helper", outdatedHelpers],
         ["在线 session", summary.onlineSessions],
         ["24h 导入", summary.imports24h],
         ["24h 切换", summary.switches24h],
@@ -103,6 +114,28 @@
       `).join("");
     }
 
+    function renderDevices(devices = []) {
+      if (!devices.length) return '<div class="empty small">暂无设备记录。</div>';
+      return `
+        <table class="admin-table">
+          <thead><tr><th>设备</th><th>用户</th><th>连接</th><th>Helper 版本</th><th>最近活跃</th></tr></thead>
+          <tbody>
+            ${devices.map((device) => {
+              const version = device.helperVersion || "未上报";
+              const versionStatus = !device.helperVersion || compareVersion(device.helperVersion, "0.4.0") < 0 ? " · 待升级" : "";
+              return `<tr>
+                <td><strong>${escapeHtml(device.name || "设备")}</strong><span>${escapeHtml(shortId(device.id))}</span></td>
+                <td>${escapeHtml(device.userEmail || "未知用户")}</td>
+                <td>${escapeHtml(device.helperOnline ? "在线" : "离线")}</td>
+                <td>${escapeHtml(version + versionStatus)}</td>
+                <td>${escapeHtml(formatTime(device.lastSeenAt))}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
     function renderAdmin({
       summary = null,
       users = [],
@@ -114,6 +147,7 @@
       return {
         summaryHtml: renderSummary(summary, devices),
         usersHtml: renderUsers(users, selectedIds),
+        devicesHtml: renderDevices(devices),
         selectAllLabel: selectedCount ? `已选 ${selectedCount}` : "选择结果",
         auditHtml: renderAudit(audit),
       };
@@ -123,6 +157,7 @@
       renderSummary,
       renderUsers,
       renderAudit,
+      renderDevices,
       renderAdmin,
     });
   }

@@ -95,9 +95,12 @@
     function renderActions(account, current, context) {
       const mode = accountActionMode(account);
       const canRefresh = mode === "direct-switch" || mode === "download-auth";
+      const refreshAvailable = typeof context.canRefreshUsage === "function"
+        ? context.canRefreshUsage(account)
+        : context.helperReady;
       return `
         <div class="account-row-actions">
-          <button class="icon-action" data-account-action="refresh-usage" data-id="${escapeHtml(account.id)}" ${context.helperReady && canRefresh ? "" : "disabled"} title="刷新额度" aria-label="刷新额度">
+          <button class="icon-action" data-account-action="refresh-usage" data-id="${escapeHtml(account.id)}" ${refreshAvailable && canRefresh ? "" : "disabled"} title="刷新额度" aria-label="刷新额度">
             ${refreshIcon}
           </button>
           ${renderAction(account, current, context)}

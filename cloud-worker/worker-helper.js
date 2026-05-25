@@ -103,12 +103,14 @@ export async function handleDeviceRoutes(request, env, user, path, options = {})
     const now = nowIso();
     const expiresAt = isoAfter(DEVICE_TOKEN_TTL_SECONDS);
     await env.DB.prepare(
-      `INSERT INTO devices (id, user_id, device_key, name, helper_online, helper_base, created_at, last_seen_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO devices (id, user_id, device_key, name, helper_online, helper_base, helper_version, helper_build_date, created_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, device_key) DO UPDATE SET
          name = excluded.name,
          helper_online = excluded.helper_online,
          helper_base = excluded.helper_base,
+         helper_version = excluded.helper_version,
+         helper_build_date = excluded.helper_build_date,
          last_seen_at = excluded.last_seen_at`,
     ).bind(
       crypto.randomUUID(),
@@ -117,6 +119,8 @@ export async function handleDeviceRoutes(request, env, user, path, options = {})
       String(body.name || "Dock Helper").slice(0, 120),
       1,
       String(body.helperBase || "").slice(0, 200),
+      String(body.helperVersion || "").slice(0, 32),
+      String(body.helperBuildDate || "").slice(0, 32),
       now,
       now,
     ).run();
@@ -152,12 +156,14 @@ export async function handleDeviceRoutes(request, env, user, path, options = {})
     if (!key) return json({ ok: false, error: "缺少 deviceKey" }, 400);
     const now = nowIso();
     await env.DB.prepare(
-      `INSERT INTO devices (id, user_id, device_key, name, helper_online, helper_base, created_at, last_seen_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO devices (id, user_id, device_key, name, helper_online, helper_base, helper_version, helper_build_date, created_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, device_key) DO UPDATE SET
          name = excluded.name,
          helper_online = excluded.helper_online,
          helper_base = excluded.helper_base,
+         helper_version = excluded.helper_version,
+         helper_build_date = excluded.helper_build_date,
          last_seen_at = excluded.last_seen_at`,
     ).bind(
       crypto.randomUUID(),
@@ -166,6 +172,8 @@ export async function handleDeviceRoutes(request, env, user, path, options = {})
       String(body.name || "Browser").slice(0, 120),
       body.helperOnline ? 1 : 0,
       String(body.helperBase || "").slice(0, 200),
+      String(body.helperVersion || "").slice(0, 32),
+      String(body.helperBuildDate || "").slice(0, 32),
       now,
       now,
     ).run();
@@ -266,8 +274,11 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
     if (body.error) usage.error = body.error;
     const current = await findCurrentAccount(env, user, body);
     if (current) {
+      usage.refresh_source = "helper-auto";
       await env.DB.prepare(
-        "INSERT INTO usage_snapshots (id, account_id, user_id, usage_json, ok, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        `INSERT INTO usage_snapshots
+         (id, account_id, user_id, usage_json, ok, error, refresh_source, refresh_kind, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         crypto.randomUUID(),
         current.id,
@@ -275,25 +286,14 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
         JSON.stringify(usage),
         body.ok === false || body.error ? 0 : 1,
         body.error || "",
+        "helper-auto",
+        "auto-switch",
         nowIso(),
       ).run();
       await env.DB.prepare("UPDATE accounts SET plan_type = COALESCE(?, plan_type), updated_at = ? WHERE id = ? AND user_id = ?")
         .bind(usage.plan_type || null, nowIso(), current.id, user.id).run();
     }
     const trigger = isSwitchTriggerUsage(usage, body.error || "", settings);
-    if ((trigger.yes || body.error) && writeAudit) {
-      await writeAudit(env, user, {
-        accountId: current?.id || "",
-        action: "auto-switch-check",
-        result: trigger.yes ? `trigger:${trigger.reason}` : "error",
-        deviceKey: helper.deviceKey,
-        metadata: {
-          matched: Boolean(current),
-          error: body.error || "",
-          currentAccountId: body.currentAccountId || "",
-        },
-      });
-    }
     return json({ ok: true, matchedAccountId: current?.id || "", trigger });
   }
 
@@ -341,6 +341,9 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
     const effectiveTriggerReason = trigger.yes ? trigger.reason : (forcedByHelper ? helperTriggerReason : "");
     const effectiveTriggerType = trigger.yes ? "usage" : helperTriggerType;
     if (!effectiveTriggerReason) return json({ ok: true, shouldSwitch: false, reason: "未命中切换条件" });
+    if (body.boundaryConfirmed !== true) {
+      return json({ ok: true, shouldSwitch: false, reason: "等待 Helper 确认安全轮次边界" });
+    }
 
     const accounts = await listAccounts(env, user);
     const decisions = accounts.map((account) => candidateDecision(account, settings, body));
@@ -366,6 +369,9 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
             trigger: effectiveTriggerReason,
             triggerType: effectiveTriggerType,
             triggerSource: body.triggerSource || "",
+            boundaryConfirmed: true,
+            runtimeState: body.runtimeState || "",
+            boundaryEvidence: body.boundaryEvidence || "",
             currentUsageSummary: body.currentUsageSummary || "",
             candidateCount,
             eligibleCount,
@@ -399,6 +405,9 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
           trigger: effectiveTriggerReason,
           triggerType: effectiveTriggerType,
           triggerSource: body.triggerSource || "",
+          boundaryConfirmed: true,
+          runtimeState: body.runtimeState || "",
+          boundaryEvidence: body.boundaryEvidence || "",
           currentUsageSummary: body.currentUsageSummary || "",
           score: scored[0].score,
           reason: candidateReasons(selected, settings),

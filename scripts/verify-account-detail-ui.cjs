@@ -88,11 +88,12 @@ assert.equal(blocked.switchLabel, "立即切换");
 assert.equal(blocked.switchDisabled, true);
 assert.equal(blocked.copyDisabled, true);
 assert.match(blocked.panelHtml, /Token 已失效/);
-assert.match(blocked.panelHtml, /导入该账号的 RT auth/);
+assert.match(blocked.panelHtml, /通过 OAuth 登录补 RT/);
 assert.match(blocked.panelHtml, /不要用当前本机 auth 覆盖它/);
 assert.doesNotMatch(blocked.panelHtml, /data-auth-action="sync-local-auth"/);
 assert.doesNotMatch(blocked.panelHtml, /data-auth-action="copy-codex-login"/);
-assert.match(blocked.panelHtml, /data-auth-action="open-import-file"/);
+assert.doesNotMatch(blocked.panelHtml, /data-auth-action="open-import-file"/);
+assert.match(blocked.panelHtml, /data-auth-action="open-import-oauth-login"/);
 assert.match(blocked.panelHtml, /不可用/);
 
 console.log("account-detail-ui verification passed");

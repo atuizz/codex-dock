@@ -20,6 +20,10 @@
       return Number(current) === Number(value) ? "selected" : "";
     }
 
+    function selectedText(value, current) {
+      return String(value) === String(current) ? "selected" : "";
+    }
+
     function disabledWhen(condition) {
       return condition ? "" : "disabled";
     }
@@ -43,11 +47,23 @@
       return '<strong>未登录</strong><span>本地账号池仍可使用；登录后可同步云端。</span><button id="loginInlineBtn" type="button">登录或注册</button>';
     }
 
-    function renderHelperState({ helperReady, codex } = {}) {
+    function compareVersion(left, right) {
+      const a = String(left || "").split(".").map((part) => Number(part) || 0);
+      const b = String(right || "").split(".").map((part) => Number(part) || 0);
+      for (let index = 0; index < Math.max(a.length, b.length); index++) {
+        if ((a[index] || 0) !== (b[index] || 0)) return (a[index] || 0) - (b[index] || 0);
+      }
+      return 0;
+    }
+
+    function renderHelperState({ helperReady, helper = {}, codex, minimumHelperVersion = "0.4.0" } = {}) {
       const status = codex || {};
+      const version = helper.version || "";
+      const outdated = helperReady && (!version || compareVersion(version, minimumHelperVersion) < 0);
       return `
-        <strong>${helperReady ? "Helper 在线" : "Helper 离线"}</strong>
+        <strong>${helperReady ? `Helper 在线${version ? ` · v${escapeHtml(version)}` : ""}` : "Helper 离线"}</strong>
         <span>${escapeHtml(helperReady ? `Codex：${status.label || "状态确认中"}` : "未安装时可下载 auth.json 手动替换。")}</span>
+        ${outdated ? `<span class="warning-text">Helper 版本过旧，请升级至 v${escapeHtml(minimumHelperVersion)} 或更高版本。</span>` : ""}
         ${helperReady && status.detail ? `<span>${escapeHtml(status.detail)}</span>` : ""}
         ${helperReady && status.pending_switch_reason ? `<span>${escapeHtml(status.pending_switch_reason)}</span>` : ""}
       `;
@@ -59,6 +75,70 @@
         <label class="setting-toggle">
           <span><strong>自动备份到云端</strong><small>登录后导入的账号自动保存到云端。本机离线副本 ${Number(localAccountCount) || 0} 个。</small></span>
           <input id="autoBackupCloudToggle" type="checkbox" ${checkedWhen(cloudBackupEnabled)} />
+        </label>
+      `;
+    }
+
+    function renderUsageRefreshSettings({ user, helperReady, usageSettings = {} } = {}) {
+      const settings = {
+        usageRefreshMode: "helper",
+        cloudUsageRefreshEnabled: false,
+        helperFallbackToCloud: false,
+        usageRefreshConcurrency: 1,
+        usageRefreshIntervalMs: 1500,
+        lastUsageRefreshSource: "",
+        lastUsageRefreshAt: "",
+        ...usageSettings,
+      };
+      const cloudDisabled = user ? "" : "disabled";
+      const sourceLabels = {
+        helper: "本机 Helper",
+        "cloud-worker": "云端 Worker",
+        "auto-helper": "自动选择 / 本机 Helper",
+        "auto-cloud-fallback": "自动选择 / 云端回退",
+        mixed: "混合通道（查看各账号结果）",
+      };
+      const lastSource = sourceLabels[settings.lastUsageRefreshSource] || "还没有刷新记录";
+      return `
+        <div class="settings-section-title">额度刷新方式</div>
+        <label class="setting-line">
+          <span><strong>执行通道</strong><small>推荐使用本机网络；云端刷新需要主动授权。</small></span>
+          <select data-usage-refresh-setting="usageRefreshMode">
+            <option value="helper" ${selectedText("helper", settings.usageRefreshMode)}>本机 Helper（推荐）</option>
+            <option value="cloud" ${selectedText("cloud", settings.usageRefreshMode)} ${cloudDisabled}>云端 Worker</option>
+            <option value="auto" ${selectedText("auto", settings.usageRefreshMode)} ${cloudDisabled}>自动选择</option>
+            <option value="manual" ${selectedText("manual", settings.usageRefreshMode)}>仅手动刷新</option>
+          </select>
+        </label>
+        <div class="setting-box compact usage-refresh-status">
+          <strong>最近实际通道：${escapeHtml(lastSource)}</strong>
+          <span>${settings.lastUsageRefreshAt ? `最近刷新于 ${escapeHtml(settings.lastUsageRefreshAt)}` : "刷新完成后会显示本次实际通过哪条网络通道执行。"}</span>
+          <span>${helperReady ? "本机 Helper 当前在线。" : "本机 Helper 当前离线；只有已授权云端刷新时才能从网页继续检查额度。"}</span>
+        </div>
+        <label class="setting-toggle">
+          <span><strong>允许云端 Worker 刷新</strong><small>Worker 将在受限额度内解密该账号授权并请求用量接口；适用于无 Helper 场景。</small></span>
+          <input type="checkbox" data-usage-refresh-setting="cloudUsageRefreshEnabled" ${checkedWhen(settings.cloudUsageRefreshEnabled)} ${cloudDisabled} />
+        </label>
+        <label class="setting-toggle">
+          <span><strong>Helper 失败后回退云端</strong><small>仅自动选择模式生效，且必须已允许云端刷新。</small></span>
+          <input type="checkbox" data-usage-refresh-setting="helperFallbackToCloud" ${checkedWhen(settings.helperFallbackToCloud)} ${cloudDisabled} />
+        </label>
+        <label class="setting-line">
+          <span><strong>批量并发</strong><small>限制一次并行刷新数量，降低网络与用量接口压力。</small></span>
+          <select data-usage-refresh-setting="usageRefreshConcurrency">
+            <option value="1" ${selected(1, settings.usageRefreshConcurrency)}>1（推荐）</option>
+            <option value="2" ${selected(2, settings.usageRefreshConcurrency)}>2</option>
+            <option value="3" ${selected(3, settings.usageRefreshConcurrency)}>3</option>
+          </select>
+        </label>
+        <label class="setting-line">
+          <span><strong>批次间隔</strong><small>批量刷新时各批次之间的最短间隔。</small></span>
+          <select data-usage-refresh-setting="usageRefreshIntervalMs">
+            <option value="1000" ${selected(1000, settings.usageRefreshIntervalMs)}>1 秒</option>
+            <option value="1500" ${selected(1500, settings.usageRefreshIntervalMs)}>1.5 秒（推荐）</option>
+            <option value="3000" ${selected(3000, settings.usageRefreshIntervalMs)}>3 秒</option>
+            <option value="5000" ${selected(5000, settings.usageRefreshIntervalMs)}>5 秒</option>
+          </select>
         </label>
       `;
     }
@@ -76,7 +156,7 @@
       const auto = { ...(defaultAutoSwitchSettings || {}), ...(autoSettings || {}) };
       const showAutoAt = Boolean(auto.showExperimentalAt);
       const showSmartAt = Boolean(settings.showExperimentalAt);
-      const authorized = Boolean(autoSwitchStatus?.helperAuthorized || helperInfo?.auto_switch?.authorized);
+      const authorized = Boolean(autoSwitchStatus?.helperAuthorized);
       const autoStateText = !user
         ? "登录后可开启。"
         : !helperReady ? "等待 Dock Helper 在线。"
@@ -109,7 +189,7 @@
       return `
         <div class="settings-section-title">自动切换</div>
         <label class="setting-toggle">
-          <span><strong>后台自动切换</strong><small>账号耗尽、限流或授权失效时，Helper 会静默切换到可用账号。</small></span>
+          <span><strong>后台自动切换</strong><small>账号触发切换条件后，Helper 会先保护当前任务，只在安全轮次边界换号。</small></span>
           <input type="checkbox" data-auto-switch-setting="enabled" ${checkedWhen(auto.enabled)} ${autoDisabled} />
         </label>
         <div class="setting-box compact">
@@ -143,8 +223,8 @@
           <input type="checkbox" data-auto-switch-setting="avoidCurrent" ${checkedWhen(auto.avoidCurrent)} ${autoDisabled} />
         </label>
         <label class="setting-toggle">
-          <span><strong>只在空闲时切换</strong><small>根据本机任务日志判断 Codex 是否空闲，避免打断正在执行的任务。</small></span>
-          <input type="checkbox" data-auto-switch-setting="onlyWhenIdle" ${checkedWhen(auto.onlyWhenIdle !== false)} ${autoDisabled} />
+          <span><strong>任务连续性保护</strong><small>强制开启。额度低、额度耗尽或授权异常都不会中断仍在执行的当前轮。</small></span>
+          <input type="checkbox" checked disabled aria-label="任务连续性保护已强制开启" />
         </label>
         <label class="setting-line">
           <span><strong>空闲保护</strong><small>连续空闲达到该时间后才允许自动重启 Codex。</small></span>
@@ -208,6 +288,7 @@
       renderAccountState,
       renderHelperState,
       renderBackupCloudState,
+      renderUsageRefreshSettings,
       renderSmartSwitchSettings,
     });
   }

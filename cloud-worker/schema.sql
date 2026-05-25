@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS usage_snapshots (
   usage_json TEXT NOT NULL,
   ok INTEGER NOT NULL DEFAULT 1,
   error TEXT NOT NULL DEFAULT '',
+  refresh_source TEXT NOT NULL DEFAULT '',
+  refresh_kind TEXT NOT NULL DEFAULT 'manual',
   created_at TEXT NOT NULL,
   FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -76,6 +78,7 @@ CREATE TABLE IF NOT EXISTS usage_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_usage_account_created ON usage_snapshots(account_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_usage_user_created ON usage_snapshots(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_user_source_created ON usage_snapshots(user_id, refresh_source, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS devices (
   id TEXT PRIMARY KEY,
@@ -84,6 +87,8 @@ CREATE TABLE IF NOT EXISTS devices (
   name TEXT NOT NULL DEFAULT '',
   helper_online INTEGER NOT NULL DEFAULT 0,
   helper_base TEXT NOT NULL DEFAULT '',
+  helper_version TEXT NOT NULL DEFAULT '',
+  helper_build_date TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL,
   last_seen_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -95,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_devices_user_seen ON devices(user_id, last_seen_a
 CREATE TABLE IF NOT EXISTS user_settings (
   user_id TEXT PRIMARY KEY,
   auto_switch_json TEXT NOT NULL DEFAULT '{}',
+  usage_refresh_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
