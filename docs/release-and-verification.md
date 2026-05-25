@@ -33,14 +33,17 @@ From the repository root:
 cd cloud-worker
 npm ci
 cd ..
-Get-ChildItem -File scripts -Filter 'verify-*' | Sort-Object Name | ForEach-Object {
-  node $_.FullName
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
+.\native-helper\build-helper.ps1
 cd cloud-worker
 npm run build
 cd ..
-.\native-helper\build-helper.ps1
+Get-ChildItem -File scripts -Filter 'verify-*' |
+  Where-Object { $_.Name -ne 'verify-production-smoke.mjs' } |
+  Sort-Object Name |
+  ForEach-Object {
+  node $_.FullName
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 ```
 
 After a production deploy, run:
@@ -50,7 +53,7 @@ cd cloud-worker
 npm run smoke:production
 ```
 
-The smoke script registers a disposable cloud user, verifies login/logout, usage-refresh settings persistence, device registration with Helper version, non-admin access denial, token-free account listing, and online Helper download hash parity with `dist/CodexDockHelper/CodexDockHelper.exe`.
+The smoke script registers a disposable cloud user, verifies login/logout, static asset manifest/version parity, usage-refresh settings persistence, device registration with Helper version, non-admin access denial, token-free account listing, and online Helper download hash parity with `dist/CodexDockHelper/CodexDockHelper.exe`.
 
 For a local Worker smoke test:
 
@@ -65,7 +68,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 ## GitHub Automation
 
 - `.github/workflows/ci.yml` runs on push, pull request, and manual dispatch.
-- CI installs Worker dependencies, runs every `scripts/verify-*` verifier, builds Static Assets, builds the Windows Helper, and uploads `dist/CodexDockHelper/` as an artifact.
+- CI installs Worker dependencies, builds the Windows Helper, builds Static Assets with a content-derived asset version, runs every local `scripts/verify-*` verifier except production smoke, and uploads `dist/CodexDockHelper/` as an artifact.
 - `.github/workflows/cloudflare-deploy.yml` is manual only:
   - `preview` builds and runs `wrangler deploy --dry-run`.
   - `production` is guarded to `master` or `main`, applies remote D1 migrations, runs `wrangler deploy`, then runs `npm run smoke:production`.
@@ -108,6 +111,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 ## Current Verification Evidence
 
 - Product reference board: `artifacts/design/codex-dock-commercial-interface-reference-board-v1.png`.
+- Static Assets build produces `asset-manifest.json`; `scripts/verify-static-asset-versioning.mjs` verifies that every local JS/CSS reference in the built `index.html` uses the generated content version and that the Helper download hash matches the manifest.
 - Desktop browser screenshots:
   - `artifacts/verification/codex-dock-helper-diagnostics-desktop.png`
   - `artifacts/verification/codex-dock-settings-usage-channel-desktop.png`
@@ -121,9 +125,9 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
   - `artifacts/verification/codex-dock-production-smoke-playwright.png`
 - Local Helper health verified against `http://127.0.0.1:18766/` with version `0.4.1`, build date `2026-05-26`, active Codex state, and `safe_to_switch: false`.
 - Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available, `/api/diagnostics/export` returns redacted logs/status, no Microsoft .NET Framework dialog appears, no new `[unhandled:]` log entry is emitted, simulated Windows `TaskbarCreated` restores the tray icon registration, and Helper `0.4.1` silently re-registers `NotifyIcon` while hidden.
-- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `14186850-f662-4cf8-841b-3f76c5e8f530`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
+- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `4fe5dd59-f216-45fe-b384-cf2d1c08c888`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
 - Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `0408C16592B00FB4B3A0C8E3780066AC4EE70D00F87B17222D851CCF142E6EDB`.
-- Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, structured API error codes/request ids/diagnostic summaries, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity.
+- Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, static asset manifest/version parity, structured API error codes/request ids/diagnostic summaries, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity. Current static asset version is `18c29b1c15dc`; production `index.html` has 16 versioned JS/CSS references and no stale `20260525-oauth-primary2` string.
 - Admin operations summary verified on `2026-05-26`: `/api/admin/summary` aggregates users, sessions, account health, RT/AT split, latest usage failures, 24h audit failure trend, usage-refresh failures, Helper online/offline counts, and Helper version distribution without exposing credentials.
 - Live browser verification on `2026-05-26`: `https://codex.woai.pro` loaded `CodexAdminUi`, rendered the admin operations summary with 3 cards and 4 trend bars, and reported no horizontal overflow.
 

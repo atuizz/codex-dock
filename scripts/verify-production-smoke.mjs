@@ -66,6 +66,15 @@ function assertRequestId(result, label) {
 const index = await request("/");
 assert.equal(index.response.status, 200, "index should load");
 assert.match(index.text, /Codex Dock/, "index should contain product name");
+const manifest = await request("/asset-manifest.json");
+assert.equal(manifest.response.status, 200, "asset manifest should load");
+assert.match(manifest.data.version || "", /^[a-f0-9]{12}$/i, "asset manifest should include a generated content version");
+const versionedRefs = [...index.text.matchAll(/(?:href|src)="([^"]+\.(?:css|js)(?:\?v=([^"]+))?)"/g)]
+  .map((match) => ({ file: match[1].split("?")[0], version: match[2] || "" }))
+  .filter((ref) => (manifest.data.assets || []).some((asset) => asset.file === ref.file && ref.file !== "index.html"));
+assert.ok(versionedRefs.length >= 10, "index should include versioned JS/CSS references");
+assert.deepEqual(new Set(versionedRefs.map((ref) => ref.version)), new Set([manifest.data.version]), "all online JS/CSS refs should use manifest version");
+assert.doesNotMatch(index.text, /20260525-oauth-primary2/, "online index should not keep a stale hand-written asset version");
 
 const meBefore = await request("/api/me");
 assert.equal(meBefore.response.status, 200, "me before login should return 200");
@@ -146,6 +155,7 @@ assert.equal(recent.data.ok, true, "recent usage refresh source response should 
 
 const helperBytes = await download("/downloads/CodexDockHelper.exe");
 const onlineHash = sha256(helperBytes);
+assert.equal(manifest.data.helper?.sha256, onlineHash, "manifest Helper hash should match online download");
 let localHash = "";
 try {
   localHash = sha256(await readFile(helperPath));

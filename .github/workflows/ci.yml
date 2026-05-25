@@ -29,25 +29,28 @@ jobs:
         working-directory: cloud-worker
         run: npm ci
 
-      - name: Run verification scripts
+      - name: Build Windows Helper
         shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          Get-ChildItem -File scripts -Filter 'verify-*' | Sort-Object Name | ForEach-Object {
-            Write-Host "Running $($_.Name)"
-            node $_.FullName
-            if ($LASTEXITCODE -ne 0) {
-              exit $LASTEXITCODE
-            }
-          }
+        run: .\native-helper\build-helper.ps1
 
       - name: Build Cloudflare static assets
         working-directory: cloud-worker
         run: npm run build
 
-      - name: Build Windows Helper
+      - name: Run verification scripts
         shell: pwsh
-        run: .\native-helper\build-helper.ps1
+        run: |
+          $ErrorActionPreference = "Stop"
+          Get-ChildItem -File scripts -Filter 'verify-*' |
+            Where-Object { $_.Name -ne 'verify-production-smoke.mjs' } |
+            Sort-Object Name |
+            ForEach-Object {
+              Write-Host "Running $($_.Name)"
+              node $_.FullName
+              if ($LASTEXITCODE -ne 0) {
+                exit $LASTEXITCODE
+              }
+            }
 
       - name: Upload Helper artifact
         uses: actions/upload-artifact@v4
