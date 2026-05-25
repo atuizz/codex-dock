@@ -72,6 +72,15 @@ assert.equal(meBefore.response.status, 200, "me before login should return 200")
 assert.equal(meBefore.data.user, null, "me before login should be anonymous");
 assertRequestId(meBefore, "anonymous /api/me");
 
+const anonymousDenied = await request("/api/accounts", {
+  headers: { "X-Request-Id": "smoke-api-error" },
+});
+assert.equal(anonymousDenied.response.status, 401, "anonymous account list should be denied");
+assert.equal(anonymousDenied.data.ok, false, "anonymous denial should be a structured error");
+assert.equal(anonymousDenied.data.code, "unauthorized", "anonymous denial should include a stable error code");
+assert.equal(anonymousDenied.data.requestId, "smoke-api-error", "anonymous denial should echo request id");
+assert.equal(anonymousDenied.data.diagnostic?.summary, "GET /api/accounts returned 401", "anonymous denial should include diagnostic summary");
+
 const registered = await request("/api/auth/register", {
   method: "POST",
   body: { email, password },
@@ -120,6 +129,8 @@ assert.ok(devices.data.devices.some((device) => device.device_key === deviceKey 
 
 const adminDenied = await request("/api/admin/summary");
 assert.equal(adminDenied.response.status, 403, "normal smoke user must not access admin summary");
+assert.equal(adminDenied.data.code, "forbidden", "admin denial should include stable error code");
+assert.equal(adminDenied.data.diagnostic?.summary, "GET /api/admin/summary returned 403", "admin denial should include diagnostic summary");
 
 const accounts = await request("/api/accounts");
 assert.equal(accounts.response.status, 200, "accounts should load");

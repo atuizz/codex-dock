@@ -4,6 +4,7 @@ import {
   errorDetails,
   json,
   logRequest,
+  normalizeApiErrorResponse,
   requestContextFor,
   requestIdFor,
   responseWithRequestId,
@@ -93,6 +94,9 @@ export default {
         error: errorDetails(error),
       });
       response = json({ ok: false, error: clientErrorMessage(error), code: error?.code || "internal_error", requestId }, status);
+    }
+    if (new URL(request.url).pathname.startsWith("/api/")) {
+      response = await normalizeApiErrorResponse(response, requestContext);
     }
     response = responseWithRequestId(response, requestId);
     logRequest(ctx, request, response, startedAt, requestId);

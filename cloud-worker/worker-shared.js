@@ -51,6 +51,55 @@ export function responseWithRequestId(response, requestId) {
   return next;
 }
 
+function defaultErrorCode(status) {
+  if (status === 400) return "bad_request";
+  if (status === 401) return "unauthorized";
+  if (status === 403) return "forbidden";
+  if (status === 404) return "not_found";
+  if (status === 405) return "method_not_allowed";
+  if (status === 409) return "conflict";
+  if (status === 413) return "request_body_too_large";
+  if (status === 429) return "rate_limited";
+  if (status >= 500) return "internal_error";
+  return `http_${status}`;
+}
+
+export async function normalizeApiErrorResponse(response, requestContext) {
+  if (!response || response.status < 400) return response;
+  const contentType = response.headers.get("Content-Type") || "";
+  if (!contentType.toLowerCase().includes("application/json")) return response;
+  let body;
+  try {
+    body = await response.clone().json();
+  } catch {
+    return response;
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return response;
+  const requestId = body.requestId || requestContext?.requestId || "";
+  const status = response.status;
+  const method = requestContext?.method || "";
+  const path = requestContext?.path || "";
+  const nextBody = {
+    ...body,
+    ok: false,
+    code: body.code || defaultErrorCode(status),
+    requestId,
+    diagnostic: body.diagnostic || {
+      summary: `${method || "API"} ${path || ""} returned ${status}`.trim(),
+      status,
+      method,
+      path,
+    },
+  };
+  const headers = new Headers(response.headers);
+  headers.set("Content-Type", "application/json; charset=utf-8");
+  headers.set("Cache-Control", "no-store");
+  return new Response(JSON.stringify(nextBody), {
+    status,
+    headers,
+  });
+}
+
 export async function readJson(request, maxBytes = 4 * 1024 * 1024) {
   const length = Number(request.headers.get("Content-Length") || 0);
   if (Number.isFinite(length) && length > maxBytes) {
