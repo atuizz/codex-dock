@@ -24,12 +24,22 @@ const summaryHtml = ui.renderSummary({
   onlineSessions: 4,
   imports24h: 5,
   switches24h: 6,
+  accountHealth: { total: 9, rtReady: 7, atOnly: 2, usageFailed: 1, unrefreshed: 3 },
+  deviceHealth: { total: 2, online: 1, offline: 1, outdated: 1 },
+  helperVersions: [{ version: "0.4.1", total: 1, online: 1 }, { version: "0.3.1", total: 1, online: 0 }],
+  failureTotals: { audit24h: 12, auditFailures24h: 2, usageRefreshFailures24h: 1 },
+  failureTrend: [{ bucket: "2026-05-25T01", total: 4, failures: 1 }, { bucket: "2026-05-25T02", total: 8, failures: 2 }],
 }, [{ id: "device-a", helperVersion: "0.4.1" }, { id: "device-b", helperVersion: "0.3.1" }]);
 assert.match(summaryHtml, /用户数/);
 assert.match(summaryHtml, /<strong>3<\/strong>/);
 assert.match(summaryHtml, /设备数/);
 assert.match(summaryHtml, /<strong>2<\/strong>/);
 assert.match(summaryHtml, /待升级 Helper/);
+assert.match(summaryHtml, /账号健康/);
+assert.match(summaryHtml, /7 \/ 9 RT 可用/);
+assert.match(summaryHtml, /失败趋势/);
+assert.match(summaryHtml, /2 \/ 12 次审计失败/);
+assert.match(summaryHtml, /Helper 版本分布/);
 
 const devicesHtml = ui.renderDevices([
   { id: "device-a", name: "Desk", userEmail: "ops@example.com", helperOnline: true, helperVersion: "0.4.1", lastSeenAt: "now" },

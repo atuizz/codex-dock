@@ -113,6 +113,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
   - `artifacts/verification/codex-dock-settings-usage-channel-desktop.png`
   - `artifacts/verification/codex-dock-smart-switch-protection-desktop.png`
   - `artifacts/verification/codex-dock-admin-helper-version-desktop.png`
+  - `artifacts/verification/codex-dock-admin-ops-summary-browser.png`
 - Responsive screenshots:
   - `artifacts/verification/codex-dock-smart-switch-tablet.png`
   - `artifacts/verification/codex-dock-helper-mobile.png`
@@ -120,14 +121,16 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
   - `artifacts/verification/codex-dock-production-smoke-playwright.png`
 - Local Helper health verified against `http://127.0.0.1:18766/` with version `0.4.1`, build date `2026-05-26`, active Codex state, and `safe_to_switch: false`.
 - Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available, `/api/diagnostics/export` returns redacted logs/status, no Microsoft .NET Framework dialog appears, no new `[unhandled:]` log entry is emitted, simulated Windows `TaskbarCreated` restores the tray icon registration, and Helper `0.4.1` silently re-registers `NotifyIcon` while hidden.
-- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `2a39ecba-985c-48f7-9d85-75d0ffcfa3a0`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
+- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `14186850-f662-4cf8-841b-3f76c5e8f530`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
 - Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `0408C16592B00FB4B3A0C8E3780066AC4EE70D00F87B17222D851CCF142E6EDB`.
 - Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, structured API error codes/request ids/diagnostic summaries, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity.
+- Admin operations summary verified on `2026-05-26`: `/api/admin/summary` aggregates users, sessions, account health, RT/AT split, latest usage failures, 24h audit failure trend, usage-refresh failures, Helper online/offline counts, and Helper version distribution without exposing credentials.
+- Live browser verification on `2026-05-26`: `https://codex.woai.pro` loaded `CodexAdminUi`, rendered the admin operations summary with 3 cards and 4 trend bars, and reported no horizontal overflow.
 
 ## Commercial Quality Gates
 
 - Usage refresh: supports Helper, cloud Worker, automatic fallback, and manual-only mode; shows the actual source; cloud writes are capped and aggregate audit noise.
 - Task continuity: cloud only issues auto-switch payloads when the Helper confirms an idle, safe round boundary.
 - Helper lifecycle: close-to-tray, persistent `%APPDATA%\CodexDock\helper.log`, bounded UI log buffer, redacted diagnostics export, log restore, and RichTextBox recovery are required before publishing a Helper artifact.
-- Admin operations: users, devices, Helper versions, health totals, failures, and audit are visible without exposing credentials.
+- Admin operations: users, devices, Helper versions, RT/AT account health, 24h failure trend, usage-refresh failures, and audit are visible without exposing credentials.
 - API diagnostics: JSON API errors include stable `code`, body/header request id, and a short `diagnostic.summary` without exposing credentials or stack traces.

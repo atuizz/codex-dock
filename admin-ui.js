@@ -38,19 +38,87 @@
       return 0;
     }
 
+    function derivedHelperVersions(devices = []) {
+      const grouped = new Map();
+      for (const device of devices) {
+        const version = device.helperVersion || "未上报";
+        const current = grouped.get(version) || { version, total: 0, online: 0, lastSeenAt: "" };
+        current.total += 1;
+        if (device.helperOnline) current.online += 1;
+        current.lastSeenAt = current.lastSeenAt || device.lastSeenAt || "";
+        grouped.set(version, current);
+      }
+      return [...grouped.values()].sort((a, b) => b.total - a.total);
+    }
+
+    function renderTrend(trend = []) {
+      const rows = trend.slice(-8);
+      if (!rows.length) return '<div class="mini-trend empty-trend">暂无失败趋势</div>';
+      const max = Math.max(1, ...rows.map((row) => Number(row.failures || 0)));
+      return `
+        <div class="mini-trend" aria-label="最近失败趋势">
+          ${rows.map((row) => {
+            const failures = Number(row.failures || 0);
+            const height = Math.max(8, Math.round((failures / max) * 34));
+            return `<span title="${escapeHtml(row.bucket || "时间段")} · ${failures} 次失败" style="height:${height}px"></span>`;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function renderVersionList(versions = [], minVersion = "0.4.1") {
+      if (!versions.length) return '<div class="ops-inline muted">暂无设备版本。</div>';
+      return `
+        <div class="ops-version-list">
+          ${versions.slice(0, 4).map((item) => {
+            const version = item.version || "未上报";
+            const outdated = version === "未上报" || compareVersion(version, minVersion) < 0;
+            return `<span class="${outdated ? "warn" : ""}">${escapeHtml(version)} · ${Number(item.total || 0)} 台</span>`;
+          }).join("")}
+        </div>
+      `;
+    }
+
     function renderSummary(summary, devices = []) {
       if (!summary) return "";
-      const outdatedHelpers = devices.filter((device) => !device.helperVersion || compareVersion(device.helperVersion, "0.4.1") < 0).length;
-      return [
+      const minVersion = summary.minSupportedHelperVersion || "0.4.1";
+      const versions = summary.helperVersions?.length ? summary.helperVersions : derivedHelperVersions(devices);
+      const fallbackOutdated = devices.filter((device) => !device.helperVersion || compareVersion(device.helperVersion, minVersion) < 0).length;
+      const outdatedHelpers = Number.isFinite(Number(summary.deviceHealth?.outdated)) ? Number(summary.deviceHealth.outdated) : fallbackOutdated;
+      const accountHealth = summary.accountHealth || {};
+      const failureTotals = summary.failureTotals || {};
+      const basic = [
         ["用户数", summary.users],
         ["启用用户", summary.activeUsers],
         ["账号数", summary.accounts],
-        ["设备数", devices.length],
+        ["设备数", summary.deviceHealth?.total ?? devices.length],
         ["待升级 Helper", outdatedHelpers],
         ["在线 session", summary.onlineSessions],
         ["24h 导入", summary.imports24h],
         ["24h 切换", summary.switches24h],
       ].map(([label, value]) => metric(label, value)).join("");
+      return `
+        <div class="admin-summary-metrics">${basic}</div>
+        <div class="admin-ops-grid">
+          <div class="ops-card">
+            <span>账号健康</span>
+            <strong>${Number(accountHealth.rtReady || 0)} / ${Number(accountHealth.total ?? summary.accounts ?? 0)} RT 可用</strong>
+            <p>AT-only ${Number(accountHealth.atOnly || 0)} · 刷新失败 ${Number(accountHealth.usageFailed || 0)} · 未刷新 ${Number(accountHealth.unrefreshed || 0)}</p>
+          </div>
+          <div class="ops-card">
+            <span>失败趋势</span>
+            <strong>${Number(failureTotals.auditFailures24h || 0)} / ${Number(failureTotals.audit24h || 0)} 次审计失败</strong>
+            ${renderTrend(summary.failureTrend || [])}
+            <p>24h 额度刷新失败 ${Number(failureTotals.usageRefreshFailures24h || 0)} 次</p>
+          </div>
+          <div class="ops-card">
+            <span>Helper 版本分布</span>
+            <strong>${outdatedHelpers} 台待升级</strong>
+            ${renderVersionList(versions, minVersion)}
+            <p>最低支持版本 v${escapeHtml(minVersion)}</p>
+          </div>
+        </div>
+      `;
     }
 
     function renderUserRows(users = [], selectedIds = new Set()) {
