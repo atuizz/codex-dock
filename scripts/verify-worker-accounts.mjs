@@ -6,6 +6,7 @@ import {
   candidateDiagnostic,
   candidateReasons,
   accountCodexStatus,
+  handleAccounts,
   isSwitchTriggerUsage,
   normalizeSession,
   normalizeUsage,
@@ -199,6 +200,101 @@ await assert.rejects(
 );
 const atPayload = await switchPayloadForAccount(env, { id: "user-1" }, "at-only", { allowAtExperimental: true });
 assert.equal(atPayload.tokens.refresh_token, "rt_mock_token");
+
+class RouteDB {
+  constructor(rows, settings = {}) {
+    this.rows = rows;
+    this.settings = settings;
+  }
+
+  prepare(sql) {
+    if (/SELECT auto_switch_json FROM user_settings/.test(sql)) {
+      return {
+        bind: () => ({
+          first: async () => (this.settings.auto_switch_json ? this.settings : null),
+        }),
+      };
+    }
+    if (/SELECT \* FROM accounts/.test(sql)) {
+      return {
+        bind: (accountId, userId) => ({
+          first: async () => this.rows.find((row) => row.id === accountId && row.user_id === userId) || null,
+        }),
+      };
+    }
+    if (/FROM account_secrets/.test(sql)) {
+      return {
+        bind: (accountId, userId) => ({
+          first: async () => this.rows.find((row) => row.id === accountId && row.user_id === userId) || null,
+        }),
+      };
+    }
+    throw new Error(`unexpected route SQL: ${sql}`);
+  }
+}
+
+function post(path, body) {
+  return new Request(`https://codex.example.test${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+}
+
+const routeAudits = [];
+const writeAudit = async (_env, auditUser, body) => {
+  routeAudits.push({ userId: auditUser.id, ...body });
+};
+const rtRouteRow = {
+  ...viable,
+  user_id: "user-1",
+  group_name: viable.group,
+  chatgpt_account_id: viable.accountId,
+  plan_type: viable.planType,
+  expires_at: viable.expiresAt,
+  has_refresh_token: 1,
+  secret_updated_at: secretUpdatedAt,
+  usage_json: JSON.stringify(viable.usage),
+  encrypted_auth_json: await encryptSecret(env, { session }),
+};
+env.DB = new RouteDB([rtRouteRow]);
+const manualPayload = await handleAccounts(post("/api/accounts/a1/switch-payload", {
+  deviceKey: "desktop-1",
+}), env, { id: "user-1" }, "/api/accounts/a1/switch-payload", { writeAudit });
+assert.equal(manualPayload.status, 200);
+const manualPayloadBody = await manualPayload.json();
+assert.equal(manualPayloadBody.ok, true);
+assert.equal(manualPayloadBody.allowAtExperimental, false);
+assert.equal(manualPayloadBody.authJson.tokens.refresh_token, "rt-live");
+assert.equal(routeAudits.at(-1).action, "switch-payload");
+assert.equal(routeAudits.at(-1).result, "payload-issued");
+assert.equal(routeAudits.at(-1).accountId, "a1");
+assert.equal(routeAudits.at(-1).metadata.allowAtExperimental, false);
+assert.doesNotMatch(JSON.stringify(routeAudits.at(-1)), /rt-live|access_token|refresh_token/i);
+
+const atRouteRow = {
+  ...rtRouteRow,
+  id: "at-only",
+  has_refresh_token: 0,
+  encrypted_auth_json: await encryptSecret(env, { session: atOnlySession }),
+};
+env.DB = new RouteDB([atRouteRow]);
+await assert.rejects(
+  () => handleAccounts(post("/api/accounts/at-only/switch-payload", {}), env, { id: "user-1" }, "/api/accounts/at-only/switch-payload", { writeAudit }),
+  (error) => error instanceof ApiError && error.code === "account_at_not_supported",
+);
+
+env.DB = new RouteDB([atRouteRow], {
+  auto_switch_json: JSON.stringify({ allowAt: true, showExperimentalAt: true }),
+});
+const experimentalPayload = await handleAccounts(post("/api/accounts/at-only/switch-payload", {
+  allowAtExperimental: true,
+}), env, { id: "user-1" }, "/api/accounts/at-only/switch-payload", { writeAudit });
+assert.equal(experimentalPayload.status, 200);
+const experimentalPayloadBody = await experimentalPayload.json();
+assert.equal(experimentalPayloadBody.allowAtExperimental, true);
+assert.equal(experimentalPayloadBody.authJson.tokens.refresh_token, "rt_mock_token");
+assert.equal(routeAudits.at(-1).metadata.allowAtExperimental, true);
 
 class SyncDB {
   constructor(row) {
