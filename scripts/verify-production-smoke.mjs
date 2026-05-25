@@ -156,6 +156,8 @@ assert.equal(recent.data.ok, true, "recent usage refresh source response should 
 const helperBytes = await download("/downloads/CodexDockHelper.exe");
 const onlineHash = sha256(helperBytes);
 assert.equal(manifest.data.helper?.sha256, onlineHash, "manifest Helper hash should match online download");
+assert.match(manifest.data.helper?.version || "", /^\d+\.\d+\.\d+$/, "manifest Helper version should be present");
+assert.match(manifest.data.helper?.build_date || "", /^\d{4}-\d{2}-\d{2}$/, "manifest Helper build date should be present");
 let localHash = "";
 try {
   localHash = sha256(await readFile(helperPath));

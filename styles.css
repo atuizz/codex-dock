@@ -1738,6 +1738,64 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
   flex: 1 1 118px;
 }
 
+.helper-release-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 13px;
+  margin: 6px 0 12px;
+}
+
+.helper-release-card.warn {
+  border-color: rgba(155, 100, 0, 0.22);
+  background: #fffaf0;
+}
+
+.helper-release-card.ok {
+  border-color: rgba(7, 129, 95, 0.18);
+  background: #f7fffb;
+}
+
+.helper-release-main,
+.helper-release-current {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.helper-release-main span,
+.helper-release-current span,
+.helper-release-main small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.helper-release-main strong,
+.helper-release-current strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.helper-release-main strong,
+.helper-release-current strong,
+.helper-release-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.helper-release-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
 .signal-grid {
   grid-template-columns: 1fr 1fr;
   column-gap: 18px;
@@ -3536,6 +3594,15 @@ label span {
 
   .cleanup-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .helper-release-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .helper-release-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .primary-actions {

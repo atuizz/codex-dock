@@ -11,6 +11,7 @@ const htmlEscape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => 
 
 const ui = createPanelsUi({
   escapeHtml: htmlEscape,
+  formatBytes: (value) => `${value} bytes`,
   formatTime: (value) => value || "无记录",
   auditTitle: (item) => item.action === "switch" ? "账号已切换" : "操作记录",
   auditDescription: (item) => item.result || "已完成",
@@ -44,6 +45,13 @@ assert.match(auditHtml, /switched/);
 const deviceHtml = ui.renderDevice({
   helperReady: true,
   helper: { port: 18766, version: "0.4.2", build_date: "2026-05-26" },
+  helperRelease: {
+    file: "downloads/CodexDockHelper.exe",
+    version: "0.4.2",
+    build_date: "2026-05-26",
+    bytes: 164352,
+    sha256: "D516CA84CF3FCAA4F09A3F4C806BD1685CF719497CE4D7816529BA6AC41743EB",
+  },
   helperBase: "http://127.0.0.1:18766",
   helperAuthorized: true,
   userPresent: true,
@@ -68,6 +76,10 @@ assert.match(deviceHtml, /令牌到期/);
 assert.match(deviceHtml, /托盘/);
 assert.match(deviceHtml, /data-helper-action="authorize"/);
 assert.match(deviceHtml, /data-helper-action="export-diagnostics"/);
+assert.match(deviceHtml, /Helper 分发/);
+assert.match(deviceHtml, /下载最新版/);
+assert.match(deviceHtml, /data-helper-action="copy-helper-sha"/);
+assert.match(deviceHtml, /D516CA84CF3F/);
 assert.match(deviceHtml, /在线/);
 assert.match(deviceHtml, /v0\.4\.2/);
 assert.match(deviceHtml, /http:\/\/127\.0\.0\.1:18766/);

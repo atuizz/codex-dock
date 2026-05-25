@@ -16,6 +16,7 @@
     const auditCore = deps.auditCore || root.CodexAuditCore || {};
     const escapeHtml = deps.escapeHtml || formatCore.escapeHtml || fallbackEscapeHtml;
     const formatTime = deps.formatTime || formatCore.formatTime || ((value) => value || "无记录");
+    const formatBytes = deps.formatBytes || formatCore.formatBytes || ((value) => `${Number(value) || 0} B`);
     const auditTitle = deps.auditTitle || auditCore.auditTitle || ((item) => item?.action || "操作记录");
     const auditDescription = deps.auditDescription || auditCore.auditDescription || ((item) => item?.result || "已完成");
 
@@ -44,6 +45,49 @@
       if (!text) return "";
       if (/^(无|暂无|none|null|undefined|n\/a)$/i.test(text)) return "";
       return text;
+    }
+
+    function helperDownloadUrl(release = {}) {
+      const file = release.downloadUrl || release.file || "downloads/CodexDockHelper.exe";
+      if (/^https?:\/\//i.test(file)) return file;
+      return file.startsWith("/") ? file : `/${file}`;
+    }
+
+    function shortSha(value) {
+      const text = String(value || "").trim();
+      if (text.length <= 18) return text;
+      return `${text.slice(0, 12)}...${text.slice(-6)}`;
+    }
+
+    function renderHelperRelease({ helperReady = false, helper = {}, helperRelease = {}, minimumHelperVersion = "0.4.2" } = {}) {
+      const latestVersion = helperRelease.version || minimumHelperVersion;
+      const latestBuild = helperRelease.build_date || helperRelease.buildDate || "";
+      const currentVersion = helperReady ? (helper.version || "旧版未上报") : "未连接";
+      const currentOutdated = helperReady && (!helper.version || compareVersion(helper.version, minimumHelperVersion) < 0);
+      const releaseKnown = Boolean(helperRelease.file || helperRelease.sha256 || helperRelease.version);
+      const cardClass = helperReady && !currentOutdated ? "ok" : "warn";
+      const statusText = !helperReady
+        ? "未检测到本机 Helper，可先下载最新版。"
+        : currentOutdated
+          ? `当前 ${currentVersion} 低于最低支持版本 v${minimumHelperVersion}，建议升级后重启 Helper。`
+          : `当前 ${currentVersion} 可用；如需重新安装，可下载同版本发布包。`;
+      return `
+        <div class="helper-release-card ${escapeHtml(cardClass)}">
+          <div class="helper-release-main">
+            <span>Helper 分发</span>
+            <strong>最新版 v${escapeHtml(latestVersion)}${latestBuild ? ` · ${escapeHtml(latestBuild)}` : ""}</strong>
+            <small>${releaseKnown ? `发布包 ${escapeHtml(formatBytes(helperRelease.bytes || 0))} · SHA-256 ${escapeHtml(shortSha(helperRelease.sha256))}` : "发布包信息加载中。"}</small>
+          </div>
+          <div class="helper-release-current">
+            <span>当前设备</span>
+            <strong>${escapeHtml(statusText)}</strong>
+          </div>
+          <div class="helper-release-actions">
+            <a class="button-link primary-link" href="${escapeHtml(helperDownloadUrl(helperRelease))}" download>下载最新版</a>
+            <button type="button" data-helper-action="copy-helper-sha" ${helperRelease.sha256 ? "" : "disabled"}>复制校验值</button>
+          </div>
+        </div>
+      `;
     }
 
     function helperDiagnostic({
@@ -145,6 +189,7 @@
       helperAuthorized = false,
       userPresent = false,
       minimumHelperVersion = "0.4.2",
+      helperRelease = {},
       currentAuthChecking = false,
       currentAuthMatched = false,
     } = {}) {
@@ -217,6 +262,7 @@
           <button type="button" data-helper-action="open-status" ${helperReady ? "" : "disabled"}>本机状态页</button>
           <button type="button" data-helper-action="export-diagnostics" ${helperReady ? "" : "disabled"}>导出诊断</button>
         </div>
+        ${renderHelperRelease({ helperReady, helper, helperRelease, minimumHelperVersion })}
         <div class="device-grid">
           ${rows.map(([label, value]) => `
             <div class="device-row">
@@ -261,6 +307,7 @@
     return Object.freeze({
       codexStatusSourceLabel,
       helperDiagnostic,
+      renderHelperRelease,
       renderAudit,
       renderDevice,
       securitySummary,

@@ -43,7 +43,21 @@ await writeFile(join(publicDir, "index.html"), versionedIndex);
 
 const helperSource = join(repoRoot, "dist", "CodexDockHelper", "CodexDockHelper.exe");
 const legacyHelperSource = join(repoRoot, "dist", "CodexPlusLocalHelper", "CodexPlusLocalHelper.exe");
+const helperSourceCode = join(repoRoot, "native-helper", "CodexPlusLocalHelper.cs");
 let helperEntry = null;
+
+async function helperMetadata() {
+  try {
+    const source = await readFile(helperSourceCode, "utf8");
+    return {
+      version: source.match(/HelperVersion\s*=\s*"([^"]+)"/)?.[1] || "",
+      build_date: source.match(/HelperBuildDate\s*=\s*"([^"]+)"/)?.[1] || "",
+    };
+  } catch {
+    return { version: "", build_date: "" };
+  }
+}
+
 try {
   let source = helperSource;
   let helperStat = await stat(source).catch(() => null);
@@ -55,8 +69,11 @@ try {
     const downloadsDir = join(publicDir, "downloads");
     await mkdir(downloadsDir, { recursive: true });
     const helperBytes = await readFile(source);
+    const metadata = await helperMetadata();
     helperEntry = {
       file: "downloads/CodexDockHelper.exe",
+      version: metadata.version,
+      build_date: metadata.build_date,
       bytes: helperBytes.length,
       sha256: createHash("sha256").update(helperBytes).digest("hex").toUpperCase(),
     };

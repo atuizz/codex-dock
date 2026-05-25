@@ -75,5 +75,8 @@ const helperPath = join(publicDir, manifest.helper.file);
 const helperStat = await stat(helperPath);
 assert.equal(helperStat.size, manifest.helper.bytes, "Helper size should match manifest");
 assert.equal(sha256(await readFile(helperPath)), manifest.helper.sha256, "Helper hash should match manifest");
+const helperSource = await readFile(join(repoRoot, "native-helper", "CodexPlusLocalHelper.cs"), "utf8");
+assert.equal(manifest.helper.version, helperSource.match(/HelperVersion\s*=\s*"([^"]+)"/)?.[1], "Helper version should match source");
+assert.equal(manifest.helper.build_date, helperSource.match(/HelperBuildDate\s*=\s*"([^"]+)"/)?.[1], "Helper build date should match source");
 
 console.log("static asset versioning verification passed");

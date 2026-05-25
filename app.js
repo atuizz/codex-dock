@@ -150,6 +150,7 @@ const state = {
   helperReady: false,
   helperBase: "",
   helperInfo: null,
+  helperRelease: null,
   codexProxy: null,
   codexStatus: null,
   deviceKey: "",
@@ -286,6 +287,7 @@ const panelsUi = window.CodexPanelsUi.createPanelsUi({
   formatCore: window.CodexFormatCore,
   auditCore: window.CodexAuditCore,
   escapeHtml,
+  formatBytes,
   formatTime,
   auditTitle,
   auditDescription,
@@ -316,6 +318,34 @@ const importUi = window.CodexImportUi.createImportUi({
 
 function helperClient() {
   return createHelperClient(state.helperBase);
+}
+
+function normalizeHelperRelease(manifest = {}) {
+  const helper = manifest.helper || {};
+  if (!helper.file && !helper.sha256 && !helper.version) return null;
+  return {
+    ...helper,
+    version: helper.version || minimumHelperVersion,
+    build_date: helper.build_date || helper.buildDate || "",
+    assetVersion: manifest.version || "",
+    downloadUrl: helper.file ? `/${String(helper.file).replace(/^\/+/, "")}` : "/downloads/CodexDockHelper.exe",
+  };
+}
+
+async function loadHelperRelease() {
+  try {
+    const response = await fetch(`/asset-manifest.json?ts=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`manifest ${response.status}`);
+    state.helperRelease = normalizeHelperRelease(await response.json());
+  } catch {
+    state.helperRelease = {
+      version: minimumHelperVersion,
+      build_date: "",
+      downloadUrl: "/downloads/CodexDockHelper.exe",
+    };
+  }
+  renderDevice();
+  renderSettings();
 }
 
 function helperAuthorizedForCurrentConsole(helper = state.helperInfo) {
@@ -1960,6 +1990,7 @@ function renderDevice() {
     helperAuthorized: state.autoSwitchStatus.helperAuthorized || helperAuthorizedForCurrentConsole(helper),
     userPresent: Boolean(state.user),
     minimumHelperVersion,
+    helperRelease: state.helperRelease || {},
     currentAuthChecking: state.currentAuthChecking,
     currentAuthMatched: Boolean(resolveCurrentAccountId()),
   });
@@ -1987,6 +2018,7 @@ function renderSettings() {
     helper: state.helperInfo || {},
     codex,
     minimumHelperVersion,
+    helperRelease: state.helperRelease || {},
   });
   $("backupCloudState").innerHTML = settingsUi.renderBackupCloudState({
     user: state.user,
@@ -3342,6 +3374,22 @@ async function exportHelperDiagnostics() {
   }
 }
 
+async function copyHelperChecksum() {
+  const sha = state.helperRelease?.sha256 || "";
+  if (!sha) {
+    toast("Helper 校验值还在加载，请稍后重试。");
+    return;
+  }
+  const text = `${sha}  CodexDockHelper.exe`;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("已复制 Helper SHA-256 校验值。");
+  } catch {
+    downloadText("CodexDockHelper.sha256.txt", `${text}\n`);
+    toast("无法写入剪贴板，已下载校验文件。");
+  }
+}
+
 async function changePassword(event) {
   event.preventDefault();
   if (!state.user) return;
@@ -3771,6 +3819,7 @@ function bindEvents() {
       if (action === "repair-tray") repairHelperTray();
       if (action === "open-status") openLocalStatus();
       if (action === "export-diagnostics") exportHelperDiagnostics();
+      if (action === "copy-helper-sha") copyHelperChecksum();
       return;
     }
     const button = event.target.closest("[data-codex-proxy-action]");
@@ -3968,6 +4017,7 @@ function init() {
   setAuthMode("login");
     $("authEmail").value = readMigratedLocalStorage(cachedEmailStorage, previousCachedEmailStorage);
   render();
+  loadHelperRelease();
   checkHelper();
   window.setInterval(refreshHelperRuntimeStatus, 3000);
   loadMe();

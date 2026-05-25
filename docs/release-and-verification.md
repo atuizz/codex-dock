@@ -103,7 +103,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 ## Current Verification Evidence
 
 - Product reference board: `artifacts/design/codex-dock-commercial-interface-reference-board-v1.png`.
-- Static Assets build produces `asset-manifest.json`; `scripts/verify-static-asset-versioning.mjs` verifies that every local JS/CSS reference in the built `index.html` uses the generated content version and that the Helper download hash matches the manifest.
+- Static Assets build produces `asset-manifest.json`; `scripts/verify-static-asset-versioning.mjs` verifies that every local JS/CSS reference in the built `index.html` uses the generated content version and that the Helper download version, build date, size, and hash match the manifest.
 - Desktop browser screenshots:
   - `artifacts/verification/codex-dock-helper-diagnostics-desktop.png`
   - `artifacts/verification/codex-dock-settings-usage-channel-desktop.png`
@@ -114,6 +114,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
   - `artifacts/verification/codex-dock-account-detail-diagnostics-local.png`
   - `artifacts/verification/account-health-production-preview.png`
   - `artifacts/verification/account-cleanup-modal-production.png`
+  - `artifacts/verification/helper-release-card-production.png`
 - Responsive screenshots:
   - `artifacts/verification/codex-dock-smart-switch-tablet.png`
   - `artifacts/verification/codex-dock-helper-mobile.png`
@@ -124,10 +125,11 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
   - `artifacts/verification/codex-dock-import-primary-live.png`
 - Local Helper health verified against `http://127.0.0.1:18766/` with version `0.4.2`, build date `2026-05-26`, active Codex state, and `safe_to_switch: false`.
 - Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available with `tray` diagnostics, `/api/diagnostics/export` returns redacted logs/status, no Microsoft .NET Framework dialog appears, no new `[unhandled:]` log entry is emitted, simulated Windows `TaskbarCreated` restores the tray icon registration, and Helper `0.4.2` silently re-registers `NotifyIcon` even when the main window is visible.
-- Production deployment verified on `2026-05-26`: `wrangler deploy` published Worker version `89ae14eb-30ce-4dab-8907-dd6a66f18840`, API register/login/logout and usage-refresh settings smoke tests passed, and the deployed static assets use version `fdbe869e8743`.
+- Production deployment verified on `2026-05-26`: `wrangler deploy` published Worker version `aaa62285-2652-431c-a44d-08d000f4d0ba`, API register/login/logout and usage-refresh settings smoke tests passed, and the deployed static assets use version `d5154870db74`.
 - Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `D516CA84CF3FCAA4F09A3F4C806BD1685CF719497CE4D7816529BA6AC41743EB`.
-- Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, static asset manifest/version parity, structured API error codes/request ids/diagnostic summaries, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity. Current static asset version is `fdbe869e8743`; production `index.html` has versioned JS/CSS references, the account health center, the cleanup confirmation modal, the Helper tray repair buttons, and no stale `20260525-oauth-primary2` string.
+- Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, static asset manifest/version parity, structured API error codes/request ids/diagnostic summaries, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity. Current static asset version is `d5154870db74`; production `index.html` has versioned JS/CSS references, the account health center, the cleanup confirmation modal, the Helper release card, the Helper tray repair buttons, and no stale `20260525-oauth-primary2` string.
 - Helper diagnostics browser verification on `2026-05-26`: production `panels-ui.js` exposes `helperDiagnostic`, the device panel renders the Helper diagnosis card with safe-boundary guidance plus refresh, re-authorize, tray repair, local status, and diagnostics export actions. Screenshot: `artifacts/verification/helper-diagnostics-production-preview.png`.
+- Helper release browser verification on `2026-05-26`: production `asset-manifest.json` reports Helper `0.4.2`, build date `2026-05-26`, and SHA-256 `D516CA84CF3FCAA4F09A3F4C806BD1685CF719497CE4D7816529BA6AC41743EB`; production `panels-ui.js` renders the release card with download and checksum actions. De-identified screenshot: `artifacts/verification/helper-release-card-production.png`.
 - Account health browser verification on `2026-05-26`: production `shell-ui.js` exposes `renderHealthCenter`, the account pool renders health filter chips for usable RT, missing RT, invalid RT/token, low quota, cooldown, current account, Helper blocked, and attention states. De-identified screenshot: `artifacts/verification/account-health-production-preview.png`.
 - Account cleanup browser verification on `2026-05-26`: production `dialog-ui.js` exposes `renderCleanupReview`, the batch cleanup modal shows selected, attention, usable, and re-importable counts, warns when usable accounts are included, and was captured with a de-identified screenshot: `artifacts/verification/account-cleanup-modal-production.png`.
 - Admin operations summary verified on `2026-05-26`: `/api/admin/summary` aggregates users, sessions, account health, RT/AT split, latest usage failures, 24h audit failure trend, usage-refresh failures, Helper online/offline counts, and Helper version distribution without exposing credentials.

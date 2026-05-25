@@ -32,6 +32,11 @@ const helperHtml = ui.renderHelperState({
   helperReady: true,
   helper: { version: "0.3.1" },
   minimumHelperVersion: "0.4.2",
+  helperRelease: {
+    version: "0.4.2",
+    build_date: "2026-05-26",
+    sha256: "D516CA84CF3FCAA4F09A3F4C806BD1685CF719497CE4D7816529BA6AC41743EB",
+  },
   codex: {
     label: "空闲",
     detail: "连续 42 秒没有任务类日志。",
@@ -39,6 +44,8 @@ const helperHtml = ui.renderHelperState({
   },
 });
 assert.match(helperHtml, /Codex：空闲/);
+assert.match(helperHtml, /最新发布：v0\.4\.2 · 2026-05-26/);
+assert.match(helperHtml, /D516CA84CF3F/);
 assert.match(helperHtml, /5H 剩余 0%/);
 assert.match(helperHtml, /版本过旧/);
 
