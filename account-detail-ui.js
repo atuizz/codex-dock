@@ -56,7 +56,94 @@
       if (reason) return reason;
       const label = `${token?.label || ""} ${token?.detail || ""}`;
       if (label.includes("不支持 Codex")) return "at_unsupported";
+      if (label.includes("RT 已失效")) return "rt_invalid";
+      if (label.includes("Token 已过期")) return "token_expired";
+      if (label.includes("缺少密钥") || label.includes("无本地 token")) return "missing_secret";
       return "";
+    }
+
+    function blockDetail(reason, token = {}) {
+      if (reason === "at_unsupported") return "这个账号缺少 RT，当前不能用于 Codex 切换。";
+      if (reason === "rt_invalid") return "refresh_token 已失效或已被使用，需要重新登录获取 RT。";
+      if (reason === "token_expired") return "access_token 已过期且没有可用 RT。";
+      if (reason === "missing_secret") return "云端没有可下发的 auth 密文，或本机缺少可用授权。";
+      return token.detail || token.label || "账号当前不可用于 Codex。";
+    }
+
+    function availabilityDiagnostic({ account, current, helperReady, usable, issue, token, hasRt, blockReason }) {
+      if (issue) {
+        return {
+          className: issue.className || "bad",
+          title: "暂不可用",
+          reason: issue.label || "额度或授权状态异常。",
+          action: hasRt ? "先刷新额度或重新登录更新授权。" : "点击“补 RT”，用这个账号重新网页登录。",
+        };
+      }
+      if (!hasRt || blockReason === "at_unsupported") {
+        return {
+          className: "warn",
+          title: "不可用于 Codex",
+          reason: blockDetail("at_unsupported", token),
+          action: "点击“补 RT”，用这个账号重新网页登录。",
+        };
+      }
+      if (blockReason) {
+        return {
+          className: blockReason === "missing_secret" ? "warn" : "bad",
+          title: blockReason === "missing_secret" ? "缺少授权" : "需更新授权",
+          reason: blockDetail(blockReason, token),
+          action: "重新打开授权页面，导入这个账号自己的 RT。",
+        };
+      }
+      if (!usable) {
+        return {
+          className: "bad",
+          title: "暂不可用",
+          reason: token.detail || token.label || "账号当前不满足切换条件。",
+          action: "检查授权、额度和 Helper 状态后再切换。",
+        };
+      }
+      if (current) {
+        return {
+          className: "ok",
+          title: "正在使用",
+          reason: "这是当前 Codex 正在使用的账号。",
+          action: "无需切换；如需换号，可选择其它可用 RT 账号。",
+        };
+      }
+      if (!helperReady) {
+        return {
+          className: "warn",
+          title: "可用，Helper 未连接",
+          reason: "账号授权可用，但当前不能一键写入 Codex。",
+          action: "启动 Dock Helper 后可一键切换；也可以下载 auth.json 手动使用。",
+        };
+      }
+      return {
+        className: "ok",
+        title: "可用于 Codex",
+        reason: "账号带可用 RT，可参与手动切换和智能切换。",
+        action: "点击“立即切换”，或让智能切换在安全边界选择它。",
+      };
+    }
+
+    function diagnosticCard(diagnostic) {
+      return `
+        <div class="availability-diagnostic ${escapeHtml(diagnostic.className || "warn")}">
+          <div>
+            <span>诊断结论</span>
+            <strong>${escapeHtml(diagnostic.title)}</strong>
+          </div>
+          <div>
+            <span>原因</span>
+            <strong>${escapeHtml(diagnostic.reason)}</strong>
+          </div>
+          <div>
+            <span>下一步</span>
+            <strong>${escapeHtml(diagnostic.action)}</strong>
+          </div>
+        </div>
+      `;
     }
 
 
@@ -141,10 +228,11 @@
       const hasRt = accountHasRt(account);
       const blockReason = accountBlockReason(account, token);
       const needsAuth = Boolean(issue || token.className === "warn" || !usable);
+      const diagnostic = availabilityDiagnostic({ account, current, helperReady, usable, issue, token, hasRt, blockReason });
       return {
         selectedState: [
           account.email || "",
-          issue?.label || token.label,
+          diagnostic.title || issue?.label || token.label,
           planLabel(plan),
         ].filter(Boolean).join(" · "),
         detailTitle: account.name || "当前选择",
@@ -159,6 +247,7 @@
               <span class="badge ${badgeClass}"><span class="status-dot ${badgeClass}"></span>${escapeHtml(issue?.label || token.label)}</span>
               <span class="badge ${planClass(plan)}">${escapeHtml(planLabel(plan))}</span>
             </div>
+            ${diagnosticCard(diagnostic)}
             <div class="quota-summary">
               ${quotaCell(account.usage?.five_hour, "5H", account.usage)}
               ${quotaCell(account.usage?.one_week, "7D", account.usage)}

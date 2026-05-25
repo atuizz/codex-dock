@@ -60,18 +60,31 @@ const selected = ui.renderSelectedAccount({
   helperReady: false,
   operationActive: false,
 });
-assert.equal(selected.selectedState, "primary@example.com · RT · Plus");
+assert.equal(selected.selectedState, "primary@example.com · 正在使用 · Plus");
 assert.equal(selected.detailTitle, "Primary <Ops>");
 assert.equal(selected.switchLabel, "下载 auth.json");
 assert.equal(selected.switchDisabled, false);
 assert.equal(selected.copyDisabled, false);
 assert.match(selected.panelHtml, /Primary &lt;Ops&gt;/);
 assert.match(selected.panelHtml, /正在使用/);
+assert.match(selected.panelHtml, /诊断结论/);
+assert.match(selected.panelHtml, /无需切换；如需换号，可选择其它可用 RT 账号。/);
 assert.match(selected.panelHtml, /本地 \+ 云端/);
 assert.match(selected.panelHtml, /72% 剩余/);
 assert.match(selected.panelHtml, /data-selected-action="copy-email"/);
 assert.match(selected.panelHtml, /option value="primary" selected/);
 assert.doesNotMatch(selected.panelHtml, /授权需要更新/);
+
+const helperOffline = ui.renderSelectedAccount({
+  account: { ...account, id: "detail-2", lastSwitchAt: "" },
+  current: false,
+  userPresent: true,
+  helperReady: false,
+  operationActive: false,
+});
+assert.equal(helperOffline.selectedState, "primary@example.com · 可用，Helper 未连接 · Plus");
+assert.match(helperOffline.panelHtml, /启动 Dock Helper 后可一键切换/);
+assert.match(helperOffline.panelHtml, /下载 auth\.json/);
 
 const blocked = ui.renderSelectedAccount({
   account: {
@@ -88,6 +101,8 @@ assert.equal(blocked.switchLabel, "立即切换");
 assert.equal(blocked.switchDisabled, true);
 assert.equal(blocked.copyDisabled, true);
 assert.match(blocked.panelHtml, /Token 已失效/);
+assert.match(blocked.panelHtml, /暂不可用/);
+assert.match(blocked.panelHtml, /点击“补 RT”，用这个账号重新网页登录。/);
 assert.match(blocked.panelHtml, /通过 OAuth 登录补 RT/);
 assert.match(blocked.panelHtml, /不要用当前本机 auth 覆盖它/);
 assert.doesNotMatch(blocked.panelHtml, /data-auth-action="sync-local-auth"/);

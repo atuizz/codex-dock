@@ -1524,6 +1524,58 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
   gap: 6px;
 }
 
+.availability-diagnostic {
+  display: grid;
+  grid-template-columns: 0.9fr 1.2fr 1.3fr;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 15px;
+  background: var(--border-soft);
+}
+
+.availability-diagnostic > div {
+  min-width: 0;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.availability-diagnostic span,
+.availability-diagnostic strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.availability-diagnostic span {
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.availability-diagnostic strong {
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.availability-diagnostic.ok {
+  border-color: rgba(20, 181, 141, 0.35);
+  background: rgba(20, 181, 141, 0.18);
+}
+
+.availability-diagnostic.warn {
+  border-color: rgba(196, 124, 40, 0.35);
+  background: rgba(196, 124, 40, 0.18);
+}
+
+.availability-diagnostic.bad {
+  border-color: rgba(198, 66, 66, 0.34);
+  background: rgba(198, 66, 66, 0.16);
+}
+
 .quota-summary {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -3257,6 +3309,7 @@ label span {
   .settings-layout,
   .quota-summary,
   .optional-grid,
+  .availability-diagnostic,
   .signal-grid,
   .detail-edit-grid {
     grid-template-columns: 1fr;
