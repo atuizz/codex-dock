@@ -59,13 +59,14 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.0";
+        private const string HelperVersion = "0.4.1";
         private const string HelperBuildDate = "2026-05-26";
         private const int HelperLogMaxBytes = 1024 * 1024;
         private const int HelperLogBackups = 5;
         private const int HelperUiLogLineLimit = 400;
         private const int HelperUiLogMaxCharacters = 160000;
         private const int AutoSwitchRepeatedLogSeconds = 300;
+        private const int TrayWatchdogIntervalMs = 30000;
         private static readonly object HelperLogFileLock = new object();
         private int _port = 18766;
         private readonly string _root;
@@ -91,6 +92,7 @@ namespace CodexPlusLocalHelper
         private readonly Label _autoSwitchDetailLabel;
         private readonly Label _uptimeLabel;
         private readonly System.Windows.Forms.Timer _dashboardTimer;
+        private readonly System.Windows.Forms.Timer _trayWatchdogTimer;
         private readonly Icon _appIcon;
         private readonly NotifyIcon _trayIcon;
         private readonly ContextMenuStrip _trayMenu;
@@ -572,6 +574,9 @@ namespace CodexPlusLocalHelper
             _dashboardTimer = new System.Windows.Forms.Timer { Interval = 1500 };
             _dashboardTimer.Tick += delegate { RefreshDashboardUi(); };
             _dashboardTimer.Start();
+            _trayWatchdogTimer = new System.Windows.Forms.Timer { Interval = TrayWatchdogIntervalMs };
+            _trayWatchdogTimer.Tick += delegate { EnsureTrayIconHeartbeat(); };
+            _trayWatchdogTimer.Start();
             FormClosing += MainForm_FormClosing;
             Resize += delegate
             {
@@ -827,6 +832,11 @@ namespace CodexPlusLocalHelper
                 _dashboardTimer.Stop();
                 _dashboardTimer.Dispose();
             }
+            if (_trayWatchdogTimer != null)
+            {
+                _trayWatchdogTimer.Stop();
+                _trayWatchdogTimer.Dispose();
+            }
             if (_trayIcon != null)
             {
                 _trayIcon.Visible = false;
@@ -894,6 +904,11 @@ namespace CodexPlusLocalHelper
 
         private void EnsureTrayIcon(string reason)
         {
+            EnsureTrayIcon(reason, true);
+        }
+
+        private void EnsureTrayIcon(string reason, bool logSuccess)
+        {
             if (_applicationClosing || _trayIcon == null) return;
             try
             {
@@ -901,11 +916,20 @@ namespace CodexPlusLocalHelper
                 _trayIcon.ContextMenuStrip = _trayMenu;
                 _trayIcon.Visible = false;
                 _trayIcon.Visible = true;
-                WriteLifecycleLog("托盘图标已确认; reason=" + reason);
+                if (logSuccess) WriteLifecycleLog("托盘图标已确认; reason=" + reason);
             }
             catch (Exception ex)
             {
                 WriteLifecycleLog("托盘图标确认失败; reason=" + reason + "; " + ex.Message);
+            }
+        }
+
+        private void EnsureTrayIconHeartbeat()
+        {
+            if (_applicationClosing || _trayIcon == null) return;
+            if (!Visible || !ShowInTaskbar || WindowState == FormWindowState.Minimized)
+            {
+                EnsureTrayIcon("托盘心跳", false);
             }
         }
 

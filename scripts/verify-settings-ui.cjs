@@ -31,7 +31,7 @@ assert.match(backupHtml, /checked/);
 const helperHtml = ui.renderHelperState({
   helperReady: true,
   helper: { version: "0.3.1" },
-  minimumHelperVersion: "0.4.0",
+  minimumHelperVersion: "0.4.1",
   codex: {
     label: "空闲",
     detail: "连续 42 秒没有任务类日志。",

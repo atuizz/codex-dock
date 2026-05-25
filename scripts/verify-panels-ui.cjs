@@ -30,7 +30,7 @@ assert.match(auditHtml, /switched/);
 
 const deviceHtml = ui.renderDevice({
   helperReady: true,
-  helper: { port: 18766, version: "0.4.0", build_date: "2026-05-26" },
+  helper: { port: 18766, version: "0.4.1", build_date: "2026-05-26" },
   helperBase: "http://127.0.0.1:18766",
   codex: {
     source: "logs_2.sqlite",
@@ -44,7 +44,7 @@ const deviceHtml = ui.renderDevice({
   currentAuthMatched: true,
 });
 assert.match(deviceHtml, /在线/);
-assert.match(deviceHtml, /v0\.4\.0/);
+assert.match(deviceHtml, /v0\.4\.1/);
 assert.match(deviceHtml, /http:\/\/127\.0\.0\.1:18766/);
 assert.match(deviceHtml, /任务日志/);
 assert.match(deviceHtml, /42 秒/);

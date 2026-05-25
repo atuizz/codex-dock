@@ -16,7 +16,7 @@ https://codex.woai.pro
 - 云端 API：`cloud-worker/worker.js` 聚合 `worker-auth.js`、`worker-accounts.js`、`worker-usage.js`、`worker-settings.js`、`worker-helper.js`、`worker-audit.js`、`worker-admin.js` 和 `worker-user.js`，处理注册、登录、账号导入、额度快照、刷新通道、切换 payload、设备、审计记录和管理员接口。
 - 云端数据库：Cloudflare D1，数据库名 `codex-cloud-console`。
 - token 存储：`account_secrets.encrypted_auth_json`，使用 Worker secret `TOKEN_ENCRYPTION_KEY` 加密落库。
-- Dock Helper：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.0`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
+- Dock Helper：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.1`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
 
 ## 使用模型
 
@@ -44,9 +44,9 @@ https://codex.woai.pro
 http://127.0.0.1:18766/
 ```
 
-Dock Helper 不托管账号管理页，`/console/` 会返回 404。关闭窗口不会退出，只会驻留系统托盘；托盘菜单可以显示窗口、打开 Codex Dock、打开本地状态页、重启服务或退出。
+Dock Helper 不托管账号管理页，`/console/` 会返回 404。关闭窗口不会退出，只会驻留系统托盘；托盘菜单可以显示窗口、打开 Codex Dock、重启服务或退出。
 
-Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。控制台会显示 Helper 版本并提示低于最低支持版本的设备升级。
+Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Helper 0.4.1 起会在窗口隐藏时低频重新注册托盘图标，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。控制台会显示 Helper 版本并提示低于最低支持版本的设备升级。
 
 ## 额度刷新与智能切换
 

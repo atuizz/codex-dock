@@ -6,7 +6,7 @@ This document is the operational checklist for shipping the Cloudflare console a
 
 - Cloud console: Cloudflare Worker `codex-cloud-console` with Static Assets from `cloud-worker/public`.
 - Cloud data: D1 database `codex-cloud-console`, managed by incremental files in `cloud-worker/migrations`.
-- Windows Helper: `dist/CodexDockHelper/CodexDockHelper.exe`, currently version `0.4.0` with build date `2026-05-26`.
+- Windows Helper: `dist/CodexDockHelper/CodexDockHelper.exe`, currently version `0.4.1` with build date `2026-05-26`.
 - Public domain: `https://codex.woai.pro`.
 
 ## Required Secrets And Variables
@@ -118,10 +118,10 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
   - `artifacts/verification/codex-dock-helper-mobile.png`
 - Production smoke screenshot:
   - `artifacts/verification/codex-dock-production-smoke-playwright.png`
-- Local Helper health verified against `http://127.0.0.1:18766/` with version `0.4.0`, build date `2026-05-26`, active Codex state, and `safe_to_switch: false`.
-- Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available, `/api/diagnostics/export` returns redacted logs/status, no Microsoft .NET Framework dialog appears, no new `[unhandled:]` log entry is emitted, and simulated Windows `TaskbarCreated` restores the tray icon registration.
-- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `b534196f-ed76-4ea0-b45d-62a469bb94fe`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
-- Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `6E0CF0A5FE2C31C89B8BC4E849FD52004C75BC7FE7F9CD3796CCEE7AEF551F55`.
+- Local Helper health verified against `http://127.0.0.1:18766/` with version `0.4.1`, build date `2026-05-26`, active Codex state, and `safe_to_switch: false`.
+- Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available, `/api/diagnostics/export` returns redacted logs/status, no Microsoft .NET Framework dialog appears, no new `[unhandled:]` log entry is emitted, simulated Windows `TaskbarCreated` restores the tray icon registration, and Helper `0.4.1` silently re-registers `NotifyIcon` while hidden.
+- Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `2a39ecba-985c-48f7-9d85-75d0ffcfa3a0`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
+- Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `0408C16592B00FB4B3A0C8E3780066AC4EE70D00F87B17222D851CCF142E6EDB`.
 - Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, structured API error codes/request ids/diagnostic summaries, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity.
 
 ## Commercial Quality Gates

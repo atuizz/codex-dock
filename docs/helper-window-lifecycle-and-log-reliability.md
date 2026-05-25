@@ -165,3 +165,9 @@
 - 即使 UI 渲染被人为注入异常，本地服务和持久日志仍继续工作，界面能够自恢复。
 - 错误文案对用户简洁明确，对诊断提供足够证据，同时不泄露敏感凭证。
 - Helper 窗口、任务弹窗、托盘菜单的生命周期行为一致、可预测、可重复验收。
+
+## 2026-05-26 实施记录
+
+- Helper `0.4.1` 在窗口隐藏或最小化时启用低频托盘心跳，静默重新注册 `NotifyIcon`，避免 Windows 托盘状态丢失后出现“Helper 进程仍在、本地 API 正常、托盘图标不见”的半失联状态。
+- 本地验证：`GET http://127.0.0.1:18766/api/health` 返回 `version: 0.4.1`，日志记录 `托盘图标已确认; reason=主窗口首次显示`，`scripts/verify-helper-diagnostics.cjs` 通过。
+- 线上验证：`https://codex.woai.pro/downloads/CodexDockHelper.exe` 与本地 `dist/CodexDockHelper/CodexDockHelper.exe` SHA-256 均为 `0408C16592B00FB4B3A0C8E3780066AC4EE70D00F87B17222D851CCF142E6EDB`。

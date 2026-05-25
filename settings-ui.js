@@ -56,7 +56,7 @@
       return 0;
     }
 
-    function renderHelperState({ helperReady, helper = {}, codex, minimumHelperVersion = "0.4.0" } = {}) {
+    function renderHelperState({ helperReady, helper = {}, codex, minimumHelperVersion = "0.4.1" } = {}) {
       const status = codex || {};
       const version = helper.version || "";
       const outdated = helperReady && (!version || compareVersion(version, minimumHelperVersion) < 0);

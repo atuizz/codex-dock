@@ -40,7 +40,7 @@
 
     function renderSummary(summary, devices = []) {
       if (!summary) return "";
-      const outdatedHelpers = devices.filter((device) => !device.helperVersion || compareVersion(device.helperVersion, "0.4.0") < 0).length;
+      const outdatedHelpers = devices.filter((device) => !device.helperVersion || compareVersion(device.helperVersion, "0.4.1") < 0).length;
       return [
         ["用户数", summary.users],
         ["启用用户", summary.activeUsers],
@@ -122,7 +122,7 @@
           <tbody>
             ${devices.map((device) => {
               const version = device.helperVersion || "未上报";
-              const versionStatus = !device.helperVersion || compareVersion(device.helperVersion, "0.4.0") < 0 ? " · 待升级" : "";
+              const versionStatus = !device.helperVersion || compareVersion(device.helperVersion, "0.4.1") < 0 ? " · 待升级" : "";
               return `<tr>
                 <td><strong>${escapeHtml(device.name || "设备")}</strong><span>${escapeHtml(shortId(device.id))}</span></td>
                 <td>${escapeHtml(device.userEmail || "未知用户")}</td>

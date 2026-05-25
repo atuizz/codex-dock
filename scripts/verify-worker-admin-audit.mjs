@@ -23,7 +23,7 @@ class FakeD1 {
       { id: "sess-1", user_id: "user-1", expires_at: "2999-01-01T00:00:00.000Z", last_seen_at: "2026-01-02" },
     ];
     this.devices = [
-      { id: "dev-1", user_id: "user-1", device_key: "desktop", name: "Dock Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.0", helper_build_date: "2026-05-26", created_at: "", last_seen_at: "" },
+      { id: "dev-1", user_id: "user-1", device_key: "desktop", name: "Dock Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.1", helper_build_date: "2026-05-26", created_at: "", last_seen_at: "" },
     ];
     this.auditLogs = [];
   }
@@ -268,7 +268,7 @@ assert.equal((await summary.json()).summary.users, 2);
 
 const devices = await handleAdmin(request("/api/admin/devices"), env, admin, "/api/admin/devices");
 const deviceBody = await devices.json();
-assert.equal(deviceBody.devices[0].helperVersion, "0.4.0");
+assert.equal(deviceBody.devices[0].helperVersion, "0.4.1");
 assert.equal(deviceBody.devices[0].helperBuildDate, "2026-05-26");
 
 const guard = await handleAdmin(request("/api/admin/users/admin-1", "PATCH", {

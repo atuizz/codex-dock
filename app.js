@@ -101,7 +101,7 @@ const defaultUsageRefreshSettings = {
   lastUsageRefreshSource: "",
   lastUsageRefreshAt: "",
 };
-const minimumHelperVersion = "0.4.0";
+const minimumHelperVersion = "0.4.1";
 
 const state = {
   user: null,
