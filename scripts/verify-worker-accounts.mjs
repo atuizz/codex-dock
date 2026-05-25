@@ -13,6 +13,7 @@ import {
   summarizeCandidateBlocks,
   syncCurrentAuthSecret,
   switchPayloadForAccount,
+  usageFresh,
 } from "../cloud-worker/worker-accounts.js";
 import {
   ApiError,
@@ -95,6 +96,8 @@ const settings = {
 };
 const experimentalSettings = { ...settings, allowAt: true, showExperimentalAt: true };
 const secretUpdatedAt = new Date(Date.now() - 10_000).toISOString();
+const freshUsageAt = new Date(Date.now() - 60_000).toISOString();
+const staleUsageAt = new Date(Date.now() - 2 * 60 * 60_000).toISOString();
 const viable = accountSummary({
   id: "a1",
   name: "Primary",
@@ -110,6 +113,7 @@ const viable = accountSummary({
   secret_updated_at: secretUpdatedAt,
   last_switch_at: "",
 }, {
+  refreshed_at: freshUsageAt,
   plan_type: "plus",
   five_hour: { remainingPercent: 86 },
   one_week: { usedPercent: 10 },
@@ -119,7 +123,8 @@ assert.equal(viable.codexUsable, true);
 assert.equal(viable.codexBlockReason, "");
 const current = { ...viable, id: "current", accountId: "acct-current" };
 const free = { ...viable, id: "free", planType: "free", accountId: "acct-free" };
-const low = { ...viable, id: "low", accountId: "acct-low", usage: normalizeUsage({ fiveHour: { remainingPercent: 1 } }) };
+const low = { ...viable, id: "low", accountId: "acct-low", usage: normalizeUsage({ refreshed_at: freshUsageAt, fiveHour: { remainingPercent: 1 } }) };
+const staleLow = { ...viable, id: "stale-low", accountId: "acct-stale-low", usage: normalizeUsage({ refreshed_at: staleUsageAt, fiveHour: { remainingPercent: 1 } }) };
 const expiredAtOnly = { ...viable, id: "expired", accountId: "acct-expired", hasRefreshToken: false, expiresAt: new Date(Date.now() - 1000).toISOString() };
 const switchedRt = { ...viable, id: "switched-rt", accountId: "acct-switched", secretUpdatedAt: new Date(Date.now() - 1_200_000).toISOString(), lastSwitchAt: new Date(Date.now() - 900_000).toISOString() };
 const invalidRt = { ...viable, id: "invalid-rt", accountId: "acct-invalid", usage: normalizeUsage({ error: "invalid_grant" }) };
@@ -132,6 +137,9 @@ assert.match(candidateReasons(viable, settings), /PLUS、可用 RT、5H 86%/);
 assert.equal(candidateDecision(current, settings, { currentAccountId: "acct-current" }).blocked, "避开当前账号");
 assert.equal(candidateDecision(free, settings, {}).blocked, "已开启仅付费账号");
 assert.equal(candidateDecision(low, settings, {}).blocked, "5H 剩余 1%");
+assert.equal(usageFresh(staleLow.usage), false);
+assert.equal(candidateDecision(staleLow, settings, {}).eligible, true);
+assert.match(candidateReasons(staleLow, settings), /额度待刷新/);
 assert.equal(accountCodexStatus(expiredAtOnly).codexBlockReason, "at_unsupported");
 assert.equal(candidateDecision(expiredAtOnly, settings, {}).blocked, "AT 账号当前不支持 Codex 使用");
 assert.equal(candidateDecision(expiredAtOnly, experimentalSettings, {}).blocked, "Token 已过期且无 RT");
@@ -149,6 +157,10 @@ const diagnostic = candidateDiagnostic(candidateDecision(low, settings, {}));
 assert.equal(diagnostic.fiveHour, 1);
 assert.equal(diagnostic.blocked, "5H 剩余 1%");
 assert.equal(diagnostic.credentialKind, "rt");
+const staleDiagnostic = candidateDiagnostic(candidateDecision(staleLow, settings, {}));
+assert.equal(staleDiagnostic.usageFresh, false);
+assert.equal(staleDiagnostic.fiveHour, 1);
+assert.equal(staleDiagnostic.blocked, "");
 
 assert.throws(
   () => assertSwitchableSession(normalizeSession({ tokens: { access_token: expiredToken } })),

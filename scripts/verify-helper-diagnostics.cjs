@@ -13,6 +13,9 @@ assert.match(helperSource, /EnsureTrayIconHeartbeat[\s\S]*EnsureTrayIcon\("æ‰˜ç›
 assert.match(helperSource, /protected override void WndProc\(ref Message m\)/);
 assert.match(helperSource, /RecoverRichTextState\(ex\)/);
 assert.match(helperSource, /RedactDiagnosticText/);
+assert.match(helperSource, /AutoSwitchFailureBackoffSeconds/);
+assert.match(helperSource, /AutoSwitchFailureBackoffActive/);
+assert.match(helperSource, /ArmAutoSwitchFailureBackoff/);
 assert.ok(helperSource.includes("\\\\bAuthorization\\\\s*:\\\\s*Bearer"));
 assert.match(helperSource, /cdh_\[REDACTED\]/);
 

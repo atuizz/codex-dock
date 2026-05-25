@@ -102,6 +102,7 @@ class FakeStatement {
         encrypted_auth_json: secret.encrypted_auth_json,
         secret_updated_at: secret.updated_at,
         usage_json: usage?.usage_json || null,
+        usage_created_at: usage?.created_at || "",
       };
     }
     throw new Error(`Unhandled first SQL: ${sql}`);
@@ -125,6 +126,7 @@ class FakeStatement {
               ...account,
               secret_updated_at: secret?.updated_at || "",
               usage_json: usage?.usage_json || null,
+              usage_created_at: usage?.created_at || "",
             };
           }),
       };

@@ -46,7 +46,7 @@ http://127.0.0.1:18766/
 
 Dock Helper 不托管账号管理页，`/console/` 会返回 404。关闭窗口不会退出，只会驻留系统托盘；托盘菜单可以显示窗口、打开 Codex Dock、重启服务或退出。
 
-Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Helper 0.4.2 起会无论窗口是否可见都低频重新注册托盘图标，并提供本地托盘修复接口，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。控制台会显示 Helper 版本并提示低于最低支持版本的设备升级。
+Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Helper 0.4.2 起会无论窗口是否可见都低频重新注册托盘图标，并提供本地托盘修复接口，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。控制台会显示 Helper 版本并提示低于最低支持版本的设备升级，Helper 页会展示最新版、构建日期、下载入口和 SHA-256 校验值。
 
 ## 额度刷新与智能切换
 
@@ -75,7 +75,7 @@ npm --prefix cloud-worker ci
 npm run preflight
 ```
 
-`preflight` 会把 Helper 验证构建输出到 `artifacts/build/CodexDockHelper`，避免本机正在运行的 `dist\CodexDockHelper\CodexDockHelper.exe` 锁住发布包时导致验证失败。正式更新发布包仍使用 `npm run helper:build` 或 `.\native-helper\build-helper.ps1`。
+`preflight` 会把 Helper 验证构建输出到 `artifacts/build/CodexDockHelper`，避免本机正在运行的 `dist\CodexDockHelper\CodexDockHelper.exe` 锁住发布包时导致验证失败。正式更新发布包仍使用 `npm run helper:build` 或 `.\native-helper\build-helper.ps1`。静态资源构建会把发布包复制到 `downloads/CodexDockHelper.exe`，并在 `asset-manifest.json` 写入 Helper 版本、构建日期、大小和 SHA-256。
 
 只跑 Worker/UI/静态资源验证时：
 

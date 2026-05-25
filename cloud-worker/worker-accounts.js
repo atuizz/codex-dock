@@ -57,6 +57,40 @@ export function bestPlan(...values) {
   return best;
 }
 
+export const USAGE_STALE_MS = 30 * 60 * 1000;
+
+function parseUsageTimestamp(value) {
+  if (value === null || value === undefined || value === "") return NaN;
+  if (typeof value === "number") {
+    return value > 10_000_000_000 ? value : value * 1000;
+  }
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return numeric > 10_000_000_000 ? numeric : numeric * 1000;
+  }
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function usageTimestampIso(value) {
+  const timestamp = parseUsageTimestamp(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : "";
+}
+
+export function usageTimestampMs(usage) {
+  if (!usage || typeof usage !== "object") return NaN;
+  const refreshed = parseUsageTimestamp(usage.refreshed_at ?? usage.refreshedAt);
+  if (Number.isFinite(refreshed)) return refreshed;
+  return parseUsageTimestamp(usage.fetched_at ?? usage.fetchedAt);
+}
+
+export function usageFresh(usage, baseMs = Date.now(), maxAgeMs = USAGE_STALE_MS) {
+  const timestamp = usageTimestampMs(usage);
+  if (!Number.isFinite(timestamp)) return false;
+  if (timestamp - baseMs > 5 * 60 * 1000) return false;
+  return baseMs - timestamp <= maxAgeMs;
+}
+
 export function usageRemaining(window) {
   if (!window || typeof window !== "object") return null;
   const direct = Number(window.remaining_percent ?? window.remainingPercent);
@@ -193,7 +227,7 @@ export function normalizeUsage(raw, fallbackPlan = "") {
   }
   return {
     fetched_at: raw.fetched_at ?? raw.fetchedAt ?? null,
-    refreshed_at: raw.refreshed_at || raw.refreshedAt || nowIso(),
+    refreshed_at: raw.refreshed_at || raw.refreshedAt || usageTimestampIso(raw.fetched_at ?? raw.fetchedAt) || "",
     plan_type: bestPlan(raw.plan_type, raw.planType, fallbackPlan),
     five_hour: raw.five_hour || raw.fiveHour || raw.short_window || raw.shortWindow || null,
     one_week: raw.one_week || raw.oneWeek || raw.long_window || raw.longWindow || null,
@@ -205,7 +239,16 @@ export function normalizeUsage(raw, fallbackPlan = "") {
 }
 
 export function accountSummary(row, usage) {
-  const planType = bestPlan(row.plan_type, usage?.plan_type, usage?.planType);
+  const usageSummary = usage && typeof usage === "object" ? { ...usage } : null;
+  if (usageSummary
+    && !usageSummary.refreshed_at
+    && !usageSummary.refreshedAt
+    && !usageSummary.fetched_at
+    && !usageSummary.fetchedAt
+    && row.usage_created_at) {
+    usageSummary.refreshed_at = row.usage_created_at;
+  }
+  const planType = bestPlan(row.plan_type, usageSummary?.plan_type, usageSummary?.planType);
   const summary = {
     id: row.id,
     name: row.name,
@@ -222,7 +265,7 @@ export function accountSummary(row, usage) {
     updatedAt: row.updated_at,
     secretUpdatedAt: row.secret_updated_at || "",
     lastSwitchAt: row.last_switch_at || "",
-    usage: usage || null,
+    usage: usageSummary,
   };
   const credential = accountCodexStatus(summary);
   summary.credentialKind = credential.credentialKind;
@@ -310,6 +353,7 @@ export function candidateScore(account, settings, body) {
 export function candidateDecision(account, settings, body) {
   const plan = canonicalPlan(account.planType);
   const usage = normalizeUsage(account.usage, plan);
+  const freshUsage = usageFresh(usage);
   const blocked = (score, reason) => ({ account, score, eligible: false, blocked: reason });
   if (isHardAccountFailure(usage)) return blocked(-100000, "账号不可用或已失效");
   const credential = accountCodexStatus(account, {
@@ -321,8 +365,8 @@ export function candidateDecision(account, settings, body) {
   if (accountTokenExpired(account) && !hasUsableRefresh(account)) return blocked(-78000, "Token 已过期且无 RT");
   const five = usageRemaining(usage.five_hour);
   const week = usageRemaining(usage.one_week);
-  if (settings.avoidLow5h && Number.isFinite(five) && five <= settings.fiveHourThreshold) return blocked(-76000, `5H 剩余 ${five}%`);
-  if (settings.avoidLow7d && Number.isFinite(week) && week <= settings.oneWeekThreshold) return blocked(-76000, `7D 剩余 ${week}%`);
+  if (freshUsage && settings.avoidLow5h && Number.isFinite(five) && five <= settings.fiveHourThreshold) return blocked(-76000, `5H 剩余 ${five}%`);
+  if (freshUsage && settings.avoidLow7d && Number.isFinite(week) && week <= settings.oneWeekThreshold) return blocked(-76000, `7D 剩余 ${week}%`);
   const cooldown = Number(settings.cooldownMinutes || 0);
   if (cooldown && account.lastSwitchAt) {
     const last = new Date(account.lastSwitchAt).getTime();
@@ -331,9 +375,10 @@ export function candidateDecision(account, settings, body) {
   const priorityBoost = account.priority === "primary" ? 16 : account.priority === "reserve" ? -16 : 0;
   const rtBoost = settings.preferRt && hasUsableRefresh(account) ? 18 : 0;
   const paidBoost = Math.max(0, planRank(plan) - 1) * 12;
-  const fiveScore = Number.isFinite(five) ? five * 0.9 : 38;
-  const weekScore = Number.isFinite(week) ? week * 0.35 : 15;
-  const score = 20 + paidBoost + rtBoost + priorityBoost + fiveScore + weekScore;
+  const fiveScore = freshUsage && Number.isFinite(five) ? five * 0.9 : 38;
+  const weekScore = freshUsage && Number.isFinite(week) ? week * 0.35 : 15;
+  const stalePenalty = freshUsage ? 0 : -6;
+  const score = 20 + paidBoost + rtBoost + priorityBoost + fiveScore + weekScore + stalePenalty;
   return { account, score, eligible: true, blocked: "", reason: candidateReasons(account, settings) };
 }
 
@@ -355,6 +400,8 @@ export function candidateDiagnostic(decision) {
     codexBlockReason: account.codexBlockReason || accountCodexStatus(account).codexBlockReason,
     secretUpdatedAt: account.secretUpdatedAt || "",
     lastSwitchAt: account.lastSwitchAt || "",
+    usageFresh: usageFresh(usage),
+    usageRefreshedAt: usage.refreshed_at || "",
     fiveHour: usageRemaining(usage.five_hour),
     oneWeek: usageRemaining(usage.one_week),
     error: usage.error || "",
@@ -378,15 +425,21 @@ export function candidateReasons(account, settings) {
   reasons.push(hasUsableRefresh(account) ? "可用 RT" : "AT 实验");
   const five = usageRemaining(usage.five_hour);
   const week = usageRemaining(usage.one_week);
-  if (Number.isFinite(five)) reasons.push(`5H ${five}%`);
-  if (Number.isFinite(week)) reasons.push(`7D ${week}%`);
+  if (usageFresh(usage)) {
+    if (Number.isFinite(five)) reasons.push(`5H ${five}%`);
+    if (Number.isFinite(week)) reasons.push(`7D ${week}%`);
+  } else if (Number.isFinite(five) || Number.isFinite(week) || usage.refreshed_at || usage.fetched_at) {
+    reasons.push("额度待刷新");
+  } else {
+    reasons.push("未刷新额度");
+  }
   if (settings.avoidCurrent) reasons.push("避开当前账号");
   return reasons.join("、");
 }
 
 export async function switchPayloadForAccount(env, user, accountId, options = {}) {
   const secret = await env.DB.prepare(
-    `SELECT a.*, s.encrypted_auth_json, s.updated_at AS secret_updated_at, us.usage_json
+    `SELECT a.*, s.encrypted_auth_json, s.updated_at AS secret_updated_at, us.usage_json, us.created_at AS usage_created_at
      FROM account_secrets s
      JOIN accounts a ON a.id = s.account_id AND a.user_id = s.user_id
      LEFT JOIN usage_snapshots us ON us.id = (
@@ -505,7 +558,7 @@ export async function findCurrentAccount(env, user, body) {
 
 export async function listAccounts(env, user) {
   const rows = await env.DB.prepare(
-    `SELECT a.*, us.usage_json, s.updated_at AS secret_updated_at
+    `SELECT a.*, us.usage_json, us.created_at AS usage_created_at, s.updated_at AS secret_updated_at
      FROM accounts a
      LEFT JOIN account_secrets s ON s.account_id = a.id AND s.user_id = a.user_id
      LEFT JOIN usage_snapshots us ON us.id = (

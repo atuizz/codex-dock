@@ -13,6 +13,9 @@ const oauthRedirectUri = "http://localhost:1455/auth/callback";
 const oauthPkceStorage = "codex-dock-oauth-pkce-v1";
 const oauthPkceHistoryStorage = "codex-dock-oauth-pkce-history-v1";
 const oauthFlowDurationMs = 3 * 60 * 1000;
+const usageFreshWindowMs = 30 * 60 * 1000;
+const backgroundUsageRefreshIntervalMs = 5 * 60 * 1000;
+const backgroundUsageRefreshBatchSize = 2;
 const { auditTitle, auditDescription } = window.CodexAuditCore;
 const {
   escapeHtml,
@@ -160,6 +163,7 @@ const state = {
   currentAuthChecking: false,
   autoImportingLocalAuth: false,
   refreshingUsage: false,
+  backgroundUsageRefreshRunning: false,
   pendingImportItems: [],
   commandFiles: [],
   importMode: "oauth",
@@ -1406,6 +1410,44 @@ function canRefreshAccountUsage(account) {
   return state.helperReady || cloudAvailable;
 }
 
+function parseUsageTimestampMs(value) {
+  if (value === null || value === undefined || value === "") return NaN;
+  if (typeof value === "number") return value > 10_000_000_000 ? value : value * 1000;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric > 10_000_000_000 ? numeric : numeric * 1000;
+  const parsed = Date.parse(String(value));
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function usageTimestampMs(usage = {}) {
+  const refreshed = parseUsageTimestampMs(usage.refreshed_at ?? usage.refreshedAt);
+  if (Number.isFinite(refreshed)) return refreshed;
+  return parseUsageTimestampMs(usage.fetched_at ?? usage.fetchedAt);
+}
+
+function usageFresh(usage = {}, maxAgeMs = usageFreshWindowMs) {
+  const timestamp = usageTimestampMs(usage);
+  if (!Number.isFinite(timestamp)) return false;
+  const now = Date.now();
+  if (timestamp - now > 5 * 60 * 1000) return false;
+  return now - timestamp <= maxAgeMs;
+}
+
+function accountUsage(account) {
+  return normalizeUsage(account?.usage, accountPlan(account));
+}
+
+function accountUsageFresh(account, maxAgeMs = usageFreshWindowMs) {
+  return usageFresh(accountUsage(account), maxAgeMs);
+}
+
+function accountUsageNeedsRefresh(account, maxAgeMs = usageFreshWindowMs) {
+  if (!canUseAccount(account) || !canRefreshAccountUsage(account)) return false;
+  const usage = accountUsage(account);
+  if (usage.status === "刷新中") return false;
+  return !usageFresh(usage, maxAgeMs);
+}
+
 function readMigratedLocalStorage(currentKey, previousKey) {
   const current = localStorage.getItem(currentKey);
   if (current) return current;
@@ -1540,7 +1582,8 @@ function tokenState(account) {
 }
 
 function usagePenalty(account) {
-  const usage = normalizeUsage(account?.usage, accountPlan(account));
+  const usage = accountUsage(account);
+  if (!usageFresh(usage)) return 0;
   const fiveHourUsed = usage.five_hour?.used_percent;
   const oneWeekUsed = usage.one_week?.used_percent;
   let penalty = 0;
@@ -1554,9 +1597,10 @@ function accountScore(account) {
   if (!codexUsable(account, settings)) return -9999;
   if (settings.paidOnly && !isPaidPlan(account)) return -9000;
   if (settings.avoidCurrent && isCurrentAccount(account)) return -8000;
-  const usage = normalizeUsage(account?.usage, accountPlan(account));
-  if (settings.avoidLow5h && Number.isFinite(usage.five_hour?.remaining_percent) && usage.five_hour.remaining_percent <= 30) return -7000;
-  if (settings.avoidLow7d && Number.isFinite(usage.one_week?.remaining_percent) && usage.one_week.remaining_percent <= 30) return -7000;
+  const usage = accountUsage(account);
+  const freshUsage = usageFresh(usage);
+  if (freshUsage && settings.avoidLow5h && Number.isFinite(usage.five_hour?.remaining_percent) && usage.five_hour.remaining_percent <= 30) return -7000;
+  if (freshUsage && settings.avoidLow7d && Number.isFinite(usage.one_week?.remaining_percent) && usage.one_week.remaining_percent <= 30) return -7000;
   const cooldown = Number(settings.cooldownMinutes || 0);
   if (cooldown && account.lastSwitchAt && Date.now() - new Date(account.lastSwitchAt).getTime() < cooldown * 60 * 1000) return -6500;
   const priorityBoost = account.priority === "primary" ? 12 : account.priority === "reserve" ? -12 : 0;
@@ -1570,12 +1614,16 @@ function bestAccount() {
 }
 
 function smartSwitchReasons(account) {
-  const usage = normalizeUsage(account?.usage, accountPlan(account));
+  const usage = accountUsage(account);
   const reasons = [];
   if (isPaidPlan(account)) reasons.push(planLabel(accountPlan(account)));
   reasons.push(hasUsableRefreshToken(account) ? "可用 RT" : "AT 实验");
-  if (Number.isFinite(usage.five_hour?.remaining_percent)) reasons.push(`5H ${usage.five_hour.remaining_percent}%`);
-  if (Number.isFinite(usage.one_week?.remaining_percent)) reasons.push(`7D ${usage.one_week.remaining_percent}%`);
+  if (usageFresh(usage)) {
+    if (Number.isFinite(usage.five_hour?.remaining_percent)) reasons.push(`5H ${usage.five_hour.remaining_percent}%`);
+    if (Number.isFinite(usage.one_week?.remaining_percent)) reasons.push(`7D ${usage.one_week.remaining_percent}%`);
+  } else if (Number.isFinite(usage.five_hour?.remaining_percent) || Number.isFinite(usage.one_week?.remaining_percent) || usage.refreshed_at) {
+    reasons.push("额度待刷新");
+  }
   if (account.priority === "primary") reasons.push("优先使用");
   if (!account.lastSwitchAt) reasons.push("最近未切换");
   return reasons.join("、");
@@ -1590,7 +1638,8 @@ function isPaidPlan(account) {
 }
 
 function accountMinRemaining(account) {
-  const usage = normalizeUsage(account?.usage, accountPlan(account));
+  const usage = accountUsage(account);
+  if (!usageFresh(usage)) return -1;
   const values = [usage.five_hour?.remaining_percent, usage.one_week?.remaining_percent].filter(Number.isFinite);
   return values.length ? Math.min(...values) : -1;
 }
@@ -1601,7 +1650,8 @@ function isExpiredWithoutRt(account) {
 }
 
 function accountLowQuota(account) {
-  const usage = normalizeUsage(account?.usage, accountPlan(account));
+  const usage = accountUsage(account);
+  if (!usageFresh(usage)) return false;
   return Boolean(
     Number.isFinite(usage.five_hour?.remaining_percent) && usage.five_hour.remaining_percent <= 30
     || Number.isFinite(usage.one_week?.remaining_percent) && usage.one_week.remaining_percent <= 30
@@ -1634,9 +1684,9 @@ function tokenFilterValue(account) {
 }
 
 function usageFilterValue(account) {
-  const usage = normalizeUsage(account?.usage, accountPlan(account));
+  const usage = accountUsage(account);
   if (usageIssue(account)) return "failed";
-  if (!usage?.refreshed_at) return "unrefreshed";
+  if (!usage?.refreshed_at || !usageFresh(usage)) return "unrefreshed";
   if (Number.isFinite(usage.five_hour?.remaining_percent) && usage.five_hour.remaining_percent <= 30) return "low5h";
   if (Number.isFinite(usage.one_week?.remaining_percent) && usage.one_week.remaining_percent <= 30) return "low7d";
   return "ready";
@@ -2809,6 +2859,26 @@ async function refreshAllUsage() {
     return;
   }
   await refreshAccountsInBatches(accounts, "刷新额度");
+}
+
+async function refreshStaleUsageInBackground() {
+  if (state.refreshingUsage || state.backgroundUsageRefreshRunning) return;
+  if (document.hidden) return;
+  const accounts = state.accounts
+    .filter((account) => accountUsageNeedsRefresh(account))
+    .slice(0, backgroundUsageRefreshBatchSize);
+  if (!accounts.length) return;
+  state.backgroundUsageRefreshRunning = true;
+  try {
+    const interval = Math.max(1000, Number(state.usageRefreshSettings.usageRefreshIntervalMs || 1500));
+    for (let index = 0; index < accounts.length; index++) {
+      if (state.refreshingUsage) break;
+      await refreshAccountUsage(accounts[index].id, { silent: true, batch: true, background: true });
+      if (index + 1 < accounts.length) await wait(interval);
+    }
+  } finally {
+    state.backgroundUsageRefreshRunning = false;
+  }
 }
 
 async function smartSwitchBestAccount() {
@@ -4020,6 +4090,8 @@ function init() {
   loadHelperRelease();
   checkHelper();
   window.setInterval(refreshHelperRuntimeStatus, 3000);
+  window.setInterval(refreshStaleUsageInBackground, backgroundUsageRefreshIntervalMs);
+  window.setTimeout(refreshStaleUsageInBackground, 10000);
   loadMe();
 }
 

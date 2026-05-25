@@ -232,7 +232,7 @@ export async function adminUserSummary(env, targetUserId) {
 
 export async function adminUserAccounts(env, targetUserId) {
   const rows = await env.DB.prepare(
-    `SELECT a.*, us.usage_json
+    `SELECT a.*, us.usage_json, us.created_at AS usage_created_at
      FROM accounts a
      LEFT JOIN usage_snapshots us ON us.id = (
        SELECT id FROM usage_snapshots

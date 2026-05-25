@@ -66,6 +66,7 @@ namespace CodexPlusLocalHelper
         private const int HelperUiLogLineLimit = 400;
         private const int HelperUiLogMaxCharacters = 160000;
         private const int AutoSwitchRepeatedLogSeconds = 300;
+        private const int AutoSwitchFailureBackoffSeconds = 180;
         private const int TrayWatchdogIntervalMs = 30000;
         private static readonly object HelperLogFileLock = new object();
         private int _port = 18766;
@@ -120,6 +121,12 @@ namespace CodexPlusLocalHelper
         private DateTime _lastAutoSwitchCheckAt = DateTime.MinValue;
         private string _lastAutoSwitchReason = "";
         private string _lastAutoSwitchResult = "";
+        private string _lastAutoSwitchStage = "";
+        private string _lastAutoSwitchStageLabel = "";
+        private string _lastAutoSwitchFailureStage = "";
+        private string _lastAutoSwitchFailureDetail = "";
+        private DateTime _autoSwitchFailurePauseUntilUtc = DateTime.MinValue;
+        private string _autoSwitchFailurePauseKey = "";
         private string _lastAutoSwitchLogKey = "";
         private DateTime _lastAutoSwitchLogAt = DateTime.MinValue;
         private string _lastAutoSwitchAuditKey = "";
@@ -2288,6 +2295,11 @@ namespace CodexPlusLocalHelper
                 + "\"last_switch_label\":\"" + JsonEscape(config.LastSwitchLabel) + "\","
                 + "\"last_reason\":\"" + JsonEscape(_lastAutoSwitchReason) + "\","
                 + "\"last_result\":\"" + JsonEscape(_lastAutoSwitchResult) + "\","
+                + "\"last_stage\":\"" + JsonEscape(_lastAutoSwitchStage) + "\","
+                + "\"last_stage_label\":\"" + JsonEscape(_lastAutoSwitchStageLabel) + "\","
+                + "\"last_failure_stage\":\"" + JsonEscape(_lastAutoSwitchFailureStage) + "\","
+                + "\"last_failure_detail\":\"" + JsonEscape(_lastAutoSwitchFailureDetail) + "\","
+                + "\"failure_backoff_until\":\"" + JsonEscape(_autoSwitchFailurePauseUntilUtc == DateTime.MinValue ? "" : _autoSwitchFailurePauseUntilUtc.ToString("o")) + "\","
                 + "\"token_expires_at\":\"" + JsonEscape(config.DeviceTokenExpiresAt) + "\","
                 + "\"cloud_last_sync\":\"" + JsonEscape(config.CloudLastSyncAt) + "\","
                 + "\"only_when_idle\":" + (config.OnlyWhenIdle ? "true" : "false") + ","
@@ -3561,6 +3573,7 @@ namespace CodexPlusLocalHelper
             var authPath = CurrentAuthPath();
             if (!File.Exists(authPath))
             {
+                SetAutoSwitchStage("missing-auth", "缺少 auth");
                 SetAutoSwitchResult("未找到 auth.json", "missing-auth");
                 return;
             }
@@ -3623,26 +3636,39 @@ namespace CodexPlusLocalHelper
             if (string.IsNullOrEmpty(trigger))
             {
                 _lastAutoSwitchReason = "";
+                ClearAutoSwitchFailureBackoff();
+                SetAutoSwitchStage("normal", "检查正常");
                 SetAutoSwitchResult(string.IsNullOrEmpty(clearedRuntimeTriggerReason) ? "检查正常" : "检查正常：" + clearedRuntimeTriggerReason,
                     string.IsNullOrEmpty(clearedRuntimeTriggerReason) ? "normal" : "normal:runtime-trigger-cleared:" + ShortText(clearedRuntimeTriggerReason, 80));
                 return;
             }
             _lastAutoSwitchReason = trigger;
             var triggerLabel = string.IsNullOrEmpty(triggerSource) ? trigger : triggerSource + "：" + trigger;
+            var failureBackoffKey = triggerType + ":" + triggerSource + ":" + trigger;
+            int failureBackoffSeconds;
+            if (AutoSwitchFailureBackoffActive(failureBackoffKey, out failureBackoffSeconds))
+            {
+                SetAutoSwitchStage("failure-backoff", "失败退避");
+                SetAutoSwitchResult("已触发但正在失败退避：" + triggerLabel + "，约 " + failureBackoffSeconds + " 秒后重试", "failure-backoff:" + failureBackoffKey);
+                return;
+            }
             if ((DateTime.UtcNow - _lastAutoSwitchAt).TotalSeconds < config.GlobalCooldownSeconds)
             {
+                SetAutoSwitchStage("cooldown", "切换冷却");
                 SetAutoSwitchResult("已触发但处于冷却：" + triggerLabel, "cooldown:" + triggerSource + ":" + trigger);
                 return;
             }
             string idleReason;
             if (!IsSafeToAutoSwitch(config, triggerType, out idleReason))
             {
+                SetAutoSwitchStage("waiting-boundary", "保护当前任务");
                 SetAutoSwitchResult("额度已触发，正在保护当前任务：" + idleReason + "；触发源 " + triggerLabel, "waiting-boundary:" + triggerType + ":" + trigger);
                 TryPostHelperAudit(config, "deferred-active-turn", triggerLabel, idleReason);
                 return;
             }
 
             var boundaryStatus = CurrentCodexStatus();
+            SetAutoSwitchStage("boundary-confirmed", "安全边界");
             SetAutoSwitchResult("任务已结束，正在安全切换：" + triggerLabel, "boundary-confirmed:" + triggerType + ":" + trigger);
             TryPostHelperAudit(config, "boundary-confirmed", triggerLabel, boundaryStatus.Detail);
             var forceCloudTrigger = IsHardAutoSwitchTrigger(triggerType);
@@ -3670,14 +3696,17 @@ namespace CodexPlusLocalHelper
                 var responseDetail = string.IsNullOrEmpty(responseReason) ? cloudSummary : responseReason + (string.IsNullOrEmpty(cloudSummary) ? "" : "；" + cloudSummary);
                 if (IsCloudTriggerRejected(responseReason))
                 {
+                    ArmAutoSwitchFailureBackoff(failureBackoffKey, "cloud-rejected", responseDetail);
                     SetAutoSwitchResult("云端未确认切换条件：" + triggerLabel + (string.IsNullOrEmpty(responseDetail) ? "" : "（" + responseDetail + "）"), "not-triggered:" + triggerSource + ":" + trigger);
                 }
                 else if (IsCloudNoCandidate(responseReason))
                 {
+                    ArmAutoSwitchFailureBackoff(failureBackoffKey, "no-candidate", responseDetail);
                     SetAutoSwitchResult("已触发但无可用候选账号：" + triggerLabel + (string.IsNullOrEmpty(responseDetail) ? "" : "（" + responseDetail + "）"), "no-candidate:" + triggerSource + ":" + trigger + ":" + ShortText(responseDetail, 120));
                 }
                 else
                 {
+                    ArmAutoSwitchFailureBackoff(failureBackoffKey, "not-switched", responseDetail);
                     SetAutoSwitchResult("已触发但未切换：" + triggerLabel + (string.IsNullOrEmpty(responseDetail) ? "" : "（" + responseDetail + "）"), "not-switched:" + triggerSource + ":" + trigger + ":" + ShortText(responseDetail, 120));
                 }
                 return;
@@ -3692,10 +3721,13 @@ namespace CodexPlusLocalHelper
             var switched = RunSwitchJob(nextAuth, true, true);
             if (!switched)
             {
+                ArmAutoSwitchFailureBackoff(failureBackoffKey, "switch-failed", targetName);
                 SetAutoSwitchResult("自动切换失败：" + ShortText(targetName, 48), "switch-failed:" + ShortText(targetName, 48));
                 TryPostHelperAudit(config, "switch-failed", trigger, "target=" + targetName, targetCloudId);
                 return;
             }
+            ClearAutoSwitchFailureBackoff();
+            SetAutoSwitchStage("switched", "已切换");
             _lastAutoSwitchAt = DateTime.UtcNow;
             PersistAutoSwitchSuccess(targetName, _lastAutoSwitchAt);
             SetAutoSwitchResult("已自动切换：" + ShortText(targetName, 48), "switched:" + ShortText(targetName, 48));
@@ -4118,6 +4150,51 @@ namespace CodexPlusLocalHelper
             _lastAutoSwitchLogKey = key;
             _lastAutoSwitchLogAt = now;
             Log("自动切换：" + next);
+        }
+
+        private void SetAutoSwitchStage(string stage, string label)
+        {
+            _lastAutoSwitchStage = stage ?? "";
+            _lastAutoSwitchStageLabel = label ?? "";
+        }
+
+        private void SetAutoSwitchFailure(string stage, string detail)
+        {
+            _lastAutoSwitchFailureStage = stage ?? "";
+            _lastAutoSwitchFailureDetail = detail ?? "";
+            SetAutoSwitchStage(_lastAutoSwitchFailureStage, "切换失败");
+        }
+
+        private bool AutoSwitchFailureBackoffActive(string key, out int waitSeconds)
+        {
+            waitSeconds = 0;
+            var now = DateTime.UtcNow;
+            if (string.IsNullOrEmpty(_autoSwitchFailurePauseKey) || _autoSwitchFailurePauseKey != key)
+            {
+                return false;
+            }
+            if (_autoSwitchFailurePauseUntilUtc == DateTime.MinValue || _autoSwitchFailurePauseUntilUtc <= now)
+            {
+                ClearAutoSwitchFailureBackoff();
+                return false;
+            }
+            waitSeconds = Math.Max(1, (int)Math.Ceiling((_autoSwitchFailurePauseUntilUtc - now).TotalSeconds));
+            return true;
+        }
+
+        private void ArmAutoSwitchFailureBackoff(string key, string stage, string detail)
+        {
+            _autoSwitchFailurePauseKey = key ?? "";
+            _autoSwitchFailurePauseUntilUtc = DateTime.UtcNow.AddSeconds(AutoSwitchFailureBackoffSeconds);
+            SetAutoSwitchFailure(stage, detail);
+        }
+
+        private void ClearAutoSwitchFailureBackoff()
+        {
+            _autoSwitchFailurePauseKey = "";
+            _autoSwitchFailurePauseUntilUtc = DateTime.MinValue;
+            _lastAutoSwitchFailureStage = "";
+            _lastAutoSwitchFailureDetail = "";
         }
 
         private void ShowTrayTip(string title, string text)
