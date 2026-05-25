@@ -184,7 +184,7 @@
               <div class="bulk-bar" id="bulkBar">
                 <span id="bulkCount">未选择账号</span>
                 <button id="selectAllFilteredBtn" type="button">选择当前结果</button>
-                <button id="selectInvalidBtn" type="button">选择失效账号</button>
+                <button id="selectInvalidBtn" type="button">选择需处理</button>
                 <button id="bulkRefreshBtn" type="button">刷新额度</button>
                 <button id="bulkExportBtn" type="button">导出</button>
                 <select id="bulkPrioritySelect" aria-label="批量设置偏好">
@@ -194,6 +194,7 @@
                   <option value="reserve">尽量少用</option>
                 </select>
                 <button class="subtle-danger" id="bulkDeleteBtn" type="button">删除</button>
+                <small id="bulkCleanupHint" class="bulk-hint"></small>
               </div>
 
               <div class="metrics-grid" id="metricsGrid" hidden></div>
@@ -346,6 +347,23 @@
           <button class="primary" id="mergeSyncBtn" type="button">合并并同步</button>
           <button id="localOnlyBtn" type="button">只使用本地</button>
           <button class="danger" id="cloudOverwriteBtn" type="button">拉取云端覆盖本地</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal" id="cleanupModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="cleanupModal"></div>
+      <section class="cleanup-dialog" role="dialog" aria-modal="true" aria-labelledby="cleanupTitle">
+        <button class="modal-close" type="button" data-close-modal="cleanupModal" aria-label="关闭">×</button>
+        <span class="eyebrow">批量清理</span>
+        <h2 id="cleanupTitle">清理所选账号</h2>
+        <p id="cleanupSummary">删除前会先展示风险摘要。</p>
+        <div class="cleanup-stats" id="cleanupStats"></div>
+        <div id="cleanupRisk"></div>
+        <div class="cleanup-list" id="cleanupList"></div>
+        <div class="cleanup-actions">
+          <button type="button" data-close-modal="cleanupModal">取消</button>
+          <button class="danger" id="cleanupConfirmBtn" type="button">确认清理</button>
         </div>
       </section>
     </div>

@@ -56,4 +56,22 @@ assert.match(summaryHtml, /账号 5 · 会话 2 · 设备 1/);
 assert.match(summaryHtml, /Second &lt;Name&gt;/);
 assert.doesNotMatch(summaryHtml, /hidden@example\.com/);
 
+const cleanup = ui.renderCleanupReview({
+  total: 3,
+  invalid: 2,
+  normal: 1,
+  recoverable: 2,
+  rows: [
+    { title: "Broken <RT>", subtitle: "hidden@example.test", reason: "RT 失效", className: "bad" },
+    { title: "Missing RT", subtitle: "local", reason: "缺 RT", className: "warn" },
+    { title: "Good", subtitle: "usable", reason: "看似可用", className: "neutral" },
+  ],
+});
+assert.match(cleanup.summaryText, /1 个看起来仍可使用/);
+assert.equal(cleanup.confirmText, "仍要删除所选");
+assert.match(cleanup.statsHtml, /可重新导入/);
+assert.match(cleanup.riskHtml, /包含可用账号/);
+assert.match(cleanup.listHtml, /Broken &lt;RT&gt;/);
+assert.doesNotMatch(cleanup.listHtml, /<RT>/);
+
 console.log("dialog-ui verification passed");

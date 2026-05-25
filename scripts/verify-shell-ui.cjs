@@ -43,10 +43,13 @@ const toolbar = ui.toolbarState({
   filtered: [{ id: "a" }, { id: "b" }],
   selectedBulkIds: new Set(["b"]),
   helperReady: true,
+  isInvalidAccount: (account) => account.id === "b",
 });
 assert.equal(toolbar.bulkText, "已选择 1 个账号");
 assert.equal(toolbar.refreshDisabled, false);
 assert.equal(toolbar.exportDisabled, false);
+assert.equal(toolbar.deleteText, "清理不可用");
+assert.match(toolbar.cleanupHint, /需处理账号/);
 
 const metrics = ui.renderMetrics([
   { id: "a", planType: "plus", usage: { refreshed_at: "now" }, warn: false },

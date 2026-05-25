@@ -65,6 +65,50 @@
       `;
     }
 
+    function renderCleanupReview(review = {}) {
+      const total = Number(review.total) || 0;
+      const invalid = Number(review.invalid) || 0;
+      const normal = Number(review.normal) || 0;
+      const recoverable = Number(review.recoverable) || 0;
+      const rows = Array.isArray(review.rows) ? review.rows : [];
+      const summaryText = normal
+        ? `将删除 ${total} 个账号，其中 ${normal} 个看起来仍可使用。请确认这些账号不再需要。`
+        : `将清理 ${invalid} 个不可直接使用的账号。可恢复账号建议后续通过登录导入重新登记。`;
+      const riskTitle = normal ? "包含可用账号" : "清理不可用账号";
+      const riskCopy = normal
+        ? "删除后云端凭据和本地缓存都会移除；若误删，需要重新导入。"
+        : "缺 RT 或 RT 失效的账号可通过 OAuth 重新导入；删除不会影响 OpenAI 账号本身。";
+      const statsHtml = [
+        ["所选账号", total],
+        ["需处理", invalid],
+        ["看似可用", normal],
+        ["可重新导入", recoverable],
+      ].map(([label, value]) => `
+        <div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>
+      `).join("");
+      const listHtml = rows.slice(0, 8).map((row) => `
+        <div class="cleanup-row ${escapeHtml(row.className || "")}">
+          <div>
+            <strong>${escapeHtml(row.title)}</strong>
+            <span>${escapeHtml(row.subtitle || "")}</span>
+          </div>
+          <small>${escapeHtml(row.reason || "待确认")}</small>
+        </div>
+      `).join("") + (rows.length > 8 ? `<div class="cleanup-more">还有 ${escapeHtml(rows.length - 8)} 个账号将在确认后一起处理。</div>` : "");
+      return {
+        summaryText,
+        confirmText: normal ? "仍要删除所选" : "确认清理不可用",
+        statsHtml,
+        riskHtml: `
+          <div class="cleanup-risk ${normal ? "bad" : "warn"}">
+            <strong>${escapeHtml(riskTitle)}</strong>
+            <span>${escapeHtml(riskCopy)}</span>
+          </div>
+        `,
+        listHtml,
+      };
+    }
+
     return Object.freeze({
       renderSyncStats,
       modalState,
@@ -72,6 +116,7 @@
       authModeView,
       isActive,
       renderAdminUserSummary,
+      renderCleanupReview,
     });
   }
 

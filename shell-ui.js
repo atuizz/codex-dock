@@ -44,11 +44,20 @@
       };
     }
 
-    function toolbarState({ filtered = [], selectedBulkIds, helperReady = false, canRefreshUsage } = {}) {
+    function toolbarState({ filtered = [], selectedBulkIds, helperReady = false, canRefreshUsage, isInvalidAccount } = {}) {
       const selected = filtered.filter((account) => selectedSetHas(selectedBulkIds, account.id));
       const refreshAvailable = selected.some((account) => (
         typeof canRefreshUsage === "function" ? canRefreshUsage(account) : helperReady
       ));
+      const invalidSelected = selected.filter((account) => (
+        typeof isInvalidAccount === "function" ? isInvalidAccount(account) : false
+      )).length;
+      const normalSelected = selected.length - invalidSelected;
+      const cleanupHint = selected.length
+        ? (normalSelected
+          ? `包含 ${normalSelected} 个看似可用账号，删除前会二次确认。`
+          : `已选择 ${invalidSelected} 个需处理账号，可清理后通过 OAuth 重新导入。`)
+        : "先选择当前结果或需处理账号，再执行批量操作。";
       return {
         selectedCount: selected.length,
         resultCount: filtered.length,
@@ -58,6 +67,8 @@
         exportDisabled: !selected.length,
         deleteDisabled: !selected.length,
         priorityDisabled: !selected.length,
+        deleteText: selected.length && !normalSelected && invalidSelected ? "清理不可用" : "删除所选",
+        cleanupHint,
       };
     }
 

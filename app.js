@@ -133,6 +133,7 @@ const state = {
   accountSort: "updated",
   accountLayout: "list",
   selectedBulkIds: new Set(),
+  cleanupPendingIds: [],
   smartSwitchSettings: { ...defaultSmartSwitchSettings },
   autoSwitchSettings: { ...defaultAutoSwitchSettings },
   usageRefreshSettings: { ...defaultUsageRefreshSettings },
@@ -843,12 +844,15 @@ function renderToolbarState(filtered = visibleAccounts()) {
     selectedBulkIds: state.selectedBulkIds,
     helperReady: state.helperReady,
     canRefreshUsage: canRefreshAccountUsage,
+    isInvalidAccount,
   });
   $("bulkCount").textContent = view.bulkText;
   $("bulkBar").classList.toggle("has-selection", view.hasSelection);
   $("bulkRefreshBtn").disabled = view.refreshDisabled;
   $("bulkExportBtn").disabled = view.exportDisabled;
   $("bulkDeleteBtn").disabled = view.deleteDisabled;
+  $("bulkDeleteBtn").textContent = view.deleteText;
+  $("bulkCleanupHint").textContent = view.cleanupHint;
   $("bulkPrioritySelect").disabled = view.priorityDisabled;
 }
 
@@ -3204,6 +3208,7 @@ function closeModal(id) {
   const view = dialogUi.modalState(false);
   modal.classList.toggle("open", view.open);
   modal.setAttribute("aria-hidden", view.ariaHidden);
+  if (id === "cleanupModal") state.cleanupPendingIds = [];
 }
 
 function setDrawer(open, options = {}) {
@@ -3413,12 +3418,89 @@ function setBulkSelection(accounts) {
   renderAccounts();
 }
 
-async function bulkDeleteAccounts() {
+function cleanupAccountIssue(account) {
+  const block = codexBlockReason(account);
+  const tokenFilter = tokenFilterValue(account);
+  const issue = usageIssue(account);
+  const usage = normalizeUsage(account?.usage, accountPlan(account));
+  if (isCurrentAccount(account)) {
+    return { reason: "当前使用", className: "warn", recoverable: false };
+  }
+  if (block === "at_unsupported" || (hasAccountSecret(account) && !hasUsableRefreshToken(account) && tokenFilter !== "expired")) {
+    return { reason: "缺 RT，需重新登录导入", className: "warn", recoverable: true };
+  }
+  if (block === "rt_invalid" || tokenFilter === "expired" || refreshTokenInvalidText(usage.error)) {
+    return { reason: "RT/Token 失效", className: "bad", recoverable: true };
+  }
+  if (issue) {
+    return { reason: issue.label, className: issue.className || "warn", recoverable: false };
+  }
+  if (accountLowQuota(account)) {
+    return { reason: "额度低，建议暂不优先使用", className: "warn", recoverable: false };
+  }
+  if (accountCooldownActive(account)) {
+    return { reason: "冷却中，等待后可恢复", className: "neutral", recoverable: false };
+  }
+  if (codexUsable(account) && !state.helperReady) {
+    return { reason: "Helper 不可操作", className: "warn", recoverable: false };
+  }
+  return { reason: "看似可用", className: "neutral", recoverable: false };
+}
+
+function cleanupReview(accounts) {
+  const rows = accounts.map((account) => {
+    const issue = cleanupAccountIssue(account);
+    return {
+      id: account.id,
+      title: account.name || account.email || account.accountId || "未命名账号",
+      subtitle: account.email || shortId(account.accountId || account.id),
+      reason: issue.reason,
+      className: issue.className,
+      recoverable: issue.recoverable,
+      invalid: isInvalidAccount(account),
+    };
+  });
+  return {
+    total: rows.length,
+    invalid: rows.filter((row) => row.invalid).length,
+    normal: rows.filter((row) => !row.invalid).length,
+    recoverable: rows.filter((row) => row.recoverable).length,
+    rows,
+  };
+}
+
+function renderCleanupModal(accounts) {
+  const review = cleanupReview(accounts);
+  const view = dialogUi.renderCleanupReview(review);
+  $("cleanupSummary").textContent = view.summaryText;
+  $("cleanupStats").innerHTML = view.statsHtml;
+  $("cleanupRisk").innerHTML = view.riskHtml;
+  $("cleanupList").innerHTML = view.listHtml;
+  $("cleanupConfirmBtn").textContent = view.confirmText;
+}
+
+function openBulkCleanupModal() {
   const accounts = selectedBulkAccounts();
   if (!accounts.length) return;
-  const invalid = accounts.filter(isInvalidAccount).length;
-  const normal = accounts.length - invalid;
-  if (!confirm(`确认删除 ${accounts.length} 个账号？其中失效 ${invalid} 个，正常 ${normal} 个。`)) return;
+  state.cleanupPendingIds = accounts.map((account) => account.id);
+  renderCleanupModal(accounts);
+  openModal("cleanupModal");
+}
+
+function cleanupPendingAccounts() {
+  const ids = new Set(state.cleanupPendingIds || []);
+  return state.accounts.filter((account) => ids.has(account.id));
+}
+
+async function confirmBulkDeleteAccounts() {
+  const accounts = cleanupPendingAccounts();
+  if (!accounts.length) {
+    closeModal("cleanupModal");
+    return;
+  }
+  const button = $("cleanupConfirmBtn");
+  button.disabled = true;
+  button.textContent = "正在清理...";
   for (const account of accounts) {
     state.localAccounts = state.localAccounts.filter((item) => item.id !== account.localId && item.id !== account.id && accountDedupeKey(item) !== accountDedupeKey(account));
     if (state.user && account.cloudId) {
@@ -3426,10 +3508,13 @@ async function bulkDeleteAccounts() {
     }
   }
   state.selectedBulkIds.clear();
+  state.cleanupPendingIds = [];
   if (state.user) await loadCloudData().catch(() => {});
   saveLocalStore();
+  closeModal("cleanupModal");
   render();
   toast(`已删除 ${accounts.length} 个账号。`);
+  button.disabled = false;
 }
 
 async function bulkRefreshAccounts() {
@@ -3601,7 +3686,8 @@ function bindEvents() {
   $("selectInvalidBtn").addEventListener("click", () => setBulkSelection(visibleAccounts().filter(isInvalidAccount)));
   $("bulkRefreshBtn").addEventListener("click", bulkRefreshAccounts);
   $("bulkExportBtn").addEventListener("click", bulkExportAccounts);
-  $("bulkDeleteBtn").addEventListener("click", bulkDeleteAccounts);
+  $("bulkDeleteBtn").addEventListener("click", openBulkCleanupModal);
+  $("cleanupConfirmBtn").addEventListener("click", confirmBulkDeleteAccounts);
   $("bulkPrioritySelect").addEventListener("change", async (event) => {
     await bulkSetPriority(event.target.value);
     event.target.value = "";

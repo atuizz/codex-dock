@@ -999,6 +999,10 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
 }
 
 .bulk-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
   border-top: 0;
   border-bottom: 1px solid var(--border-soft);
   padding: 6px 0 10px;
@@ -1008,6 +1012,12 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
 
 .bulk-bar.has-selection {
   color: var(--text-primary);
+}
+
+.bulk-hint {
+  flex-basis: 100%;
+  color: var(--text-tertiary);
+  font-size: 11px;
 }
 
 .bulk-bar:not(.has-selection) #bulkRefreshBtn,
@@ -2152,7 +2162,8 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
 .auth-card,
 .sync-dialog,
 .settings-card,
-.account-detail-card {
+.account-detail-card,
+.cleanup-dialog {
   position: relative;
   z-index: 1;
   border: 1px solid var(--border-control);
@@ -2225,6 +2236,131 @@ label span {
 .sync-dialog {
   width: min(480px, 100%);
   padding: 24px;
+}
+
+.cleanup-dialog {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+}
+
+.cleanup-dialog h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 520;
+}
+
+.cleanup-dialog p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.cleanup-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.cleanup-stats div,
+.cleanup-risk,
+.cleanup-row {
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: #fbfbfa;
+}
+
+.cleanup-stats div {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.cleanup-stats span,
+.cleanup-row span,
+.cleanup-row small,
+.cleanup-more {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.cleanup-stats strong {
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.cleanup-risk {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.cleanup-risk.warn {
+  border-color: rgba(155, 100, 0, 0.25);
+  background: #fff9ed;
+}
+
+.cleanup-risk.bad {
+  border-color: rgba(181, 54, 54, 0.25);
+  background: #fff4f2;
+}
+
+.cleanup-risk strong {
+  color: var(--text-primary);
+}
+
+.cleanup-risk span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.cleanup-list {
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.cleanup-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.cleanup-row div,
+.cleanup-row strong,
+.cleanup-row span {
+  min-width: 0;
+}
+
+.cleanup-row strong,
+.cleanup-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cleanup-row.warn small {
+  color: #9b6400;
+}
+
+.cleanup-row.bad small {
+  color: #b53636;
+}
+
+.cleanup-more {
+  padding: 4px 2px;
+}
+
+.cleanup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .progress-card {
@@ -3394,6 +3530,14 @@ label span {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .cleanup-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cleanup-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .primary-actions {
     overflow-x: auto;
     padding-bottom: 2px;
@@ -3631,6 +3775,15 @@ label span {
 
   .health-chip-row {
     grid-template-columns: 1fr;
+  }
+
+  .cleanup-stats,
+  .cleanup-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .cleanup-actions {
+    display: grid;
   }
 
   .account-card-grid {
