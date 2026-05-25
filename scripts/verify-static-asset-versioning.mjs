@@ -24,6 +24,7 @@ const sourceAssets = [
   "panels-ui.js",
   "import-core.js",
   "import-ui.js",
+  "oauth-core.js",
   "app.js",
   "styles.css",
 ];

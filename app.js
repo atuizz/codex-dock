@@ -51,6 +51,10 @@ if (!window.CodexShellUi) {
 if (!window.CodexDialogUi) {
   throw new Error("CodexDialogUi 未加载，请检查 dialog-ui.js。");
 }
+if (!window.CodexOauthCore) {
+  throw new Error("CodexOauthCore 未加载，请检查 oauth-core.js。");
+}
+const oauthCore = window.CodexOauthCore;
 
 const defaultAccountFilters = {
   plan: "all",
@@ -875,46 +879,11 @@ function parseImportTextToPreview() {
 }
 
 function normalizeOauthCallbackValue(raw) {
-  const text = String(raw || "").trim();
-  if (!text) throw new Error("请先粘贴回调链接。");
-  const cleaned = text
-    .replace(/&amp;/g, "&")
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .trim();
-  const compact = cleaned.replace(/\s+/g, "");
-  const sources = [cleaned, compact];
-  for (const source of sources) {
-    const callbackUrl = source.match(/https?:\/\/(?:localhost|127\.0\.0\.1):1455\/auth\/callback[^\s"'<>]*/i)
-      || source.match(/(?:localhost|127\.0\.0\.1):1455\/auth\/callback[^\s"'<>]*/i);
-    if (callbackUrl) {
-      const value = callbackUrl[0].replace(/[),.;，。]+$/g, "");
-      return /^https?:\/\//i.test(value) ? value : `http://${value}`;
-    }
-  }
-  const anyUrl = compact.match(/https?:\/\/[^\s"'<>]+/i);
-  if (anyUrl) return anyUrl[0].replace(/[),.;，。]+$/g, "");
-  const paramMatch = compact.match(/(?:^|[?#&])((?:code|access_token|accessToken|id_token|idToken|refresh_token|refreshToken)=[^"'<>]+)/);
-  if (paramMatch) {
-    const query = paramMatch[1].replace(/^[?#&]/, "");
-    return `${oauthRedirectUri}?${query}`;
-  }
-  const bareParam = compact.match(/\b((?:code|access_token|accessToken|id_token|idToken|refresh_token|refreshToken)=[^"'<>]+)/);
-  if (bareParam) return `${oauthRedirectUri}?${bareParam[1]}`;
-  if (/^(?:localhost|127\.0\.0\.1):1455\/auth\/callback/i.test(compact)) return `http://${compact}`;
-  if (/^https?:\/\//i.test(compact)) return compact;
-  return `${oauthRedirectUri}${compact.startsWith("?") || compact.startsWith("#") ? compact : `?${compact}`}`;
+  return oauthCore.normalizeOauthCallbackValue(raw, oauthRedirectUri);
 }
 
 function callbackParams(raw) {
-  const value = normalizeOauthCallbackValue(raw);
-  const url = new URL(value);
-  const params = new URLSearchParams(url.search);
-  if (url.hash) {
-    const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
-    const hashParams = new URLSearchParams(hash);
-    for (const [key, val] of hashParams.entries()) params.set(key, val);
-  }
-  return params;
+  return oauthCore.callbackParams(raw, oauthRedirectUri);
 }
 
 async function exchangeOauthCode(code, pkce) {
@@ -938,9 +907,13 @@ async function parseOauthCallbackToPreview(rawCallback = null) {
     let idToken = params.get("id_token") || params.get("idToken") || "";
     let refreshToken = params.get("refresh_token") || params.get("refreshToken") || "";
     const code = params.get("code") || "";
+    const returnedState = params.get("state") || "";
+    if (state.oauthFlow.active) {
+      const stateStatus = oauthCore.callbackStateStatus(params, state.oauthFlow.state || state.oauthState || "", oauthRedirectUri);
+      if (!stateStatus.ok) throw new Error(stateStatus.message);
+    }
     let usedOauthCode = false;
     if (!accessToken && code) {
-      const returnedState = params.get("state") || "";
       const pkce = returnedState ? oauthPkce(returnedState) : oauthPkce();
       if (!pkce.verifier) throw new Error("OAuth code 已收到，但找不到对应授权链接的 PKCE 记录。请点“打开授权页面”重新授权，不要复用旧回调。");
       let token;
@@ -948,10 +921,7 @@ async function parseOauthCallbackToPreview(rawCallback = null) {
         if (state.oauthFlow.active) setOauthFlow({ phase: "exchanging" });
         token = await exchangeOauthCode(code, pkce);
       } catch (error) {
-        const detail = String(error.message || "换取 token 失败");
-        const reason = /could not validate|invalid_grant|expired|code|verifier/i.test(detail)
-          ? "授权回调已失效、已被使用，或和当前授权链接不匹配"
-          : detail;
+        const reason = oauthCore.exchangeFailureMessage(error.message);
         throw new Error(`OAuth code 已收到，但换 token 失败：${reason}。请点“打开授权页面”重新授权，并使用刚打开页面返回的回调。`);
       }
       accessToken = token.access_token || token.accessToken || "";
@@ -961,7 +931,7 @@ async function parseOauthCallbackToPreview(rawCallback = null) {
       forgetOauthPkce(returnedState || pkce.state);
     }
     if (!accessToken && !idToken && !refreshToken) {
-      throw new Error(usedOauthCode ? "OAuth code 已收到，但没有换到 token，请重新打开授权页面。" : "回调链接里没有 token 或 code。");
+      throw new Error(oauthCore.emptyCallbackMessage(usedOauthCode));
     }
     if (state.oauthFlow.active && !refreshToken) {
       throw new Error("授权已返回 token，但没有 refresh_token，不能用于 Codex。请重新打开授权页面。");
@@ -1036,6 +1006,25 @@ async function latestOauthCallbackAny() {
   }
 }
 
+function oauthCallbackMatchesActiveFlow(callbackUrl) {
+  if (!state.oauthFlow.active) return true;
+  const expectedState = state.oauthFlow.state || state.oauthState || "";
+  if (!expectedState || !callbackUrl) return true;
+  try {
+    return oauthCore.callbackStateStatus(callbackUrl, expectedState, oauthRedirectUri).ok;
+  } catch {
+    return true;
+  }
+}
+
+function rejectMismatchedOauthCallback() {
+  stopOauthCallbackPolling();
+  setOauthFlow({
+    phase: "error",
+    error: "收到的授权回调不属于当前这次登录。请重新打开授权页面，并只使用刚打开页面返回的回调。",
+  });
+}
+
 function startOauthCallbackPolling() {
   stopOauthCallbackPolling();
   const flow = state.oauthFlow || {};
@@ -1059,6 +1048,10 @@ function startOauthCallbackPolling() {
         const latest = await latestOauthCallbackAny();
         const receivedAt = latest?.receivedAt ? new Date(latest.receivedAt).getTime() : 0;
         if (latest && !latest.pending && latest.url && receivedAt >= startedAt - 3000) {
+          if (!oauthCallbackMatchesActiveFlow(latest.url)) {
+            rejectMismatchedOauthCallback();
+            return;
+          }
           stopOauthCallbackPolling();
           await handleOauthCallbackUrl(latest.url, { autoImport: true });
         }
@@ -1068,6 +1061,10 @@ function startOauthCallbackPolling() {
       if (result.error) {
         setOauthFlow({ phase: "error", error: `OAuth 授权失败：${result.error}` });
         toast(`OAuth 授权失败：${result.error}`);
+        return;
+      }
+      if (!oauthCallbackMatchesActiveFlow(result.url || `?code=${encodeURIComponent(result.code || "")}&state=${encodeURIComponent(result.state || "")}`)) {
+        rejectMismatchedOauthCallback();
         return;
       }
       await handleOauthCallbackUrl(result.url || `?code=${encodeURIComponent(result.code || "")}&state=${encodeURIComponent(result.state || "")}`, { autoImport: true });
@@ -1087,6 +1084,10 @@ async function handleOauthCallbackMessage(event) {
   if (data.type !== "codex-dock-oauth-callback" || !data.url) return;
   if (state.lastOauthCallbackUrl === data.url) return;
   state.lastOauthCallbackUrl = data.url;
+  if (!oauthCallbackMatchesActiveFlow(data.url)) {
+    rejectMismatchedOauthCallback();
+    return;
+  }
   stopOauthCallbackPolling();
   try {
     event.source?.postMessage?.({ type: "codex-dock-oauth-received" }, event.origin);
