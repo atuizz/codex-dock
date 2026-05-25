@@ -159,7 +159,7 @@ const state = {
   refreshingUsage: false,
   pendingImportItems: [],
   commandFiles: [],
-  importMode: "paste",
+  importMode: "oauth",
   importCompleted: false,
   operationProgress: {
     active: false,
@@ -688,15 +688,13 @@ async function beginOauthAuthorization(options = {}) {
 async function handleAuthAcquireAction(action) {
   if (action === "open-import-oauth-login") {
     closeModal("accountDetailModal");
-    setDrawer(true);
-    setImportMode("oauth");
+    setDrawer(true, { mode: "oauth" });
     await beginOauthAuthorization();
     return;
   }
   if (action === "open-import-session" || action === "open-import-oauth" || action === "open-import-file") {
     closeModal("accountDetailModal");
-    setDrawer(true);
-    setImportMode(action === "open-import-file" ? "file" : (action === "open-import-oauth" ? "oauth" : "session"));
+    setDrawer(true, { mode: action === "open-import-file" ? "file" : (action === "open-import-oauth" ? "oauth" : "session") });
     toast(action === "open-import-file" ? "请导入该账号自己的 auth.json。" : (action === "open-import-oauth" ? "已打开 OAuth 导入。" : "已打开 Session 导入。"));
     return;
   }
@@ -773,6 +771,8 @@ function setImportMode(mode) {
   document.querySelectorAll("[data-import-panel]").forEach((panel) => {
     panel.classList.toggle("active", importUi.modeIsActive(mode, panel.dataset.importPanel));
   });
+  const advancedPanel = document.querySelector(".advanced-import-panel");
+  if (advancedPanel) advancedPanel.open = mode !== "oauth";
   if (mode === "oauth") refreshOauthAuthorizeUrl().catch(() => toast("OAuth 授权链接生成失败。"));
 }
 
@@ -1139,9 +1139,8 @@ async function parseCommandFilesToPreview() {
     return;
   }
   await parseImportFilesToPreview(state.commandFiles);
-  setImportMode("file");
   clearCommandFiles();
-  setDrawer(true);
+  setDrawer(true, { mode: "file" });
 }
 
 function openProgress(title, items) {
@@ -3147,13 +3146,13 @@ function closeModal(id) {
   modal.setAttribute("aria-hidden", view.ariaHidden);
 }
 
-function setDrawer(open) {
+function setDrawer(open, options = {}) {
   const view = dialogUi.drawerState(open);
   $("importDrawer").classList.toggle("open", view.open);
   $("importDrawer").setAttribute("aria-hidden", view.ariaHidden);
   if (open) {
+    setImportMode(options.mode || "oauth");
     $("importResult").hidden = true;
-    refreshOauthAuthorizeUrl().catch(() => toast("OAuth 授权链接生成失败。"));
     renderOauthFlow();
   } else {
     cancelOauthFlow({ silent: true });

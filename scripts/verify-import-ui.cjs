@@ -99,7 +99,8 @@ assert.equal(completed.confirmHidden, true);
 assert.equal(completed.finishHidden, false);
 assert.equal(completed.finishPrimary, true);
 assert.equal(completed.clearText, "继续导入");
-assert.match(completed.listHtml, /选择文件或粘贴 JSON/);
+assert.match(completed.listHtml, /打开授权页面/);
+assert.match(completed.listHtml, /高级 JSON \/ 文件导入/);
 
 const busy = ui.renderImportPreview([{ ok: true, status: "新增" }], {
   operationActive: true,

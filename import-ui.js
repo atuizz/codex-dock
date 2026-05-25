@@ -79,7 +79,7 @@
         clearSoft: !importCompleted,
         listHtml: items.length
           ? items.map(renderImportPreviewItem).join("")
-          : '<div class="empty small">选择文件或粘贴 JSON 后，先在这里预览解析结果。</div>',
+          : '<div class="empty small">点击“打开授权页面”登录后，导入结果会自动出现在这里。高级 JSON / 文件导入会先显示预览。</div>',
       };
     }
 

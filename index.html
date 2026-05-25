@@ -480,34 +480,44 @@
           <button class="ghost" id="closeImportBtn" type="button">关闭</button>
         </div>
         <div id="accountForm" class="import-form">
-          <div class="import-source-grid" role="tablist" aria-label="导入方式">
-            <button class="import-source-card active" type="button" data-import-mode="oauth">
+          <div class="import-source-grid primary-import-grid" role="tablist" aria-label="推荐导入方式">
+            <button class="import-source-card primary-source active" type="button" data-import-mode="oauth">
               <span class="source-icon">↻</span>
-              <strong>OAuth 网页登录</strong>
-              <small>Helper 在线时自动接收回调。</small>
-            </button>
-            <button class="import-source-card" type="button" data-import-mode="session">
-              <span class="source-icon">⌁</span>
-              <strong>Session JSON（仅 AT）</strong>
-              <small>只能登记账号，当前不能直接用于 Codex。</small>
-            </button>
-            <button class="import-source-card" type="button" data-import-mode="device">
-              <span class="source-icon">↥</span>
-              <strong>导入当前设备</strong>
-              <small>只导入当前 Codex 账号。</small>
-            </button>
-            <button class="import-source-card" type="button" data-import-mode="file">
-              <span class="source-icon">↓</span>
-              <strong>上传文件</strong>
-              <small>批量导入 auth / CPA / Sub JSON。</small>
+              <strong>登录导入 RT 账号</strong>
+              <small>推荐路径。Helper 在线时自动接收回调、换取 RT 并导入，可直接用于 Codex 切换。</small>
+              <span class="method-tag">推荐</span>
             </button>
           </div>
+          <details class="advanced-import-panel">
+            <summary>
+              <strong>高级导入方式</strong>
+              <span>仅用于登记 AT、导入当前设备或批量文件。</span>
+            </summary>
+            <div class="import-source-grid advanced-source-grid" role="tablist" aria-label="高级导入方式">
+              <button class="import-source-card" type="button" data-import-mode="session">
+                <span class="source-icon">⌁</span>
+                <strong>Session JSON（仅登记）</strong>
+                <small>多数只含 AT。导入后可识别账号，但不能用于 Codex 切换。</small>
+                <span class="method-tag warn">仅登记</span>
+              </button>
+              <button class="import-source-card" type="button" data-import-mode="device">
+                <span class="source-icon">↥</span>
+                <strong>当前设备账号</strong>
+                <small>只导入这台电脑当前 Codex 已登录账号，不用于修复其它账号。</small>
+              </button>
+              <button class="import-source-card" type="button" data-import-mode="file">
+                <span class="source-icon">↓</span>
+                <strong>批量上传文件</strong>
+                <small>高级批量导入 auth / CPA / Sub JSON。</small>
+              </button>
+            </div>
+          </details>
 
           <section class="import-mode-panel active" data-import-panel="oauth">
             <div class="auth-method-panel oauth-panel">
               <div>
-                <strong>OAuth 网页登录</strong>
-                <span>Helper 在线时会自动接收回调、换取 RT 并导入账号。手动链接只作为备用。</span>
+                <strong>登录导入 RT 账号</strong>
+                <span>普通用户只需要点下面的按钮完成网页登录。Helper 在线时会自动接收回调、换取 RT 并导入账号；手动链接只作为备用。</span>
               </div>
               <div class="oauth-primary-action">
                 <button class="primary" id="openOauthAuthBtn" type="button">打开授权页面</button>
@@ -536,7 +546,7 @@
           <section class="import-mode-panel" data-import-panel="session">
             <div class="auth-method-panel">
               <div>
-                <strong>Session JSON（仅 AT）</strong>
+                <strong>Session JSON（仅登记）</strong>
                 <span>ChatGPT Session 页面目前通常只能拿到 AT。导入后可登记账号、识别套餐和邮箱，但缺少 RT，当前不能用于 Codex 切换；要可用请重新登录 Codex 获取 RT。</span>
               </div>
               <div class="auth-acquire-actions">
