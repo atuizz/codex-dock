@@ -59,6 +59,221 @@
       return `${text.slice(0, 12)}...${text.slice(-6)}`;
     }
 
+    function hasAnyText(text, patterns = []) {
+      return patterns.some((pattern) => pattern.test(text));
+    }
+
+    function autoSwitchStage({
+      helperReady = false,
+      helper = {},
+      codex = {},
+      helperAuthorized = false,
+      userPresent = false,
+      minimumHelperVersion = "0.4.2",
+    } = {}) {
+      const autoSwitch = helperAutoSwitch(helper);
+      const version = helper.version || "";
+      const outdated = helperReady && (!version || compareVersion(version, minimumHelperVersion) < 0);
+      const pendingReason = meaningfulText(codex.pending_switch_reason);
+      const lastResult = meaningfulText(autoSwitch.last_result || autoSwitch.lastResult);
+      const lastReason = meaningfulText(autoSwitch.last_reason || autoSwitch.lastReason);
+      const resultText = meaningfulText([lastReason, lastResult].filter(Boolean).join("；"));
+      const resultProbe = resultText.toLowerCase();
+      const sourceLabel = helperReady ? codexStatusSourceLabel(codex) : "未连接";
+      const taskEvent = meaningfulText(codex.last_task_event) || meaningfulText(codex.detail) || meaningfulText(codex.label);
+      const evidence = helperReady
+        ? `${codex.safe_to_switch ? "安全门已打开" : codex.safe_to_switch === false ? "安全门关闭" : "安全门确认中"} · ${sourceLabel}${taskEvent ? ` · ${taskEvent}` : ""}`
+        : "Helper 未连接，暂无本机边界证据";
+      const trigger = pendingReason || lastReason || "暂无触发";
+      const lastSeen = autoSwitch.last_check || autoSwitch.cloud_last_sync || autoSwitch.last_switch || "";
+      const base = {
+        className: "warn",
+        key: "monitoring",
+        eyebrow: "自动切换阶段",
+        title: "持续监控",
+        summary: "Helper 会按阈值观察额度和任务状态，只有安全边界确认后才换号。",
+        trigger,
+        evidence,
+        result: resultText || "暂无执行结果",
+        next: "保持 Helper 在线；触发后会先保护当前任务。",
+        lastSeen,
+      };
+
+      if (!helperReady) {
+        return {
+          ...base,
+          className: "bad",
+          key: "offline",
+          title: "等待 Helper 在线",
+          summary: "本机 Helper 未连接，无法读取任务边界或执行自动切换。",
+          trigger: "未连接",
+          result: "本机状态不可用",
+          next: "启动或安装最新版 Helper，再刷新状态。",
+        };
+      }
+      if (outdated) {
+        return {
+          ...base,
+          className: "warn",
+          key: "upgrade_required",
+          title: "等待 Helper 升级",
+          summary: `当前 Helper 版本 ${version || "未上报"} 低于最低支持版本 ${minimumHelperVersion}。`,
+          result: resultText || "版本不满足自动切换要求",
+          next: "下载最新版 Helper 并重启本地助手。",
+        };
+      }
+      if (!helperAuthorized) {
+        return {
+          ...base,
+          className: "warn",
+          key: "unauthorized",
+          title: "等待设备授权",
+          summary: userPresent ? "Helper 在线，但还不能接收当前云控制台下发的切换任务。" : "登录后才能把这台 Helper 授权给云控制台。",
+          trigger: "未授权",
+          result: resultText || "自动切换未绑定当前控制台",
+          next: userPresent ? "点击“授权 Helper”，绑定当前设备。" : "先登录云账号，再授权 Helper。",
+        };
+      }
+      if (autoSwitch.enabled === false) {
+        return {
+          ...base,
+          className: "warn",
+          key: "disabled",
+          title: "自动切换未开启",
+          summary: "设备已授权，但后台自动切换守护处于关闭状态。",
+          result: resultText || "等待启用",
+          next: "在智能切换设置中开启后台自动切换。",
+        };
+      }
+      if (pendingReason && codex.safe_to_switch === false) {
+        return {
+          ...base,
+          className: "warn",
+          key: "draining_active_turn",
+          title: "保护当前任务",
+          summary: "额度或账号状态已触发切换，但当前 Codex 轮次仍可能继续执行，暂不抢切。",
+          result: resultText || "等待安全边界",
+          next: "等待当前轮完成；安全门打开后再请求候选账号。",
+        };
+      }
+      if (pendingReason && codex.safe_to_switch === true) {
+        return {
+          ...base,
+          className: "ok",
+          key: "boundary_confirming",
+          title: "安全边界已确认",
+          summary: "触发条件仍存在，当前任务边界已经安全，可以进入候选选择和写入阶段。",
+          result: resultText || "准备执行切换",
+          next: "Helper 将请求云端候选账号，随后写入 auth 并重启 Codex。",
+        };
+      }
+      if (hasAnyText(resultProbe, [/正在安全切换|安全切换|boundary-confirmed/i])) {
+        return {
+          ...base,
+          className: "warn",
+          key: "switching",
+          title: "正在执行切换",
+          summary: "任务边界已经确认，Helper 正在请求候选、写入 auth 并恢复 Codex。",
+          next: "等待切换任务完成；如果长时间停留，导出诊断查看写入或启动阶段。",
+        };
+      }
+      if (hasAnyText(resultProbe, [/失败|failed|error|异常|401|403|500|missing/i])) {
+        return {
+          ...base,
+          className: "bad",
+          key: "failed",
+          title: "自动切换失败",
+          summary: "最近一次自动切换没有完成，需要查看候选 payload、auth 写入或 Codex 重启阶段。",
+          next: "导出诊断并检查账号 RT、设备授权、auth 写入权限和本机 Codex 启动状态。",
+        };
+      }
+      if (hasAnyText(resultProbe, [/无可用候选|no-candidate|候选账号/i])) {
+        return {
+          ...base,
+          className: "bad",
+          key: "no_candidate",
+          title: "没有可用候选",
+          summary: "云端已收到触发，但候选账号被冷却、不可用或不满足策略。",
+          next: "导入可用 RT 账号，或调整付费优先、避开当前账号和冷却策略。",
+        };
+      }
+      if (hasAnyText(resultProbe, [/冷却|cooldown/i])) {
+        return {
+          ...base,
+          className: "warn",
+          key: "cooldown",
+          title: "切换冷却中",
+          summary: "已命中触发条件，但全局冷却正在保护账号池，避免连续抖动切换。",
+          next: "等待冷却结束；必要时用手动切换处理紧急任务。",
+        };
+      }
+      if (hasAnyText(resultProbe, [/未确认切换条件|未切换|not-triggered|not-switched/i])) {
+        return {
+          ...base,
+          className: "warn",
+          key: "held_by_cloud",
+          title: "云端暂未放行",
+          summary: "Helper 已上报触发信息，但云端策略没有确认本轮必须切换。",
+          next: "继续观察额度和失败信号；如策略过严，可在设置中调整阈值。",
+        };
+      }
+      if (hasAnyText(resultProbe, [/已自动切换|switched/i]) || autoSwitch.last_switch) {
+        return {
+          ...base,
+          className: "ok",
+          key: "switched",
+          title: "最近已切换",
+          summary: "最近一次自动切换已完成，当前账号池进入正常监控。",
+          next: "继续观察用量；冷却期内不会重复选择刚切过的账号。",
+        };
+      }
+      if (codex.safe_to_switch === false) {
+        return {
+          ...base,
+          className: "warn",
+          key: "tail_observing",
+          title: "观察任务边界",
+          summary: "当前没有明确切换触发，但 Codex 仍未稳定空闲，自动切换会保持观察。",
+          next: "无需操作；触发出现后仍会先等待当前轮结束。",
+        };
+      }
+      return {
+        ...base,
+        className: "ok",
+        key: "healthy",
+        title: "持续监控",
+        result: resultText || "检查正常",
+        next: "无需操作；当额度或授权信号触发时再进入保护流程。",
+      };
+    }
+
+    function renderAutoSwitchStage(stage = {}) {
+      const rows = [
+        ["触发", stage.trigger || "暂无触发"],
+        ["边界证据", stage.evidence || "暂无证据"],
+        ["最近结果", stage.result || "暂无执行结果"],
+        ["下一步", stage.next || "继续观察"],
+      ];
+      return `
+        <div class="auto-switch-stage-card ${escapeHtml(stage.className || "warn")}" data-auto-switch-stage="${escapeHtml(stage.key || "unknown")}">
+          <div class="auto-switch-stage-head">
+            <span>${escapeHtml(stage.eyebrow || "自动切换阶段")}</span>
+            <strong>${escapeHtml(stage.title || "状态确认中")}</strong>
+            <p>${escapeHtml(stage.summary || "正在根据 Helper 上报状态确认自动切换阶段。")}</p>
+          </div>
+          <div class="auto-switch-stage-grid">
+            ${rows.map(([label, value]) => `
+              <div class="auto-switch-stage-item">
+                <span>${escapeHtml(label)}</span>
+                <strong>${escapeHtml(value)}</strong>
+              </div>
+            `).join("")}
+          </div>
+          ${stage.lastSeen ? `<small class="auto-switch-stage-time">最近检查 ${escapeHtml(formatTime(stage.lastSeen))}</small>` : ""}
+        </div>
+      `;
+    }
+
     function renderHelperRelease({ helperReady = false, helper = {}, helperRelease = {}, minimumHelperVersion = "0.4.2" } = {}) {
       const latestVersion = helperRelease.version || minimumHelperVersion;
       const latestBuild = helperRelease.build_date || helperRelease.buildDate || "";
@@ -139,8 +354,8 @@
       const pendingSwitchReason = meaningfulText(codex.pending_switch_reason);
       if (pendingSwitchReason) {
         return {
-          className: "warn",
-          title: "保护当前任务",
+          className: codex.safe_to_switch ? "ok" : "warn",
+          title: codex.safe_to_switch ? "安全边界已确认" : "保护当前任务",
           reason: pendingSwitchReason,
           action: codex.safe_to_switch ? "已到安全边界，可以继续执行切换。" : "等待当前 Codex 轮次完成，不会抢切账号。",
         };
@@ -196,6 +411,14 @@
       const autoSwitch = helperAutoSwitch(helper);
       const tray = helper.tray || {};
       const diagnostic = helperDiagnostic({
+        helperReady,
+        helper,
+        codex,
+        helperAuthorized,
+        userPresent,
+        minimumHelperVersion,
+      });
+      const stage = autoSwitchStage({
         helperReady,
         helper,
         codex,
@@ -262,6 +485,7 @@
           <button type="button" data-helper-action="open-status" ${helperReady ? "" : "disabled"}>本机状态页</button>
           <button type="button" data-helper-action="export-diagnostics" ${helperReady ? "" : "disabled"}>导出诊断</button>
         </div>
+        ${renderAutoSwitchStage(stage)}
         ${renderHelperRelease({ helperReady, helper, helperRelease, minimumHelperVersion })}
         <div class="device-grid">
           ${rows.map(([label, value]) => `
@@ -306,6 +530,8 @@
 
     return Object.freeze({
       codexStatusSourceLabel,
+      autoSwitchStage,
+      renderAutoSwitchStage,
       helperDiagnostic,
       renderHelperRelease,
       renderAudit,

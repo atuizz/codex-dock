@@ -1796,6 +1796,96 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
   gap: 7px;
 }
 
+.auto-switch-stage-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  background: #ffffff;
+  padding: 14px;
+  margin: 6px 0 12px;
+}
+
+.auto-switch-stage-card.ok {
+  border-color: rgba(7, 129, 95, 0.2);
+  background: #f7fffb;
+}
+
+.auto-switch-stage-card.warn {
+  border-color: rgba(155, 100, 0, 0.24);
+  background: #fffaf0;
+}
+
+.auto-switch-stage-card.bad {
+  border-color: rgba(181, 54, 54, 0.24);
+  background: #fff7f7;
+}
+
+.auto-switch-stage-head {
+  display: grid;
+  gap: 4px;
+}
+
+.auto-switch-stage-head span,
+.auto-switch-stage-head p,
+.auto-switch-stage-time {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.auto-switch-stage-head strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.auto-switch-stage-head p {
+  margin: 0;
+}
+
+.auto-switch-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--border-soft);
+}
+
+.auto-switch-stage-item {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.78);
+  padding: 10px;
+}
+
+.auto-switch-stage-item span,
+.auto-switch-stage-item strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.auto-switch-stage-item span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.auto-switch-stage-item strong {
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.auto-switch-stage-time {
+  display: block;
+}
+
 .signal-grid {
   grid-template-columns: 1fr 1fr;
   column-gap: 18px;
@@ -3605,6 +3695,10 @@ label span {
     flex-wrap: wrap;
   }
 
+  .auto-switch-stage-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .primary-actions {
     overflow-x: auto;
     padding-bottom: 2px;
@@ -3841,6 +3935,10 @@ label span {
   }
 
   .health-chip-row {
+    grid-template-columns: 1fr;
+  }
+
+  .auto-switch-stage-grid {
     grid-template-columns: 1fr;
   }
 

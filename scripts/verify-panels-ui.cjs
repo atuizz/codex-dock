@@ -28,10 +28,39 @@ assert.equal(ui.helperDiagnostic({
 }).title, "等待安全边界");
 assert.equal(ui.helperDiagnostic({
   helperReady: true,
+  helper: { version: "0.4.2", auto_switch: { enabled: true } },
+  helperAuthorized: true,
+  codex: { safe_to_switch: true, pending_switch_reason: "5H 剩余 1%" },
+}).title, "安全边界已确认");
+assert.equal(ui.helperDiagnostic({
+  helperReady: true,
   helper: { version: "0.4.2", auto_switch: { enabled: true }, tray: { visible: false } },
   helperAuthorized: true,
   codex: { safe_to_switch: true },
 }).title, "托盘需要修复");
+assert.equal(ui.autoSwitchStage({
+  helperReady: true,
+  helper: { version: "0.4.2", auto_switch: { enabled: true, last_result: "额度已触发，正在保护当前任务：Codex 未稳定空闲；触发源 实时用量：5H 剩余 1%" } },
+  helperAuthorized: true,
+  codex: {
+    safe_to_switch: false,
+    pending_switch_reason: "5H 剩余 1%",
+    last_task_event: "工具调用中",
+    source: "logs_2.sqlite",
+  },
+}).key, "draining_active_turn");
+assert.equal(ui.autoSwitchStage({
+  helperReady: true,
+  helper: { version: "0.4.2", auto_switch: { enabled: true } },
+  helperAuthorized: true,
+  codex: { safe_to_switch: true, pending_switch_reason: "7D 剩余 2%" },
+}).key, "boundary_confirming");
+assert.equal(ui.autoSwitchStage({
+  helperReady: true,
+  helper: { version: "0.4.2", auto_switch: { enabled: true, last_result: "自动切换失败：账号 A", last_reason: "5H 剩余 0%" } },
+  helperAuthorized: true,
+  codex: { safe_to_switch: true },
+}).key, "failed");
 
 const emptyAudit = ui.renderAudit([]);
 assert.match(emptyAudit, /还没有云端运行记录/);
@@ -80,6 +109,8 @@ assert.match(deviceHtml, /Helper 分发/);
 assert.match(deviceHtml, /下载最新版/);
 assert.match(deviceHtml, /data-helper-action="copy-helper-sha"/);
 assert.match(deviceHtml, /D516CA84CF3F/);
+assert.match(deviceHtml, /自动切换阶段/);
+assert.match(deviceHtml, /持续监控/);
 assert.match(deviceHtml, /在线/);
 assert.match(deviceHtml, /v0\.4\.2/);
 assert.match(deviceHtml, /http:\/\/127\.0\.0\.1:18766/);
@@ -89,7 +120,64 @@ assert.match(deviceHtml, /已识别/);
 
 const offlineDeviceHtml = ui.renderDevice({ helperReady: false });
 assert.match(offlineDeviceHtml, /Helper 未连接/);
+assert.match(offlineDeviceHtml, /等待 Helper 在线/);
 assert.match(offlineDeviceHtml, /disabled/);
+
+const protectingDeviceHtml = ui.renderDevice({
+  helperReady: true,
+  helper: {
+    port: 18766,
+    version: "0.4.2",
+    auto_switch: {
+      enabled: true,
+      last_result: "额度已触发，正在保护当前任务：Codex 未稳定空闲；触发源 实时用量：5H 剩余 1%",
+    },
+  },
+  helperAuthorized: true,
+  userPresent: true,
+  codex: {
+    source: "logs_2.sqlite",
+    safe_to_switch: false,
+    pending_switch_reason: "5H 剩余 1%",
+    last_task_event: "工具调用中",
+  },
+});
+assert.match(protectingDeviceHtml, /保护当前任务/);
+assert.match(protectingDeviceHtml, /当前 Codex 轮次仍可能继续执行/);
+assert.match(protectingDeviceHtml, /安全门关闭/);
+
+const boundaryDeviceHtml = ui.renderDevice({
+  helperReady: true,
+  helper: { port: 18766, version: "0.4.2", auto_switch: { enabled: true } },
+  helperAuthorized: true,
+  userPresent: true,
+  codex: {
+    source: "logs_2.sqlite",
+    safe_to_switch: true,
+    pending_switch_reason: "7D 剩余 2%",
+    last_task_event: "任务完成",
+  },
+});
+assert.match(boundaryDeviceHtml, /安全边界已确认/);
+assert.match(boundaryDeviceHtml, /请求云端候选账号/);
+
+const failedDeviceHtml = ui.renderDevice({
+  helperReady: true,
+  helper: {
+    port: 18766,
+    version: "0.4.2",
+    auto_switch: {
+      enabled: true,
+      last_reason: "5H 剩余 0%",
+      last_result: "自动切换失败：目标账号",
+    },
+  },
+  helperAuthorized: true,
+  userPresent: true,
+  codex: { source: "logs_2.sqlite", safe_to_switch: true },
+});
+assert.match(failedDeviceHtml, /自动切换失败/);
+assert.match(failedDeviceHtml, /auth 写入权限/);
 
 const emptySecurity = ui.securitySummary(null);
 assert.equal(emptySecurity.preview, "选择账号后显示摘要。");
