@@ -171,5 +171,5 @@
 - Helper `0.4.2` 无论窗口是否可见都会启用低频托盘心跳，静默重新注册 `NotifyIcon`，并提供 `POST /api/tray/repair` 作为本地修复入口，避免 Windows 托盘状态丢失后出现“Helper 进程仍在、本地 API 正常、托盘图标不见”的半失联状态。
 - 本地验证：`GET http://127.0.0.1:18766/api/health` 返回 `version: 0.4.2` 与 `tray` 状态，日志记录 `托盘图标已确认; reason=主窗口首次显示`，`scripts/verify-helper-diagnostics.cjs` 通过。
 - 线上验证：`https://codex.woai.pro/downloads/CodexDockHelper.exe` 与本地 `dist/CodexDockHelper/CodexDockHelper.exe` SHA-256 均为 `D516CA84CF3FCAA4F09A3F4C806BD1685CF719497CE4D7816529BA6AC41743EB`。
-- 控制台设备页和设置页均提供“修复托盘图标”动作，线上静态资源版本 `1c240a89ca2e` 已验证包含该入口。
+- 控制台设备页和设置页均提供“修复托盘图标”动作，线上静态资源版本 `edce6b24c714` 已验证包含该入口。
 

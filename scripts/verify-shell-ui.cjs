@@ -57,6 +57,23 @@ assert.match(metrics, /付费等级/);
 assert.match(metrics, /需处理账号/);
 assert.match(metrics, /<strong>1<\/strong>/);
 
+const health = ui.renderHealthCenter({
+  total: 4,
+  activeKey: "missing-rt",
+  groups: [
+    { key: "all", label: "全部", count: 4, description: "当前账号池" },
+    { key: "ready-rt", label: "可用 RT", count: 2, className: "ok", description: "可直接切换" },
+    { key: "missing-rt", label: "缺 RT", count: 1, className: "warn", description: "需重新登录" },
+  ],
+});
+assert.match(health, /账号健康/);
+assert.match(health, /data-health-filter="missing-rt"/);
+assert.match(health, /health-chip warn active/);
+assert.match(health, /批量工具/);
+
+const emptyHealth = ui.renderHealthCenter({ total: 0, groups: [] });
+assert.match(emptyHealth, /导入账号后/);
+
 const shell = ui.shellViewModel({
   authResolved: true,
   accounts: [{ usable: true }],

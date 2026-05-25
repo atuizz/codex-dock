@@ -81,6 +81,39 @@
       `).join("");
     }
 
+    function renderHealthCenter({ groups = [], activeKey = "all", total = 0 } = {}) {
+      if (!total) {
+        return `
+          <div class="health-center empty">
+            <div class="health-center-head">
+              <strong>账号健康</strong>
+              <span>导入账号后，这里会按可用性、额度和 Helper 状态自动分组。</span>
+            </div>
+          </div>
+        `;
+      }
+      return `
+        <div class="health-center">
+          <div class="health-center-head">
+            <strong>账号健康</strong>
+            <span>点击状态筛选列表；下方批量工具可处理当前结果。</span>
+          </div>
+          <div class="health-chip-row" role="group" aria-label="账号健康筛选">
+            ${groups.map((group) => {
+              const active = group.key === activeKey;
+              return `
+                <button class="health-chip ${escapeHtml(group.className || "")} ${active ? "active" : ""}" type="button" data-health-filter="${escapeHtml(group.key)}" ${group.disabled ? "disabled" : ""}>
+                  <span>${escapeHtml(group.label)}</span>
+                  <strong>${escapeHtml(group.count)}</strong>
+                  <small>${escapeHtml(group.description || "")}</small>
+                </button>
+              `;
+            }).join("")}
+          </div>
+        </div>
+      `;
+    }
+
     function shellViewModel(state = {}) {
       const accounts = Array.isArray(state.accounts) ? state.accounts : [];
       const total = accounts.length;
@@ -171,6 +204,7 @@
       commandShellState,
       toolbarState,
       renderMetrics,
+      renderHealthCenter,
       shellViewModel,
     });
   }

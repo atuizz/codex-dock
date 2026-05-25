@@ -128,6 +128,7 @@ const state = {
   },
   selectedId: null,
   accountFilter: "all",
+  accountHealthFilter: "all",
   accountFilters: { ...defaultAccountFilters },
   accountSort: "updated",
   accountLayout: "list",
@@ -835,6 +836,7 @@ function renderToolbarState(filtered = visibleAccounts()) {
   for (const [id, key] of Object.entries(map)) {
     if ($(id)) $(id).value = filters[key] || "all";
   }
+  document.querySelectorAll("[data-filter]").forEach((button) => button.classList.toggle("active", button.dataset.filter === state.accountFilter));
   document.querySelectorAll("[data-layout]").forEach((button) => button.classList.toggle("active", button.dataset.layout === state.accountLayout));
   const view = shellUi.toolbarState({
     filtered,
@@ -1289,6 +1291,7 @@ function loadLocalStore() {
     state.syncChoices = store.syncChoices || {};
     state.selectedId = store.selectedId || state.selectedId;
     state.accountLayout = store.accountLayout === "cards" ? "cards" : "list";
+    state.accountHealthFilter = store.accountHealthFilter || "all";
     state.accountFilters = { ...defaultAccountFilters, ...(store.accountFilters || {}) };
     state.accountSort = store.accountSort || "updated";
     state.smartSwitchSettings = { ...defaultSmartSwitchSettings, ...(store.smartSwitchSettings || {}) };
@@ -1335,6 +1338,7 @@ function saveLocalStore() {
     selectedId: state.selectedId,
     syncChoices: state.syncChoices,
     accountLayout: state.accountLayout,
+    accountHealthFilter: state.accountHealthFilter,
     accountFilters: state.accountFilters,
     accountSort: state.accountSort,
     smartSwitchSettings: state.smartSwitchSettings,
@@ -1562,6 +1566,21 @@ function isExpiredWithoutRt(account) {
   return Boolean(expiry && expiry.getTime() <= Date.now() && !hasUsableRefreshToken(account));
 }
 
+function accountLowQuota(account) {
+  const usage = normalizeUsage(account?.usage, accountPlan(account));
+  return Boolean(
+    Number.isFinite(usage.five_hour?.remaining_percent) && usage.five_hour.remaining_percent <= 30
+    || Number.isFinite(usage.one_week?.remaining_percent) && usage.one_week.remaining_percent <= 30
+  );
+}
+
+function accountCooldownActive(account) {
+  const cooldown = Number(state.smartSwitchSettings?.cooldownMinutes || defaultSmartSwitchSettings.cooldownMinutes || 0);
+  if (!cooldown || !account?.lastSwitchAt) return false;
+  const last = new Date(account.lastSwitchAt).getTime();
+  return Number.isFinite(last) && Date.now() - last < cooldown * 60 * 1000;
+}
+
 function isInvalidAccount(account) {
   if (!hasAccountSecret(account) || codexBlockReason(account)) return true;
   if (isExpiredWithoutRt(account)) return true;
@@ -1606,9 +1625,41 @@ function accountStatusValue(account) {
   return "attention";
 }
 
+function accountMatchesHealthFilter(account, key = state.accountHealthFilter) {
+  if (!key || key === "all") return true;
+  const block = codexBlockReason(account);
+  const hasRt = hasUsableRefreshToken(account);
+  const tokenFilter = tokenFilterValue(account);
+  if (key === "ready-rt") return codexUsable(account) && hasRt && !usageIssue(account) && !accountLowQuota(account) && !accountCooldownActive(account);
+  if (key === "missing-rt") return block === "at_unsupported" || (hasAccountSecret(account) && !hasRt && tokenFilter !== "expired");
+  if (key === "rt-invalid") return block === "rt_invalid" || tokenFilter === "expired" || refreshTokenInvalidText(normalizeUsage(account?.usage, accountPlan(account)).error);
+  if (key === "low-quota") return accountLowQuota(account);
+  if (key === "cooldown") return accountCooldownActive(account);
+  if (key === "current") return isCurrentAccount(account);
+  if (key === "helper-blocked") return codexUsable(account) && !state.helperReady;
+  if (key === "attention") return isInvalidAccount(account);
+  return true;
+}
+
+function accountHealthGroups(accounts = state.accounts) {
+  const count = (key) => accounts.filter((account) => accountMatchesHealthFilter(account, key)).length;
+  return [
+    { key: "all", label: "全部", count: accounts.length, className: "", description: "当前账号池" },
+    { key: "ready-rt", label: "可用 RT", count: count("ready-rt"), className: "ok", description: "可直接切换" },
+    { key: "missing-rt", label: "缺 RT", count: count("missing-rt"), className: "warn", description: "需重新登录" },
+    { key: "rt-invalid", label: "RT/Token 失效", count: count("rt-invalid"), className: "bad", description: "需更新凭据" },
+    { key: "low-quota", label: "额度低", count: count("low-quota"), className: "warn", description: "避免优先使用" },
+    { key: "cooldown", label: "冷却中", count: count("cooldown"), className: "neutral", description: "等待冷却结束" },
+    { key: "current", label: "当前使用", count: count("current"), className: "neutral", description: "本机 auth 匹配" },
+    { key: "helper-blocked", label: "Helper 不可操作", count: count("helper-blocked"), className: state.helperReady ? "neutral" : "warn", description: "需启动 Helper" },
+    { key: "attention", label: "需处理", count: count("attention"), className: "bad", description: "无法直接使用" },
+  ];
+}
+
 function accountMatchesFilters(account) {
   const filters = state.accountFilters || defaultAccountFilters;
   const plan = String(accountPlan(account)).toLowerCase();
+  if (!accountMatchesHealthFilter(account)) return false;
   if (filters.plan === "paid" && !isPaidPlan(account)) return false;
   if (filters.plan === "plus" && plan !== "plus") return false;
   if (filters.plan === "free" && plan !== "free") return false;
@@ -1723,7 +1774,13 @@ function renderShell() {
 }
 
 function renderMetrics() {
-  $("metricsGrid").innerHTML = shellUi.renderMetrics(state.accounts);
+  const target = $("metricsGrid");
+  target.hidden = !state.authResolved;
+  target.innerHTML = shellUi.renderHealthCenter({
+    groups: accountHealthGroups(state.accounts),
+    activeKey: state.accountHealthFilter,
+    total: state.accounts.length,
+  });
 }
 
 function sourceLabel(account) {
@@ -3526,8 +3583,10 @@ function bindEvents() {
   for (const [id, key] of Object.entries({ filterPlan: "plan", filterToken: "token", filterUsage: "usage", filterStatus: "status" })) {
     $(id).addEventListener("change", (event) => {
       state.accountFilters[key] = event.target.value;
+      state.accountHealthFilter = "all";
       state.selectedBulkIds.clear();
       saveLocalStore();
+      renderMetrics();
       renderAccounts();
     });
   }
@@ -3546,6 +3605,19 @@ function bindEvents() {
   $("bulkPrioritySelect").addEventListener("change", async (event) => {
     await bulkSetPriority(event.target.value);
     event.target.value = "";
+  });
+  $("metricsGrid").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-health-filter]");
+    if (!button) return;
+    state.accountHealthFilter = button.dataset.healthFilter || "all";
+    state.accountFilter = "all";
+    state.accountFilters = { ...defaultAccountFilters };
+    state.accountSearch = "";
+    $("accountSearchInput").value = "";
+    state.selectedBulkIds.clear();
+    saveLocalStore();
+    renderMetrics();
+    renderAccounts();
   });
   $("smartSettingsState").addEventListener("change", (event) => {
     const autoInput = event.target.closest("[data-auto-switch-setting]");
@@ -3718,9 +3790,10 @@ function bindEvents() {
     const button = event.target.closest("button[data-filter]");
     if (!button) return;
     state.accountFilter = button.dataset.filter;
-    document.querySelectorAll('[data-filter]').forEach((el) => el.classList.toggle("active", el === button));
+    state.accountHealthFilter = "all";
     state.selectedBulkIds.clear();
     saveLocalStore();
+    renderMetrics();
     renderAccounts();
   });
 

@@ -886,6 +886,118 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
   min-width: 126px;
 }
 
+.metrics-grid {
+  width: min(var(--max-content), 100%);
+  margin: 0 auto;
+}
+
+.health-center {
+  display: grid;
+  gap: 9px;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  padding: 12px 0;
+}
+
+.health-center.empty {
+  color: var(--text-secondary);
+}
+
+.health-center-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.health-center-head strong,
+.health-center-head span {
+  display: block;
+}
+
+.health-center-head strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.health-center-head span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.health-chip-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 6px;
+}
+
+.health-chip {
+  min-width: 0;
+  min-height: 72px;
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: #ffffff;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.health-chip:hover {
+  border-color: var(--border-control);
+  background: #fbfbfa;
+}
+
+.health-chip.active {
+  border-color: rgba(24, 26, 27, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(24, 26, 27, 0.08);
+}
+
+.health-chip span,
+.health-chip strong,
+.health-chip small {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.health-chip span {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.health-chip strong {
+  color: var(--text-primary);
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.health-chip small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.health-chip.ok strong {
+  color: #07815f;
+}
+
+.health-chip.warn strong {
+  color: #9b6400;
+}
+
+.health-chip.bad strong {
+  color: #b53636;
+}
+
+.health-chip.neutral strong {
+  color: var(--text-secondary);
+}
+
 .bulk-bar {
   border-top: 0;
   border-bottom: 1px solid var(--border-soft);
@@ -3272,6 +3384,16 @@ label span {
     min-width: 0;
   }
 
+  .health-center-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .health-chip-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .primary-actions {
     overflow-x: auto;
     padding-bottom: 2px;
@@ -3505,6 +3627,10 @@ label span {
 
   .filter-panel label {
     grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .health-chip-row {
+    grid-template-columns: 1fr;
   }
 
   .account-card-grid {
