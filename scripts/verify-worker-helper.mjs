@@ -16,6 +16,7 @@ import {
   saveAutoSwitchSettings,
 } from "../cloud-worker/worker-settings.js";
 import {
+  encryptSecret,
   sha256,
 } from "../cloud-worker/worker-shared.js";
 
@@ -34,6 +35,8 @@ class FakeD1 {
     this.deviceTokens = [];
     this.userSettings = [];
     this.accounts = [];
+    this.accountSecrets = [];
+    this.usageSnapshots = [];
     this.queries = [];
   }
 
@@ -88,6 +91,19 @@ class FakeStatement {
         last_login_at: user.last_login_at,
       };
     }
+    if (sql.includes("FROM account_secrets s") && sql.includes("JOIN accounts a")) {
+      const [accountId, userId] = this.params;
+      const secret = this.db.accountSecrets.find((item) => item.account_id === accountId && item.user_id === userId);
+      const account = this.db.accounts.find((item) => item.id === accountId && item.user_id === userId);
+      if (!secret || !account) return null;
+      const usage = latestUsageSnapshot(this.db, accountId);
+      return {
+        ...account,
+        encrypted_auth_json: secret.encrypted_auth_json,
+        secret_updated_at: secret.updated_at,
+        usage_json: usage?.usage_json || null,
+      };
+    }
     throw new Error(`Unhandled first SQL: ${sql}`);
   }
 
@@ -98,7 +114,20 @@ class FakeStatement {
       return { results: this.db.devices.filter((item) => item.user_id === userId) };
     }
     if (sql.includes("FROM accounts a")) {
-      return { results: [] };
+      const [userId] = this.params;
+      return {
+        results: this.db.accounts
+          .filter((item) => item.user_id === userId)
+          .map((account) => {
+            const secret = this.db.accountSecrets.find((item) => item.account_id === account.id && item.user_id === account.user_id);
+            const usage = latestUsageSnapshot(this.db, account.id);
+            return {
+              ...account,
+              secret_updated_at: secret?.updated_at || "",
+              usage_json: usage?.usage_json || null,
+            };
+          }),
+      };
     }
     throw new Error(`Unhandled all SQL: ${sql}`);
   }
@@ -214,8 +243,23 @@ class FakeStatement {
       }
       return { success: true };
     }
+    if (sql.includes("UPDATE accounts SET last_switch_at = ?, updated_at = ?")) {
+      const [lastSwitchAt, updatedAt, accountId, userId] = this.params;
+      const account = this.db.accounts.find((item) => item.id === accountId && item.user_id === userId);
+      if (account) {
+        account.last_switch_at = lastSwitchAt;
+        account.updated_at = updatedAt;
+      }
+      return { success: true };
+    }
     throw new Error(`Unhandled run SQL: ${sql}`);
   }
+}
+
+function latestUsageSnapshot(db, accountId) {
+  return db.usageSnapshots
+    .filter((item) => item.account_id === accountId)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null;
 }
 
 function request(path, body, headers = {}) {
@@ -230,7 +274,12 @@ function authHeaders(token) {
   return { Authorization: `Bearer ${token}` };
 }
 
-const env = { DB: new FakeD1() };
+function jwt(payload) {
+  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({ alg: "none", typ: "JWT" })}.${encode(payload)}.sig`;
+}
+
+const env = { DB: new FakeD1(), TOKEN_ENCRYPTION_KEY: "verify-worker-helper-secret" };
 const user = { id: "user-1", email: "owner@example.com" };
 const audits = [];
 const writeAudit = async (_env, auditUser, body) => {
@@ -342,6 +391,115 @@ const held = await handleHelperAutoSwitch(request("/api/helper/auto-switch/next"
   triggerReason: "额度耗尽，当前轮仍在执行",
 }, authHeaders(configBody.replacementDeviceToken)), env, "/api/helper/auto-switch/next", { requestId: "req-held" }, { writeAudit });
 assert.equal((await held.json()).reason, "等待 Helper 确认安全轮次边界");
+
+const switchAccountId = "acct-ready-row";
+const cloudAccountId = "chatgpt-ready";
+const accessToken = jwt({
+  exp: Math.floor(Date.now() / 1000) + 3600,
+  "https://api.openai.com/auth": {
+    chatgpt_account_id: cloudAccountId,
+    chatgpt_plan_type: "chatgptplus",
+  },
+  "https://api.openai.com/profile": {
+    email: "ready-plus@example.com",
+  },
+});
+const importedAt = new Date().toISOString();
+env.DB.accounts.push({
+  id: switchAccountId,
+  user_id: "user-1",
+  name: "Ready Plus",
+  email: "ready-plus@example.com",
+  group_name: "默认",
+  priority: "primary",
+  usage_note: "",
+  expiry_note: "",
+  chatgpt_account_id: cloudAccountId,
+  plan_type: "plus",
+  expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+  has_refresh_token: 1,
+  created_at: importedAt,
+  updated_at: importedAt,
+  last_switch_at: "",
+});
+env.DB.accountSecrets.push({
+  account_id: switchAccountId,
+  user_id: "user-1",
+  encrypted_auth_json: await encryptSecret(env, {
+    session: {
+      email: "ready-plus@example.com",
+      expires: new Date(Date.now() + 3600 * 1000).toISOString(),
+      profile: { plan: "plus" },
+      tokens: {
+        access_token: accessToken,
+        id_token: accessToken,
+        refresh_token: "rt-ready-plus",
+        account_id: cloudAccountId,
+      },
+    },
+    importedAt,
+    source: "verify-worker-helper",
+  }),
+  created_at: importedAt,
+  updated_at: importedAt,
+});
+env.DB.usageSnapshots.push({
+  id: "usage-ready",
+  account_id: switchAccountId,
+  user_id: "user-1",
+  usage_json: JSON.stringify({
+    plan_type: "plus",
+    five_hour: { remainingPercent: 88 },
+    one_week: { remainingPercent: 91 },
+  }),
+  ok: 1,
+  error: "",
+  created_at: importedAt,
+});
+
+const payloadResponse = await handleHelperAutoSwitch(request("/api/helper/auto-switch/next", {
+  force: true,
+  triggerType: "quota",
+  triggerReason: "5H 剩余 1%",
+  boundaryConfirmed: true,
+  runtimeState: "idle",
+  boundaryEvidence: "连续 15 秒没有任务类日志",
+  currentAccountId: "chatgpt-current",
+  currentUsageSummary: "5H 1%，7D 84%",
+}, authHeaders(configBody.replacementDeviceToken)), env, "/api/helper/auto-switch/next", { requestId: "req-payload" }, { writeAudit });
+assert.equal(payloadResponse.status, 200);
+const payloadBody = await payloadResponse.json();
+assert.equal(payloadBody.shouldSwitch, true);
+assert.equal(payloadBody.candidateCount, 1);
+assert.equal(payloadBody.eligibleCount, 1);
+assert.equal(payloadBody.account.id, switchAccountId);
+assert.equal(payloadBody.account.accountId, cloudAccountId);
+assert.equal(payloadBody.authJson.tokens.refresh_token, "rt-ready-plus");
+assert.equal(payloadBody.authJson.tokens.account_id, cloudAccountId);
+assert.equal(env.DB.accounts.find((item) => item.id === switchAccountId).last_switch_at, "");
+assert.equal(audits.at(-1).action, "auto-switch");
+assert.equal(audits.at(-1).result, "payload-issued");
+assert.equal(audits.at(-1).accountId, switchAccountId);
+assert.equal(audits.at(-1).metadata.boundaryConfirmed, true);
+assert.equal(audits.at(-1).metadata.candidateCount, 1);
+assert.equal(audits.at(-1).metadata.eligibleCount, 1);
+
+const switchedAudit = await handleHelperAutoSwitch(request("/api/helper/auto-switch/audit", {
+  accountId: switchAccountId,
+  result: "switched",
+  metadata: {
+    reason: "5H 剩余 1%",
+    target: "ready-plus@example.com",
+  },
+}, authHeaders(configBody.replacementDeviceToken)), env, "/api/helper/auto-switch/audit", { requestId: "req-switched" }, { writeAudit });
+assert.equal(switchedAudit.status, 200);
+assert.equal((await switchedAudit.json()).ok, true);
+const switchedAccount = env.DB.accounts.find((item) => item.id === switchAccountId);
+assert.ok(switchedAccount.last_switch_at);
+assert.ok(new Date(switchedAccount.last_switch_at).getTime() > 0);
+assert.equal(audits.at(-1).action, "auto-switch-helper");
+assert.equal(audits.at(-1).result, "switched");
+assert.equal(audits.at(-1).accountId, switchAccountId);
 
 const expiredToken = await insertDeviceToken(env, "user-1", "desktop-expired", "Dock Helper", new Date(Date.now() - 1000).toISOString());
 env.DB.devices.push({
