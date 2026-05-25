@@ -10,7 +10,7 @@ const publicDir = join(cloudRoot, "public");
 await rm(publicDir, { recursive: true, force: true });
 await mkdir(publicDir, { recursive: true });
 
-for (const file of ["index.html", "app.js", "styles.css"]) {
+for (const file of ["index.html", "account-core.js", "platform-clients.js", "format-core.js", "progress-ui.js", "shell-ui.js", "dialog-ui.js", "settings-ui.js", "account-list-ui.js", "account-detail-ui.js", "audit-core.js", "admin-ui.js", "panels-ui.js", "import-core.js", "import-ui.js", "app.js", "styles.css"]) {
   await copyFile(join(repoRoot, file), join(publicDir, file));
 }
 

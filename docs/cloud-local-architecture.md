@@ -6,9 +6,9 @@
 
 - 线上控制台：`https://codex.woai.pro`
 - Cloudflare Worker：`cloud-worker/worker.js`
-- 静态资源：Worker Static Assets，从根目录 `index.html`、`app.js`、`styles.css` 构建到 `cloud-worker/public`
+- 静态资源：Worker Static Assets，从根目录 `index.html`、`account-core.js`、`platform-clients.js`、`format-core.js`、`progress-ui.js`、`shell-ui.js`、`dialog-ui.js`、`settings-ui.js`、`account-list-ui.js`、`account-detail-ui.js`、`audit-core.js`、`admin-ui.js`、`panels-ui.js`、`import-core.js`、`import-ui.js`、`app.js`、`styles.css` 构建到 `cloud-worker/public`
 - 数据库：Cloudflare D1 `codex-cloud-console`
-- 本地执行器：`dist/CodexPlusLocalHelper/CodexPlusLocalHelper.exe`
+- 本地执行器：`dist/CodexDockHelper/CodexDockHelper.exe`
 
 ## 数据边界
 
@@ -24,7 +24,7 @@
 
 浏览器本地：
 
-- 默认账号池主视角 `codex-local-store-v4`
+- 默认账号池主视角 `codex-local-store-v5`
 - UI 偏好、同步策略、设备 Key
 - 从旧 `codex-account-switcher-store-v3` 自动迁移同源缓存
 
@@ -44,11 +44,12 @@
 
 1. 用户打开云控制台，未登录也能读取本地账号池。
 2. 用户点击切换。
-3. 若账号有本地 token，浏览器直接生成 normalized `auth.json` payload。
-4. 若账号只有云端密文，Worker 校验登录态，解密对应账号 secret。
+3. 若账号有本地 token，浏览器先校验是否带可用 RT；AT-only 默认标注为“不支持 Codex”。
+4. 若账号只有云端密文，Worker 校验登录态，解密前先按 RT-only 策略裁判账号状态。
 5. 两种路径都使用项目二验证过的 payload：
    - `id_token = access_token`
-   - 空 RT 或异常 RT 写成 `rt_mock_token`
+   - 默认必须带有效 `refresh_token`
+   - 只有 `showExperimentalAt=true` 且 `allowAt=true` 的隐藏实验路径才允许空 RT 写成 `rt_mock_token`
    - 不写 `session_token`
 6. 浏览器转发 payload 到本地助手 `/api/apply-auth`。
 7. 本地助手执行项目二验证过的切换策略：关闭 Codex，再写 auth，再启动 Codex。
@@ -65,6 +66,12 @@
 - token 只存在于 `account_secrets.encrypted_auth_json` 密文字段。
 - `TOKEN_ENCRYPTION_KEY` 通过 Cloudflare secret 注入，不写入源码。
 - 本地助手只接受本机或配置的云控制台来源。
+- Helper device token 只以哈希形式存入 D1，云端按滑动 TTL 保活，并通过 `/api/helper/auto-switch/config` 下发 replacement token；本地 Helper 保存新 token 后继续轮询。
+- 云端在发放切换 payload 前会拦截 AT-only、RT 已失效和缺少密文的账号，默认只有有可用 RT 的账号可以下发。
+- `secretUpdatedAt < lastSwitchAt` 只作为审计线索，不代表云端 RT 已过期，也不阻断切换。Helper 发现本机 auth 中出现不同 RT 时会自动回写；如果本机 RT 与云端相同，则记录为无需同步。
+- Helper 自动切换仍默认等待 Codex 空闲；当本地日志识别到认证失效、额度/限流或账号停用等硬失败时，只先记录待切换原因，等当前任务真正 completed/failed 后进入 cooling 阶段再换号。
+- Worker 所有响应带 `X-Request-Id`；运行日志用结构化 JSON 输出请求、异常、状态码和耗时，用于 Cloudflare Workers Logs 追踪。
+- D1 `audit_logs.metadata_json` 会保存同一个 request id，`worker.audit` 日志也输出 user id、device key、action 和 result，用于从线上日志回查具体业务动作。
 
 ## 已验证项
 

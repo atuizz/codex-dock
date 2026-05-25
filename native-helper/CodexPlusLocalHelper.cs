@@ -7,6 +7,7 @@ using System.IO;
 using System.Management;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -27,8 +28,15 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
+        private const string HelperVersion = "0.3.0";
+        private const string HelperBuildDate = "2026-05-25";
+        private const int HelperLogMaxBytes = 1024 * 1024;
+        private const int HelperLogBackups = 5;
+        private const int AutoSwitchRepeatedLogSeconds = 300;
+        private static readonly object HelperLogFileLock = new object();
         private int _port = 18766;
         private readonly string _root;
+        private readonly DateTime _startedAtUtc = DateTime.UtcNow;
         private readonly Label _statusLabel;
         private readonly Label _authLabel;
         private readonly TextBox _logBox;
@@ -43,6 +51,9 @@ namespace CodexPlusLocalHelper
         private readonly NotifyIcon _trayIcon;
         private readonly ContextMenuStrip _trayMenu;
         private HttpListener _listener;
+        private HttpListener _oauthCallbackListener;
+        private Thread _oauthCallbackThread;
+        private volatile bool _oauthCallbackRunning;
         private Thread _serverThread;
         private volatile bool _running;
         private bool _allowExit;
@@ -55,6 +66,28 @@ namespace CodexPlusLocalHelper
         private DateTime _lastAutoSwitchCheckAt = DateTime.MinValue;
         private string _lastAutoSwitchReason = "";
         private string _lastAutoSwitchResult = "";
+        private string _lastAutoSwitchLogKey = "";
+        private DateTime _lastAutoSwitchLogAt = DateTime.MinValue;
+        private readonly object _authSyncLock = new object();
+        private string _lastSyncedAuthFingerprint = "";
+        private DateTime _lastSyncedAuthWriteAt = DateTime.MinValue;
+        private DateTime _lastAuthSyncAttemptAt = DateTime.MinValue;
+        private string _lastHelperWrittenAuthFingerprint = "";
+        private string _lastAuthSyncLogKey = "";
+        private DateTime _lastAuthSyncLogAt = DateTime.MinValue;
+        private string _lastSkippedAuthFingerprint = "";
+        private DateTime _lastSkippedAuthWriteAt = DateTime.MinValue;
+        private DateTime _lastSkippedAuthAttemptAt = DateTime.MinValue;
+        private string _pendingPostSwitchAuthCompareFingerprint = "";
+        private DateTime _pendingPostSwitchAuthCompareAfter = DateTime.MinValue;
+        private string _lastForcedAuthCompareKey = "";
+        private DateTime _lastForcedAuthCompareAt = DateTime.MinValue;
+        private readonly object _oauthCallbackLock = new object();
+        private string _lastOauthCallbackUrl = "";
+        private string _lastOauthCallbackCode = "";
+        private string _lastOauthCallbackState = "";
+        private string _lastOauthCallbackError = "";
+        private DateTime _lastOauthCallbackAt = DateTime.MinValue;
         private double _lastCodexCpuSeconds = -1;
         private DateTime _lastCodexCpuSampleAt = DateTime.MinValue;
         private DateTime _codexCpuQuietSince = DateTime.MinValue;
@@ -63,6 +96,8 @@ namespace CodexPlusLocalHelper
         private volatile bool _codexStatusStop;
         private CodexRuntimeStatus _codexStatus = CodexRuntimeStatus.Unknown("尚未探测");
         private readonly CodexLogRuntimeMonitor _codexLogRuntimeMonitor = new CodexLogRuntimeMonitor();
+        private readonly object _operationProgressLock = new object();
+        private OperationProgressForm _operationProgressForm;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct LastInputInfo
@@ -483,8 +518,9 @@ namespace CodexPlusLocalHelper
                 _running = true;
                 _serverThread = new Thread(ServerLoop) { IsBackground = true };
                 _serverThread.Start();
+                StartOauthCallbackServer();
                 SetStatus("运行中：" + BaseUrl);
-                Log("服务已启动：" + BaseUrl);
+                Log("服务已启动：" + BaseUrl + " · Helper " + HelperVersion + " (" + HelperBuildDate + ")");
                 RefreshAuthStatus();
                 _startButton.Enabled = false;
                 _stopButton.Enabled = true;
@@ -502,6 +538,7 @@ namespace CodexPlusLocalHelper
             _running = false;
             try
             {
+                StopOauthCallbackServer();
                 if (_listener != null)
                 {
                     _listener.Stop();
@@ -529,6 +566,96 @@ namespace CodexPlusLocalHelper
                 {
                     if (_running) Log("服务循环异常，已忽略一次。");
                 }
+            }
+        }
+
+        private void StartOauthCallbackServer()
+        {
+            if (_oauthCallbackRunning) return;
+            try
+            {
+                _oauthCallbackListener = new HttpListener();
+                _oauthCallbackListener.Prefixes.Add("http://localhost:1455/");
+                _oauthCallbackListener.Prefixes.Add("http://127.0.0.1:1455/");
+                _oauthCallbackListener.Start();
+                _oauthCallbackRunning = true;
+                _oauthCallbackThread = new Thread(OauthCallbackLoop) { IsBackground = true };
+                _oauthCallbackThread.Start();
+                Log("OAuth 回调监听已启动：http://localhost:1455/auth/callback");
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    if (_oauthCallbackListener != null) _oauthCallbackListener.Close();
+                }
+                catch { }
+                _oauthCallbackListener = null;
+                _oauthCallbackRunning = false;
+                Log("OAuth 回调监听未启动：" + ex.Message);
+            }
+        }
+
+        private void StopOauthCallbackServer()
+        {
+            _oauthCallbackRunning = false;
+            try
+            {
+                if (_oauthCallbackListener != null)
+                {
+                    _oauthCallbackListener.Stop();
+                    _oauthCallbackListener.Close();
+                    _oauthCallbackListener = null;
+                }
+            }
+            catch { }
+        }
+
+        private void OauthCallbackLoop()
+        {
+            while (_oauthCallbackRunning)
+            {
+                try
+                {
+                    var context = _oauthCallbackListener.GetContext();
+                    ThreadPool.QueueUserWorkItem(delegate { HandleOauthCallbackRequest(context); });
+                }
+                catch
+                {
+                    if (_oauthCallbackRunning) Log("OAuth 回调监听异常，已忽略一次。");
+                }
+            }
+        }
+
+        private void HandleOauthCallbackRequest(HttpListenerContext context)
+        {
+            try
+            {
+                var request = context.Request;
+                if (request.HttpMethod == "GET" && request.Url.AbsolutePath == "/auth/callback")
+                {
+                    var code = request.QueryString["code"] ?? "";
+                    var state = request.QueryString["state"] ?? "";
+                    var error = request.QueryString["error"] ?? "";
+                    var raw = request.RawUrl ?? "";
+                    var fullUrl = "http://localhost:1455" + raw;
+                    lock (_oauthCallbackLock)
+                    {
+                        _lastOauthCallbackUrl = fullUrl;
+                        _lastOauthCallbackCode = code;
+                        _lastOauthCallbackState = state;
+                        _lastOauthCallbackError = error;
+                        _lastOauthCallbackAt = DateTime.UtcNow;
+                    }
+                    SendText(context.Response, string.IsNullOrEmpty(error) ? 200 : 400, OauthCallbackHtml(error, fullUrl), "text/html; charset=utf-8");
+                    return;
+                }
+                SendText(context.Response, 404, "OAuth callback listener is running.", "text/plain; charset=utf-8");
+            }
+            catch (Exception ex)
+            {
+                try { SendText(context.Response, 500, "OAuth callback failed: " + ex.Message, "text/plain; charset=utf-8"); }
+                catch { }
             }
         }
 
@@ -689,6 +816,46 @@ namespace CodexPlusLocalHelper
                 return true;
             }
 
+            if (request.HttpMethod == "GET" && path == "/api/oauth/callback/latest")
+            {
+                if (!IsAllowedOrigin(request))
+                {
+                    SendJson(context.Response, 403, "{\"ok\":false,\"error\":\"来源未授权\"}");
+                    return true;
+                }
+                string url;
+                string code;
+                string stateValue;
+                string error;
+                DateTime receivedAt;
+                lock (_oauthCallbackLock)
+                {
+                    url = _lastOauthCallbackUrl;
+                    code = _lastOauthCallbackCode;
+                    stateValue = _lastOauthCallbackState;
+                    error = _lastOauthCallbackError;
+                    receivedAt = _lastOauthCallbackAt;
+                }
+                var requestedState = request.QueryString["state"] ?? "";
+                var fresh = receivedAt != DateTime.MinValue && (DateTime.UtcNow - receivedAt).TotalMinutes < 10;
+                var stateMatches = string.IsNullOrEmpty(requestedState) || string.IsNullOrEmpty(stateValue) || requestedState == stateValue;
+                if (!fresh || !stateMatches)
+                {
+                    SendJson(context.Response, 200, "{\"ok\":true,\"pending\":true}");
+                    return true;
+                }
+                SendJson(context.Response, 200, "{"
+                    + "\"ok\":true,"
+                    + "\"pending\":false,"
+                    + "\"url\":\"" + JsonEscape(url) + "\","
+                    + "\"code\":\"" + JsonEscape(code) + "\","
+                    + "\"state\":\"" + JsonEscape(stateValue) + "\","
+                    + "\"error\":\"" + JsonEscape(error) + "\","
+                    + "\"receivedAt\":\"" + JsonEscape(receivedAt.ToString("o")) + "\""
+                    + "}");
+                return true;
+            }
+
             if (request.HttpMethod == "POST" && path == "/api/apply-auth")
             {
                 if (!IsAllowedOrigin(request))
@@ -700,7 +867,8 @@ namespace CodexPlusLocalHelper
                 var body = ReadBody(request);
                 var launch = !Regex.IsMatch(body, "\"launch\"\\s*:\\s*false", RegexOptions.IgnoreCase);
                 var restart = Regex.IsMatch(body, "\"restart\"\\s*:\\s*true", RegexOptions.IgnoreCase);
-                var authJson = NormalizeAuthJsonForCodex(ExtractAuthJson(body));
+                var allowAtExperimental = MatchJsonBool(body, "allowAtExperimental", false);
+                var authJson = NormalizeAuthJsonForCodex(ExtractAuthJson(body), allowAtExperimental);
                 ValidateAuthJson(authJson);
                 if (restart || launch)
                 {
@@ -847,6 +1015,11 @@ namespace CodexPlusLocalHelper
 
         private static string NormalizeAuthJsonForCodex(string authJson)
         {
+            return NormalizeAuthJsonForCodex(authJson, false);
+        }
+
+        private static string NormalizeAuthJsonForCodex(string authJson, bool allowAtExperimental)
+        {
             ValidateAuthJson(authJson);
             var accessToken = MatchJsonString(authJson, "access_token");
             var accountId = MatchJsonString(authJson, "account_id");
@@ -855,7 +1028,14 @@ namespace CodexPlusLocalHelper
                 accountId = AccountIdFromJwt(accessToken);
             }
             var refreshToken = MatchJsonString(authJson, "refresh_token");
-            if (string.IsNullOrEmpty(refreshToken) || refreshToken == accessToken)
+            var hasRefreshToken = !string.IsNullOrEmpty(refreshToken)
+                && refreshToken != accessToken
+                && !string.Equals(refreshToken, "rt_mock_token", StringComparison.OrdinalIgnoreCase);
+            if (!hasRefreshToken && !allowAtExperimental)
+            {
+                throw new InvalidOperationException("当前 auth 缺少可用 refresh_token，AT-only 不支持 Codex 使用。请重新登录 Codex 获取 RT。");
+            }
+            if (!hasRefreshToken)
             {
                 refreshToken = "rt_mock_token";
             }
@@ -916,7 +1096,7 @@ namespace CodexPlusLocalHelper
             request.Method = "GET";
             request.Timeout = 18000;
             request.ReadWriteTimeout = 18000;
-            request.UserAgent = "codex-plus-local-helper/0.1";
+            request.UserAgent = "codex-dock-helper/" + HelperVersion;
             request.Accept = "application/json";
             request.Headers["Authorization"] = "Bearer " + accessToken;
             request.Headers["ChatGPT-Account-Id"] = accountId;
@@ -1023,6 +1203,16 @@ namespace CodexPlusLocalHelper
             return MatchJsonString(payload, "chatgpt_account_user_id");
         }
 
+        private static string AuthSubject(string authJson)
+        {
+            var email = EmailFromAuthJson(authJson);
+            var accountId = MatchJsonString(authJson, "account_id");
+            if (string.IsNullOrEmpty(accountId)) accountId = AccountIdFromJwt(MatchJsonString(authJson, "access_token"));
+            var plan = PlanFromAuthJson(authJson);
+            var label = !string.IsNullOrEmpty(email) ? email : (!string.IsNullOrEmpty(accountId) ? ShortText(accountId, 18) : "未知账号");
+            return label + (string.IsNullOrEmpty(plan) ? "" : " · " + plan.ToUpperInvariant());
+        }
+
         private static string JwtPayloadJson(string token)
         {
             if (string.IsNullOrEmpty(token)) return "";
@@ -1040,43 +1230,77 @@ namespace CodexPlusLocalHelper
             }
         }
 
-        private void RunSwitchJob(string authJson, bool restart, bool launch)
+        private bool RunSwitchJob(string authJson, bool restart, bool launch)
         {
+            var jobId = DateTime.Now.ToString("HHmmss", CultureInfo.InvariantCulture);
+            var subject = AuthSubject(authJson);
+            ShowOperationProgress("切换 Codex 授权", "任务 " + jobId + " 正在准备目标账号：" + subject, 4);
             try
             {
-                Log("后台切换开始。");
+                Log("切换任务 " + jobId + " 开始：目标 " + subject + "，restart=" + (restart ? "true" : "false") + "，launch=" + (launch ? "true" : "false"));
+                UpdateOperationProgress(12, "正在定位当前 Codex 窗口与目标任务。");
                 var restoreTarget = launch ? CaptureCodexRestoreTarget() : null;
                 if (restoreTarget != null)
                 {
-                    Log("已记录待恢复会话：" + ShortText(restoreTarget.ThreadId, 12) + " · " + restoreTarget.Source);
+                    Log("切换任务 " + jobId + " 目标窗口：" + (restoreTarget.IsGoal ? "目标任务" : "会话") + " " + ShortText(restoreTarget.ThreadId, 12) + " · " + restoreTarget.Source);
+                    UpdateOperationProgress(24, "已记录待恢复窗口：" + (restoreTarget.IsGoal ? "目标任务" : "普通会话") + " " + ShortText(restoreTarget.ThreadId, 12));
+                }
+                else if (launch)
+                {
+                    Log("切换任务 " + jobId + " 目标窗口：未识别，将按 Codex 默认窗口启动。");
+                    UpdateOperationProgress(24, "未识别目标窗口，将按 Codex 默认窗口启动。");
                 }
                 var stoppedCount = 0;
                 if (restart)
                 {
+                    UpdateOperationProgress(36, "正在关闭旧 Codex 进程，避免 auth 写入冲突。");
                     stoppedCount = StopCodexInstances();
-                    Log("已关闭 Codex 实例数：" + stoppedCount);
+                    Log("切换任务 " + jobId + " 已关闭 Codex 实例数：" + stoppedCount);
+                    UpdateOperationProgress(48, "已关闭 Codex 实例数：" + stoppedCount);
+                }
+                else
+                {
+                    UpdateOperationProgress(48, "无需关闭 Codex，准备写入 auth.json。");
                 }
 
                 Thread.Sleep(700);
+                UpdateOperationProgress(60, "正在备份并写入新的 auth.json。");
                 var rewrite = WriteAuthJson(authJson);
-                Log("已写入 auth.json：" + rewrite.Target);
-                if (rewrite.Backup != null) Log("已备份：" + rewrite.Backup);
+                Log("切换任务 " + jobId + " 已写入 auth.json：" + rewrite.Target);
+                if (rewrite.Backup != null) Log("切换任务 " + jobId + " 已备份旧 auth：" + rewrite.Backup);
+                ClearRuntimePendingSwitch();
                 BeginInvoke(new Action(RefreshAuthStatus));
+                UpdateOperationProgress(70, "auth.json 已写入，正在刷新本地授权状态。");
 
+                var launchResult = "";
+                var restoreResult = "";
+                var goalResult = "";
                 if (launch)
                 {
                     Thread.Sleep(500);
-                    Log(LaunchCodex());
+                    UpdateOperationProgress(80, "正在启动 Codex。");
+                    launchResult = LaunchCodex();
+                    Log("切换任务 " + jobId + " " + launchResult);
                     if (restoreTarget != null)
                     {
                         Thread.Sleep(2200);
-                        Log(RestoreCodexWindow(restoreTarget));
+                        UpdateOperationProgress(88, "正在恢复切换前的 Codex 窗口。");
+                        restoreResult = RestoreCodexWindow(restoreTarget);
+                        Log("切换任务 " + jobId + " " + restoreResult);
+                        UpdateOperationProgress(94, "正在恢复目标状态。");
+                        goalResult = RestoreCodexGoalIfNeeded(restoreTarget);
+                        if (!string.IsNullOrEmpty(goalResult)) Log("切换任务 " + jobId + " " + goalResult);
                     }
                 }
+                Log("切换任务 " + jobId + " 成功：目标 " + subject + "，已写入 auth" + (launch ? "，已请求启动 Codex" : "") + (restoreTarget != null ? "，已请求恢复窗口" : "") + "。");
+                CompleteOperationProgress(true, "切换完成：" + subject);
+                return true;
             }
             catch (Exception ex)
             {
-                Log("后台切换失败：" + ex.Message);
+                Log("切换任务 " + jobId + " 失败：目标 " + subject + "，" + ex.Message);
+                CompleteOperationProgress(false, "切换失败：" + ex.Message);
+                return false;
             }
         }
 
@@ -1100,6 +1324,14 @@ namespace CodexPlusLocalHelper
             File.WriteAllText(temp, authJson + Environment.NewLine, new UTF8Encoding(false));
             if (File.Exists(target)) File.Delete(target);
             File.Move(temp, target);
+            lock (_authSyncLock)
+            {
+                var fingerprint = AuthFingerprint(authJson);
+                _lastHelperWrittenAuthFingerprint = fingerprint;
+                _pendingPostSwitchAuthCompareFingerprint = fingerprint;
+                _pendingPostSwitchAuthCompareAfter = DateTime.UtcNow.AddSeconds(45);
+            }
+            ClearRuntimePendingSwitch();
             return new AuthWriteResult { Target = target, Backup = backup };
         }
 
@@ -1185,8 +1417,10 @@ namespace CodexPlusLocalHelper
                 var refreshToken = MatchJsonString(raw, "refresh_token");
                 var expires = JwtExpiry(accessToken);
                 var rtState = string.IsNullOrEmpty(refreshToken)
-                    ? "RT 缺失"
-                    : refreshToken == accessToken ? "RT 疑似占位" : "RT 存在";
+                    ? "RT 缺失（不支持 Codex）"
+                    : (refreshToken == accessToken || string.Equals(refreshToken, "rt_mock_token", StringComparison.OrdinalIgnoreCase)
+                        ? "RT 占位（不支持 Codex）"
+                        : "RT 存在");
                 var shortAccount = ShortText(!string.IsNullOrEmpty(email) ? email : accountId, 28);
                 var expiryText = expires.HasValue ? "AT 到期 " + expires.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "AT 到期未知";
                 return "当前 auth：" + shortAccount + " · " + rtState + " · " + expiryText;
@@ -1200,6 +1434,20 @@ namespace CodexPlusLocalHelper
         private static string CurrentAuthPath()
         {
             return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "auth.json");
+        }
+
+        private static string AuthFingerprint(string authJson)
+        {
+            var seed = (MatchJsonString(authJson, "account_id") ?? "")
+                + "\n" + (MatchJsonString(authJson, "access_token") ?? "")
+                + "\n" + (MatchJsonString(authJson, "refresh_token") ?? "");
+            using (var sha = SHA256.Create())
+            {
+                var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(seed));
+                var sb = new StringBuilder(bytes.Length * 2);
+                foreach (var b in bytes) sb.Append(b.ToString("x2", CultureInfo.InvariantCulture));
+                return sb.ToString();
+            }
         }
 
         private static string DockDataDir()
@@ -1224,6 +1472,11 @@ namespace CodexPlusLocalHelper
             return Path.Combine(DockDataDir(), "codex-app-server-proxy-status.json");
         }
 
+        private static string HelperLogPath()
+        {
+            return Path.Combine(DockDataDir(), "helper.log");
+        }
+
         private string CodexProxyExePath()
         {
             return Path.Combine(_root, "CodexAppServerProxy.exe");
@@ -1242,6 +1495,10 @@ namespace CodexPlusLocalHelper
                     CloudBase = MatchJsonString(raw, "cloudBase"),
                     DeviceToken = MatchJsonString(raw, "deviceToken"),
                     DeviceKey = MatchJsonString(raw, "deviceKey"),
+                    DeviceTokenExpiresAt = MatchJsonString(raw, "deviceTokenExpiresAt"),
+                    CloudLastSyncAt = MatchJsonString(raw, "cloudLastSyncAt"),
+                    LastSwitchAt = MatchJsonString(raw, "lastSwitchAt"),
+                    LastSwitchLabel = MatchJsonString(raw, "lastSwitchLabel"),
                     FiveHourThreshold = MatchJsonInt(raw, "fiveHourThreshold", 5),
                     OneWeekThreshold = MatchJsonInt(raw, "oneWeekThreshold", 5),
                     PollSeconds = MatchJsonInt(raw, "pollSeconds", 15),
@@ -1249,7 +1506,7 @@ namespace CodexPlusLocalHelper
                     GlobalCooldownSeconds = MatchJsonInt(raw, "globalCooldownSeconds", 180),
                     CooldownMinutes = MatchJsonInt(raw, "cooldownMinutes", 10),
                     OnlyWhenIdle = MatchJsonBool(raw, "onlyWhenIdle", true),
-                    IdleSeconds = MatchJsonInt(raw, "idleSeconds", 30),
+                    IdleSeconds = MatchJsonInt(raw, "idleSeconds", 10),
                     ActivityQuietSeconds = MatchJsonInt(raw, "activityQuietSeconds", 120),
                     CpuQuietSeconds = MatchJsonInt(raw, "cpuQuietSeconds", 90),
                     CpuBusyPercent = MatchJsonInt(raw, "cpuBusyPercent", 3),
@@ -1268,6 +1525,10 @@ namespace CodexPlusLocalHelper
                 + "\"cloudBase\":\"" + JsonEscape(config.CloudBase) + "\","
                 + "\"deviceToken\":\"" + JsonEscape(config.DeviceToken) + "\","
                 + "\"deviceKey\":\"" + JsonEscape(config.DeviceKey) + "\","
+                + "\"deviceTokenExpiresAt\":\"" + JsonEscape(config.DeviceTokenExpiresAt) + "\","
+                + "\"cloudLastSyncAt\":\"" + JsonEscape(config.CloudLastSyncAt) + "\","
+                + "\"lastSwitchAt\":\"" + JsonEscape(config.LastSwitchAt) + "\","
+                + "\"lastSwitchLabel\":\"" + JsonEscape(config.LastSwitchLabel) + "\","
                 + "\"fiveHourThreshold\":" + config.FiveHourThreshold + ","
                 + "\"oneWeekThreshold\":" + config.OneWeekThreshold + ","
                 + "\"pollSeconds\":" + config.PollSeconds + ","
@@ -1292,9 +1553,12 @@ namespace CodexPlusLocalHelper
                 + "\"cloud_base\":\"" + JsonEscape(config.CloudBase) + "\","
                 + "\"device_key\":\"" + JsonEscape(config.DeviceKey) + "\","
                 + "\"last_check\":\"" + JsonEscape(_lastAutoSwitchCheckAt == DateTime.MinValue ? "" : _lastAutoSwitchCheckAt.ToString("o")) + "\","
-                + "\"last_switch\":\"" + JsonEscape(_lastAutoSwitchAt == DateTime.MinValue ? "" : _lastAutoSwitchAt.ToString("o")) + "\","
+                + "\"last_switch\":\"" + JsonEscape(_lastAutoSwitchAt == DateTime.MinValue ? config.LastSwitchAt : _lastAutoSwitchAt.ToString("o")) + "\","
+                + "\"last_switch_label\":\"" + JsonEscape(config.LastSwitchLabel) + "\","
                 + "\"last_reason\":\"" + JsonEscape(_lastAutoSwitchReason) + "\","
                 + "\"last_result\":\"" + JsonEscape(_lastAutoSwitchResult) + "\","
+                + "\"token_expires_at\":\"" + JsonEscape(config.DeviceTokenExpiresAt) + "\","
+                + "\"cloud_last_sync\":\"" + JsonEscape(config.CloudLastSyncAt) + "\","
                 + "\"only_when_idle\":" + (config.OnlyWhenIdle ? "true" : "false") + ","
                 + "\"poll_seconds\":" + config.PollSeconds + ","
                 + "\"effective_poll_seconds\":" + EffectiveAutoSwitchPollSeconds(config)
@@ -1319,9 +1583,15 @@ namespace CodexPlusLocalHelper
             var target = CaptureCodexRestoreTarget();
             if (target == null)
             {
-                return "{\"ok\":true,\"available\":false,\"thread_id\":\"\",\"url\":\"\",\"source\":\"\"}";
+                return "{\"ok\":true,\"available\":false,\"thread_id\":\"\",\"url\":\"\",\"source\":\"\",\"title\":\"\",\"cwd\":\"\",\"is_goal\":false,\"reason\":\"\"}";
             }
-            return "{\"ok\":true,\"available\":true,\"thread_id\":\"" + JsonEscape(target.ThreadId) + "\",\"url\":\"" + JsonEscape(target.Url) + "\",\"source\":\"" + JsonEscape(target.Source) + "\"}";
+            return "{\"ok\":true,\"available\":true,\"thread_id\":\"" + JsonEscape(target.ThreadId)
+                + "\",\"url\":\"" + JsonEscape(target.Url)
+                + "\",\"source\":\"" + JsonEscape(target.Source)
+                + "\",\"title\":\"" + JsonEscape(target.Title)
+                + "\",\"cwd\":\"" + JsonEscape(target.Cwd)
+                + "\",\"is_goal\":" + (target.IsGoal ? "true" : "false")
+                + ",\"reason\":\"" + JsonEscape(target.Reason) + "\"}";
         }
 
         private string CodexProxyStatusJson()
@@ -2225,19 +2495,32 @@ namespace CodexPlusLocalHelper
                 try
                 {
                     var config = GetAutoSwitchConfig();
-                    if (config.Enabled && !string.IsNullOrEmpty(config.CloudBase) && !string.IsNullOrEmpty(config.DeviceToken))
+                    if (!string.IsNullOrEmpty(config.CloudBase) && !string.IsNullOrEmpty(config.DeviceToken))
                     {
-                        var codexRunning = HasCodexProcess();
-                        delaySeconds = codexRunning ? EffectiveAutoSwitchPollSeconds(config) : config.IdlePollSeconds;
-                        if (codexRunning)
+                        config = RefreshAutoSwitchCloudConfig(config);
+                        if (string.IsNullOrEmpty(config.CloudBase) || string.IsNullOrEmpty(config.DeviceToken))
                         {
-                            RunAutoSwitchCheck(config);
+                            delaySeconds = config.IdlePollSeconds;
+                        }
+                        else
+                        {
+                            var codexRunning = HasCodexProcess();
+                            if (codexRunning)
+                            {
+                                try { MaybePostSwitchAuthCompare(config); }
+                                catch (Exception ex) { Log("切入后 auth 比对跳过：" + ShortText(ex.Message, 120)); }
+                            }
+                            delaySeconds = codexRunning ? EffectiveAutoSwitchPollSeconds(config) : config.IdlePollSeconds;
+                            if (config.Enabled && codexRunning)
+                            {
+                                RunAutoSwitchCheck(config);
+                            }
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    SetAutoSwitchResult("检查失败：" + ex.Message);
+                    SetAutoSwitchResult("检查失败：" + ex.Message, "check-error:" + ex.GetType().Name + ":" + ShortText(ex.Message, 80));
                 }
 
                 var loops = Math.Max(1, delaySeconds);
@@ -2278,25 +2561,238 @@ namespace CodexPlusLocalHelper
                 var cloudBase = MatchJsonString(body, "cloudBase");
                 var token = MatchJsonString(body, "deviceToken");
                 var deviceKey = MatchJsonString(body, "deviceKey");
+                var tokenExpiresAt = MatchJsonString(body, "tokenExpiresAt");
                 if (!string.IsNullOrEmpty(cloudBase)) next.CloudBase = cloudBase.TrimEnd('/');
                 if (!string.IsNullOrEmpty(token)) next.DeviceToken = token;
                 if (!string.IsNullOrEmpty(deviceKey)) next.DeviceKey = deviceKey;
-                next.FiveHourThreshold = MatchJsonInt(body, "fiveHourThreshold", MatchJsonInt(body, "five_hour_threshold", next.FiveHourThreshold));
-                next.OneWeekThreshold = MatchJsonInt(body, "oneWeekThreshold", MatchJsonInt(body, "one_week_threshold", next.OneWeekThreshold));
-                next.PollSeconds = MatchJsonInt(body, "pollSeconds", next.PollSeconds);
-                next.IdlePollSeconds = MatchJsonInt(body, "idlePollSeconds", next.IdlePollSeconds);
-                next.GlobalCooldownSeconds = MatchJsonInt(body, "globalCooldownSeconds", next.GlobalCooldownSeconds);
-                next.CooldownMinutes = MatchJsonInt(body, "cooldownMinutes", next.CooldownMinutes);
-                next.OnlyWhenIdle = MatchJsonBool(body, "onlyWhenIdle", next.OnlyWhenIdle);
-                next.IdleSeconds = MatchJsonInt(body, "idleSeconds", next.IdleSeconds);
-                next.ActivityQuietSeconds = MatchJsonInt(body, "activityQuietSeconds", next.ActivityQuietSeconds);
-                next.CpuQuietSeconds = MatchJsonInt(body, "cpuQuietSeconds", next.CpuQuietSeconds);
-                next.CpuBusyPercent = MatchJsonInt(body, "cpuBusyPercent", next.CpuBusyPercent);
+                if (!string.IsNullOrEmpty(tokenExpiresAt)) next.DeviceTokenExpiresAt = tokenExpiresAt;
+                next.CloudLastSyncAt = DateTime.UtcNow.ToString("o");
+                var settingsJson = ExtractJsonObject(body, "settings");
+                var settingsSource = string.IsNullOrEmpty(settingsJson) || settingsJson == "null" ? body : settingsJson;
+                next.FiveHourThreshold = MatchJsonInt(settingsSource, "fiveHourThreshold", MatchJsonInt(settingsSource, "five_hour_threshold", next.FiveHourThreshold));
+                next.OneWeekThreshold = MatchJsonInt(settingsSource, "oneWeekThreshold", MatchJsonInt(settingsSource, "one_week_threshold", next.OneWeekThreshold));
+                next.PollSeconds = MatchJsonInt(settingsSource, "pollSeconds", next.PollSeconds);
+                next.IdlePollSeconds = MatchJsonInt(settingsSource, "idlePollSeconds", next.IdlePollSeconds);
+                next.GlobalCooldownSeconds = MatchJsonInt(settingsSource, "globalCooldownSeconds", next.GlobalCooldownSeconds);
+                next.CooldownMinutes = MatchJsonInt(settingsSource, "cooldownMinutes", next.CooldownMinutes);
+                next.OnlyWhenIdle = MatchJsonBool(settingsSource, "onlyWhenIdle", next.OnlyWhenIdle);
+                next.IdleSeconds = MatchJsonInt(settingsSource, "idleSeconds", next.IdleSeconds);
+                next.ActivityQuietSeconds = MatchJsonInt(settingsSource, "activityQuietSeconds", next.ActivityQuietSeconds);
+                next.CpuQuietSeconds = MatchJsonInt(settingsSource, "cpuQuietSeconds", next.CpuQuietSeconds);
+                next.CpuBusyPercent = MatchJsonInt(settingsSource, "cpuBusyPercent", next.CpuBusyPercent);
                 _autoSwitchConfig = next.Clamp();
                 SaveAutoSwitchConfig(_autoSwitchConfig);
             }
-            SetAutoSwitchResult(GetAutoSwitchConfig().Enabled ? "自动切换已配置" : "自动切换已关闭");
+            SetAutoSwitchResult(GetAutoSwitchConfig().Enabled ? "自动切换已配置" : "自动切换已关闭", "configured:" + GetAutoSwitchConfig().Enabled);
             StartAutoSwitchService();
+        }
+
+        private AutoSwitchConfig RefreshAutoSwitchCloudConfig(AutoSwitchConfig config)
+        {
+            try
+            {
+                var response = GetHelperJson(config, "/api/helper/auto-switch/config");
+                var settingsJson = ExtractJsonObject(response, "settings");
+                var replacementToken = MatchJsonString(response, "replacementDeviceToken");
+                var replacementExpiresAt = MatchJsonString(response, "replacementExpiresAt");
+                var tokenJson = ExtractJsonObject(response, "token");
+                var tokenExpiresAt = MatchJsonString(tokenJson, "expiresAt");
+                var changed = false;
+
+                lock (_autoSwitchLock)
+                {
+                    var next = _autoSwitchConfig == null ? config.Clone() : _autoSwitchConfig.Clone();
+                    if (!string.IsNullOrEmpty(settingsJson) && settingsJson != "null")
+                    {
+                        next.Enabled = MatchJsonBool(settingsJson, "enabled", next.Enabled);
+                        next.FiveHourThreshold = MatchJsonInt(settingsJson, "fiveHourThreshold", next.FiveHourThreshold);
+                        next.OneWeekThreshold = MatchJsonInt(settingsJson, "oneWeekThreshold", next.OneWeekThreshold);
+                        next.PollSeconds = MatchJsonInt(settingsJson, "pollSeconds", next.PollSeconds);
+                        next.IdlePollSeconds = MatchJsonInt(settingsJson, "idlePollSeconds", next.IdlePollSeconds);
+                        next.GlobalCooldownSeconds = MatchJsonInt(settingsJson, "globalCooldownSeconds", next.GlobalCooldownSeconds);
+                        next.CooldownMinutes = MatchJsonInt(settingsJson, "cooldownMinutes", next.CooldownMinutes);
+                        next.OnlyWhenIdle = MatchJsonBool(settingsJson, "onlyWhenIdle", next.OnlyWhenIdle);
+                        next.IdleSeconds = MatchJsonInt(settingsJson, "idleSeconds", next.IdleSeconds);
+                        next.ActivityQuietSeconds = MatchJsonInt(settingsJson, "activityQuietSeconds", next.ActivityQuietSeconds);
+                        next.CpuQuietSeconds = MatchJsonInt(settingsJson, "cpuQuietSeconds", next.CpuQuietSeconds);
+                        next.CpuBusyPercent = MatchJsonInt(settingsJson, "cpuBusyPercent", next.CpuBusyPercent);
+                    }
+                    if (!string.IsNullOrEmpty(replacementToken))
+                    {
+                        next.DeviceToken = replacementToken;
+                        next.DeviceTokenExpiresAt = replacementExpiresAt;
+                        changed = true;
+                    }
+                    else if (!string.IsNullOrEmpty(tokenExpiresAt))
+                    {
+                        next.DeviceTokenExpiresAt = tokenExpiresAt;
+                    }
+                    next.CloudLastSyncAt = DateTime.UtcNow.ToString("o");
+                    next = next.Clamp();
+                    var shouldSave = changed || !AutoSwitchConfigEquivalent(_autoSwitchConfig, next);
+                    _autoSwitchConfig = next;
+                    if (shouldSave)
+                    {
+                        SaveAutoSwitchConfig(_autoSwitchConfig);
+                    }
+                    config = next.Clone();
+                }
+
+                if (!string.IsNullOrEmpty(replacementToken))
+                {
+                    Log("自动切换：云端已轮换 Helper token，新的授权已保存。");
+                }
+            }
+            catch (Exception ex)
+            {
+                SetAutoSwitchResult("云端保活失败：" + ex.Message, "cloud-keepalive-failed:" + ShortText(ex.Message, 80));
+            }
+            return config;
+        }
+
+        private static bool AutoSwitchConfigEquivalent(AutoSwitchConfig a, AutoSwitchConfig b)
+        {
+            if (a == null || b == null) return false;
+            return a.Enabled == b.Enabled
+                && string.Equals(a.CloudBase, b.CloudBase, StringComparison.Ordinal)
+                && string.Equals(a.DeviceToken, b.DeviceToken, StringComparison.Ordinal)
+                && string.Equals(a.DeviceKey, b.DeviceKey, StringComparison.Ordinal)
+                && string.Equals(a.DeviceTokenExpiresAt, b.DeviceTokenExpiresAt, StringComparison.Ordinal)
+                && a.FiveHourThreshold == b.FiveHourThreshold
+                && a.OneWeekThreshold == b.OneWeekThreshold
+                && a.PollSeconds == b.PollSeconds
+                && a.IdlePollSeconds == b.IdlePollSeconds
+                && a.GlobalCooldownSeconds == b.GlobalCooldownSeconds
+                && a.CooldownMinutes == b.CooldownMinutes
+                && a.OnlyWhenIdle == b.OnlyWhenIdle
+                && a.IdleSeconds == b.IdleSeconds
+                && a.ActivityQuietSeconds == b.ActivityQuietSeconds
+                && a.CpuQuietSeconds == b.CpuQuietSeconds
+                && a.CpuBusyPercent == b.CpuBusyPercent;
+        }
+
+        private void MaybePostSwitchAuthCompare(AutoSwitchConfig config)
+        {
+            string pendingFingerprint;
+            DateTime compareAfter;
+            lock (_authSyncLock)
+            {
+                pendingFingerprint = _pendingPostSwitchAuthCompareFingerprint;
+                compareAfter = _pendingPostSwitchAuthCompareAfter;
+            }
+            if (string.IsNullOrEmpty(pendingFingerprint) || compareAfter == DateTime.MinValue) return;
+            if (DateTime.UtcNow < compareAfter) return;
+
+            var compared = MaybeSyncCurrentAuth(config, true, "post-switch-compare");
+            if (!compared) return;
+            lock (_authSyncLock)
+            {
+                if (_pendingPostSwitchAuthCompareFingerprint == pendingFingerprint)
+                {
+                    _pendingPostSwitchAuthCompareFingerprint = "";
+                    _pendingPostSwitchAuthCompareAfter = DateTime.MinValue;
+                }
+            }
+        }
+
+        private bool MaybeSyncCurrentAuth(AutoSwitchConfig config, bool forceCompare, string syncReason)
+        {
+            if (config == null || string.IsNullOrEmpty(config.CloudBase) || string.IsNullOrEmpty(config.DeviceToken)) return false;
+            var now = DateTime.UtcNow;
+            lock (_authSyncLock)
+            {
+                if (!forceCompare && (now - _lastAuthSyncAttemptAt).TotalSeconds < 10) return false;
+                _lastAuthSyncAttemptAt = now;
+            }
+
+            var path = CurrentAuthPath();
+            if (!File.Exists(path)) return false;
+            var writeAt = File.GetLastWriteTimeUtc(path);
+            var authJson = File.ReadAllText(path, Encoding.UTF8).Trim();
+            ValidateAuthJson(authJson);
+            var fingerprint = AuthFingerprint(authJson);
+            var forceKey = (syncReason ?? "") + ":" + fingerprint + ":" + writeAt.ToUniversalTime().ToString("o");
+            lock (_authSyncLock)
+            {
+                if (forceCompare)
+                {
+                    if (forceKey == _lastForcedAuthCompareKey
+                        && _lastForcedAuthCompareAt != DateTime.MinValue
+                        && (now - _lastForcedAuthCompareAt).TotalSeconds < 300)
+                    {
+                        return false;
+                    }
+                }
+                if (!forceCompare && fingerprint == _lastHelperWrittenAuthFingerprint) return false;
+                if (!forceCompare && fingerprint == _lastSyncedAuthFingerprint && writeAt <= _lastSyncedAuthWriteAt.AddSeconds(1)) return false;
+                if (!forceCompare && fingerprint == _lastSkippedAuthFingerprint
+                    && writeAt <= _lastSkippedAuthWriteAt.AddSeconds(1)
+                    && _lastSkippedAuthAttemptAt != DateTime.MinValue
+                    && (now - _lastSkippedAuthAttemptAt).TotalSeconds < 300)
+                {
+                    return false;
+                }
+            }
+
+            var response = PostHelperJson(config, "/api/helper/auto-switch/current-auth", "{"
+                + "\"deviceKey\":\"" + JsonEscape(config.DeviceKey) + "\","
+                + "\"localUpdatedAt\":\"" + JsonEscape(writeAt.ToUniversalTime().ToString("o")) + "\","
+                + "\"fingerprint\":\"" + JsonEscape(ShortText(fingerprint, 16)) + "\","
+                + "\"syncReason\":\"" + JsonEscape(syncReason ?? "") + "\","
+                + "\"authJson\":" + JsString(authJson)
+                + "}");
+            var matched = Regex.IsMatch(response, "\"matched\"\\s*:\\s*true", RegexOptions.IgnoreCase);
+            var synced = Regex.IsMatch(response, "\"synced\"\\s*:\\s*true", RegexOptions.IgnoreCase);
+            var reason = MatchJsonString(response, "reason");
+            lock (_authSyncLock)
+            {
+                if (forceCompare)
+                {
+                    _lastForcedAuthCompareKey = forceKey;
+                    _lastForcedAuthCompareAt = now;
+                }
+                if (synced)
+                {
+                    _lastSyncedAuthFingerprint = fingerprint;
+                    _lastSyncedAuthWriteAt = writeAt;
+                    _lastSkippedAuthFingerprint = "";
+                    _lastSkippedAuthWriteAt = DateTime.MinValue;
+                    _lastSkippedAuthAttemptAt = DateTime.MinValue;
+                }
+                else
+                {
+                    _lastSkippedAuthFingerprint = fingerprint;
+                    _lastSkippedAuthWriteAt = writeAt;
+                    _lastSkippedAuthAttemptAt = now;
+                }
+            }
+            if (synced)
+            {
+                LogAuthSync("synced:" + ShortText(fingerprint, 16), "当前 auth 已同步到云端：" + ShortText(MatchJsonString(response, "matchedAccountId"), 12));
+            }
+            else if (matched && !string.IsNullOrEmpty(reason))
+            {
+                var message = reason.Contains("无需同步") ? "当前 auth 比对完成：" + reason : "当前 auth 暂未同步：" + reason;
+                LogAuthSync("skipped:" + reason, message);
+            }
+            return true;
+        }
+
+        private void LogAuthSync(string key, string message)
+        {
+            var now = DateTime.UtcNow;
+            lock (_authSyncLock)
+            {
+                if (key == _lastAuthSyncLogKey
+                    && _lastAuthSyncLogAt != DateTime.MinValue
+                    && (now - _lastAuthSyncLogAt).TotalSeconds < 300)
+                {
+                    return;
+                }
+                _lastAuthSyncLogKey = key;
+                _lastAuthSyncLogAt = now;
+            }
+            Log(message);
         }
 
         private void RunAutoSwitchCheck(AutoSwitchConfig config)
@@ -2306,10 +2802,11 @@ namespace CodexPlusLocalHelper
             var authPath = CurrentAuthPath();
             if (!File.Exists(authPath))
             {
-                SetAutoSwitchResult("未找到 auth.json");
+                SetAutoSwitchResult("未找到 auth.json", "missing-auth");
                 return;
             }
             var authJson = File.ReadAllText(authPath, Encoding.UTF8).Trim();
+            var authWrittenAt = File.GetLastWriteTimeUtc(authPath);
             ValidateAuthJson(authJson);
 
             var usageJson = "";
@@ -2325,10 +2822,33 @@ namespace CodexPlusLocalHelper
             }
 
             var trigger = AutoSwitchTriggerReason(usageJson, error, config);
+            var triggerType = AutoSwitchUsageTriggerType(trigger, error);
+            var triggerSource = string.IsNullOrEmpty(trigger) ? "" : "实时用量";
+            var usageSummary = UsageSnapshotSummary(usageJson);
+            var clearedRuntimeTriggerReason = "";
             if (string.IsNullOrEmpty(trigger))
             {
-                var runtimeTrigger = CurrentCodexStatus().PendingSwitchReason;
-                if (!string.IsNullOrEmpty(runtimeTrigger)) trigger = runtimeTrigger;
+                var runtimeStatus = RefreshCodexStatusNow();
+                var runtimeTrigger = runtimeStatus.PendingSwitchReason;
+                if (!string.IsNullOrEmpty(runtimeTrigger))
+                {
+                    if (IsRuntimeTriggerOlderThanAuth(runtimeStatus, authWrittenAt))
+                    {
+                        ClearRuntimePendingSwitch();
+                        clearedRuntimeTriggerReason = "已清理换号前触发";
+                    }
+                    else if (UsageSnapshotIsHealthy(usageJson, error, config))
+                    {
+                        ClearRuntimePendingSwitch();
+                        clearedRuntimeTriggerReason = "实时用量正常（" + usageSummary + "），已忽略运行日志触发：" + runtimeTrigger;
+                    }
+                    else
+                    {
+                        trigger = runtimeTrigger;
+                        triggerType = runtimeStatus.PendingSwitchType;
+                        triggerSource = "运行日志";
+                    }
+                }
             }
             var currentAccountId = MatchJsonString(authJson, "account_id");
             var currentEmail = EmailFromAuthJson(authJson);
@@ -2344,67 +2864,148 @@ namespace CodexPlusLocalHelper
             if (string.IsNullOrEmpty(trigger))
             {
                 _lastAutoSwitchReason = "";
-                SetAutoSwitchResult("检查正常");
+                SetAutoSwitchResult(string.IsNullOrEmpty(clearedRuntimeTriggerReason) ? "检查正常" : "检查正常：" + clearedRuntimeTriggerReason,
+                    string.IsNullOrEmpty(clearedRuntimeTriggerReason) ? "normal" : "normal:runtime-trigger-cleared:" + ShortText(clearedRuntimeTriggerReason, 80));
                 return;
             }
             _lastAutoSwitchReason = trigger;
+            var triggerLabel = string.IsNullOrEmpty(triggerSource) ? trigger : triggerSource + "：" + trigger;
             if ((DateTime.UtcNow - _lastAutoSwitchAt).TotalSeconds < config.GlobalCooldownSeconds)
             {
-                SetAutoSwitchResult("已触发但处于冷却：" + trigger);
+                SetAutoSwitchResult("已触发但处于冷却：" + triggerLabel, "cooldown:" + triggerSource + ":" + trigger);
                 return;
             }
             string idleReason;
-            if (!IsSafeToAutoSwitch(config, out idleReason))
+            if (!IsSafeToAutoSwitch(config, triggerType, out idleReason))
             {
-                SetAutoSwitchResult("已触发但等待空闲：" + idleReason);
-                TryPostHelperAudit(config, "deferred-active-task", trigger, idleReason);
+                SetAutoSwitchResult("已触发但等待空闲：" + idleReason + "；触发源 " + triggerLabel, "waiting-idle:" + triggerType + ":" + trigger);
+                TryPostHelperAudit(config, "deferred-active-task", triggerLabel, idleReason);
                 return;
             }
 
+            var forceCloudTrigger = IsHardAutoSwitchTrigger(triggerType);
+            try { MaybeSyncCurrentAuth(config, true, "pre-switch-check"); }
+            catch (Exception ex) { Log("切换前 auth 比对跳过：" + ShortText(ex.Message, 120)); }
             var response = PostHelperJson(config, "/api/helper/auto-switch/next", "{"
                 + "\"deviceKey\":\"" + JsonEscape(config.DeviceKey) + "\","
                 + "\"currentAccountId\":\"" + JsonEscape(currentAccountId) + "\","
                 + "\"currentEmail\":\"" + JsonEscape(currentEmail) + "\","
+                + "\"triggerReason\":\"" + JsonEscape(trigger) + "\","
+                + "\"triggerType\":\"" + JsonEscape(triggerType) + "\","
+                + "\"triggerSource\":\"" + JsonEscape(triggerSource) + "\","
+                + "\"currentUsageSummary\":\"" + JsonEscape(usageSummary) + "\","
+                + "\"force\":" + (forceCloudTrigger ? "true" : "false") + ","
                 + "\"error\":\"" + JsonEscape(error) + "\","
                 + "\"usage\":" + usageJson
                 + "}");
             if (!Regex.IsMatch(response, "\"shouldSwitch\"\\s*:\\s*true", RegexOptions.IgnoreCase))
             {
-                SetAutoSwitchResult("已触发但无可用候选：" + trigger);
+                var responseReason = MatchJsonString(response, "reason");
+                var cloudSummary = CloudSwitchDecisionSummary(response);
+                var responseDetail = string.IsNullOrEmpty(responseReason) ? cloudSummary : responseReason + (string.IsNullOrEmpty(cloudSummary) ? "" : "；" + cloudSummary);
+                if (IsCloudTriggerRejected(responseReason))
+                {
+                    SetAutoSwitchResult("云端未确认切换条件：" + triggerLabel + (string.IsNullOrEmpty(responseDetail) ? "" : "（" + responseDetail + "）"), "not-triggered:" + triggerSource + ":" + trigger);
+                }
+                else if (IsCloudNoCandidate(responseReason))
+                {
+                    SetAutoSwitchResult("已触发但无可用候选账号：" + triggerLabel + (string.IsNullOrEmpty(responseDetail) ? "" : "（" + responseDetail + "）"), "no-candidate:" + triggerSource + ":" + trigger + ":" + ShortText(responseDetail, 120));
+                }
+                else
+                {
+                    SetAutoSwitchResult("已触发但未切换：" + triggerLabel + (string.IsNullOrEmpty(responseDetail) ? "" : "（" + responseDetail + "）"), "not-switched:" + triggerSource + ":" + trigger + ":" + ShortText(responseDetail, 120));
+                }
                 return;
             }
-            var nextAuth = NormalizeAuthJsonForCodex(ExtractJsonObject(response, "authJson"));
-            var targetName = MatchJsonString(ExtractJsonObject(response, "account"), "email");
+            var allowAtExperimental = MatchJsonBool(response, "allowAtExperimental", false);
+            var nextAuth = NormalizeAuthJsonForCodex(ExtractJsonObject(response, "authJson"), allowAtExperimental);
+            var accountJson = ExtractJsonObject(response, "account");
+            var targetCloudId = MatchJsonString(accountJson, "id");
+            var targetName = MatchJsonString(accountJson, "email");
             if (string.IsNullOrEmpty(targetName)) targetName = MatchJsonString(ExtractJsonObject(response, "account"), "name");
-            Log("自动切换触发：" + trigger + "，目标：" + ShortText(targetName, 48));
-            RunSwitchJob(nextAuth, true, true);
+            Log("自动切换触发：" + triggerLabel + "，当前用量 " + usageSummary + "，目标：" + ShortText(targetName, 48));
+            var switched = RunSwitchJob(nextAuth, true, true);
+            if (!switched)
+            {
+                SetAutoSwitchResult("自动切换失败：" + ShortText(targetName, 48), "switch-failed:" + ShortText(targetName, 48));
+                TryPostHelperAudit(config, "switch-failed", trigger, "target=" + targetName);
+                return;
+            }
             _lastAutoSwitchAt = DateTime.UtcNow;
-            SetAutoSwitchResult("已自动切换：" + ShortText(targetName, 48));
+            PersistAutoSwitchSuccess(targetName, _lastAutoSwitchAt);
+            SetAutoSwitchResult("已自动切换：" + ShortText(targetName, 48), "switched:" + ShortText(targetName, 48));
             ShowTrayTip("已自动切换账号", string.IsNullOrEmpty(targetName) ? trigger : targetName);
             PostHelperJson(config, "/api/helper/auto-switch/audit", "{"
+                + "\"accountId\":\"" + JsonEscape(targetCloudId) + "\","
                 + "\"result\":\"switched\","
                 + "\"metadata\":{\"reason\":\"" + JsonEscape(trigger) + "\",\"target\":\"" + JsonEscape(targetName) + "\"}"
                 + "}");
         }
 
-        private bool IsSafeToAutoSwitch(AutoSwitchConfig config, out string reason)
+        private static bool IsRuntimeTriggerOlderThanAuth(CodexRuntimeStatus status, DateTime authWrittenAt)
+        {
+            if (status == null || status.PendingSwitchAt == DateTime.MinValue) return false;
+            return authWrittenAt.ToUniversalTime() >= status.PendingSwitchAt.ToUniversalTime().AddSeconds(-2);
+        }
+
+        private void ClearRuntimePendingSwitch()
+        {
+            _codexLogRuntimeMonitor.ClearPendingSwitch();
+            lock (_codexStatusLock)
+            {
+                _codexStatus.PendingSwitchReason = "";
+                _codexStatus.PendingSwitchType = "";
+                _codexStatus.PendingSwitchAt = DateTime.MinValue;
+            }
+        }
+
+        private void PersistAutoSwitchSuccess(string targetName, DateTime switchedAtUtc)
+        {
+            try
+            {
+                lock (_autoSwitchLock)
+                {
+                    var config = _autoSwitchConfig == null ? LoadAutoSwitchConfig() : _autoSwitchConfig.Clone();
+                    config.LastSwitchAt = switchedAtUtc.ToString("o");
+                    config.LastSwitchLabel = targetName ?? "";
+                    _autoSwitchConfig = config.Clamp();
+                    SaveAutoSwitchConfig(_autoSwitchConfig);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("自动切换：保存最近切换状态失败：" + ex.Message);
+            }
+        }
+
+        private bool IsSafeToAutoSwitch(AutoSwitchConfig config, string triggerType, out string reason)
         {
             reason = "";
             if (!config.OnlyWhenIdle) return true;
 
             var runtimeStatus = CurrentCodexStatus();
+            if (IsHardAutoSwitchTrigger(triggerType) && runtimeStatus.State == "cooling")
+            {
+                return true;
+            }
             if (runtimeStatus.State == "idle" && runtimeStatus.SafeToSwitch)
             {
+                if (runtimeStatus.StableSeconds >= 0 && runtimeStatus.StableSeconds < config.IdleSeconds)
+                {
+                    reason = "Codex 空闲 " + Math.Floor(runtimeStatus.StableSeconds).ToString(CultureInfo.InvariantCulture)
+                        + " 秒，等待 " + config.IdleSeconds.ToString(CultureInfo.InvariantCulture) + " 秒确认";
+                    return false;
+                }
                 return true;
             }
             if (runtimeStatus.State == "active")
             {
-                reason = "Codex 正在执行任务";
+                reason = "Codex 未稳定空闲";
                 return false;
             }
             if (runtimeStatus.State == "cooling")
             {
-                reason = "任务刚结束，等待稳定空闲";
+                reason = "Codex 未稳定空闲";
                 return false;
             }
             if (runtimeStatus.State == "unknown")
@@ -2419,6 +3020,25 @@ namespace CodexPlusLocalHelper
             }
             reason = string.IsNullOrEmpty(runtimeStatus.Detail) ? "等待日志状态确认" : runtimeStatus.Detail;
             return false;
+        }
+
+        private static bool IsHardAutoSwitchTrigger(string triggerType)
+        {
+            return string.Equals(triggerType, "auth", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(triggerType, "quota", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(triggerType, "account_disabled", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsCloudTriggerRejected(string reason)
+        {
+            return !string.IsNullOrWhiteSpace(reason)
+                && reason.IndexOf("未命中切换条件", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool IsCloudNoCandidate(string reason)
+        {
+            return !string.IsNullOrWhiteSpace(reason)
+                && reason.IndexOf("可用候选", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static double UserIdleSeconds()
@@ -2555,11 +3175,64 @@ namespace CodexPlusLocalHelper
             if (five.HasValue && five.Value <= config.FiveHourThreshold) return "5H 剩余 " + five.Value.ToString("0.##", CultureInfo.InvariantCulture) + "%";
             if (week.HasValue && week.Value <= config.OneWeekThreshold) return "7D 剩余 " + week.Value.ToString("0.##", CultureInfo.InvariantCulture) + "%";
             var text = (error ?? "").ToLowerInvariant();
-            if (Regex.IsMatch(text, "401|429|quota|rate limit|usage limit|too many requests|token has been invalidated|invalidated|已失效|频率|额度", RegexOptions.IgnoreCase))
+            if (Regex.IsMatch(text, "401|429|quota|rate limit|usage limit|too many requests|token has been invalidated|invalidated|token expired|invalid_grant|refresh token was already used|access token could not be refreshed|could not be refreshed|已失效|频率|额度", RegexOptions.IgnoreCase))
             {
                 return "当前账号不可用或已限流";
             }
             return "";
+        }
+
+        private static string AutoSwitchUsageTriggerType(string trigger, string error)
+        {
+            if (string.IsNullOrEmpty(trigger)) return "";
+            var text = ((trigger ?? "") + " " + (error ?? "")).ToLowerInvariant();
+            if (Regex.IsMatch(text, "401|token has been invalidated|invalidated|token expired|invalid_grant|refresh token was already used|access token could not be refreshed|could not be refreshed|已失效", RegexOptions.IgnoreCase)) return "auth";
+            if (Regex.IsMatch(text, "5h|7d|429|quota|rate limit|usage limit|too many requests|频率|额度|限流", RegexOptions.IgnoreCase)) return "quota";
+            return "usage";
+        }
+
+        private static bool UsageSnapshotIsHealthy(string usageJson, string error, AutoSwitchConfig config)
+        {
+            if (!string.IsNullOrWhiteSpace(error)) return false;
+            var five = UsageRemainingPercent(usageJson, "five_hour");
+            var week = UsageRemainingPercent(usageJson, "one_week");
+            var hasSignal = false;
+            if (five.HasValue)
+            {
+                hasSignal = true;
+                if (five.Value <= config.FiveHourThreshold) return false;
+            }
+            if (week.HasValue)
+            {
+                hasSignal = true;
+                if (week.Value <= config.OneWeekThreshold) return false;
+            }
+            return hasSignal;
+        }
+
+        private static string UsageSnapshotSummary(string usageJson)
+        {
+            var parts = new List<string>();
+            var five = UsageRemainingPercent(usageJson, "five_hour");
+            var week = UsageRemainingPercent(usageJson, "one_week");
+            if (five.HasValue) parts.Add("5H " + five.Value.ToString("0.##", CultureInfo.InvariantCulture) + "%");
+            if (week.HasValue) parts.Add("7D " + week.Value.ToString("0.##", CultureInfo.InvariantCulture) + "%");
+            return parts.Count == 0 ? "实时用量无窗口" : string.Join("，", parts.ToArray());
+        }
+
+        private static string CloudSwitchDecisionSummary(string response)
+        {
+            var parts = new List<string>();
+            var candidateCount = MatchJsonInt(response, "candidateCount", -1);
+            var eligibleCount = MatchJsonInt(response, "eligibleCount", -1);
+            if (candidateCount >= 0 || eligibleCount >= 0)
+            {
+                parts.Add("候选 " + (candidateCount >= 0 ? candidateCount.ToString(CultureInfo.InvariantCulture) : "?")
+                    + "，可用 " + (eligibleCount >= 0 ? eligibleCount.ToString(CultureInfo.InvariantCulture) : "?"));
+            }
+            var blockedSummary = MatchJsonString(response, "blockedSummary");
+            if (!string.IsNullOrEmpty(blockedSummary)) parts.Add("拦截统计：" + blockedSummary);
+            return parts.Count == 0 ? "" : string.Join("；", parts.ToArray());
         }
 
         private static double? UsageRemainingPercent(string usageJson, string field)
@@ -2583,21 +3256,34 @@ namespace CodexPlusLocalHelper
             return MatchJsonString(JwtPayloadJson(MatchJsonString(authJson, "id_token")), "email");
         }
 
+        private string GetHelperJson(AutoSwitchConfig config, string path)
+        {
+            return SendHelperJson(config, "GET", path, null);
+        }
+
         private string PostHelperJson(AutoSwitchConfig config, string path, string body)
+        {
+            return SendHelperJson(config, "POST", path, body);
+        }
+
+        private string SendHelperJson(AutoSwitchConfig config, string method, string path, string body)
         {
             var url = config.CloudBase.TrimEnd('/') + path;
             var request = (HttpWebRequest)WebRequest.Create(url);
-            request.Method = "POST";
+            request.Method = method;
             request.Timeout = 20000;
             request.ReadWriteTimeout = 20000;
             request.ContentType = "application/json; charset=utf-8";
             request.Accept = "application/json";
             request.UserAgent = "codex-dock-helper/auto-switch";
             request.Headers["Authorization"] = "Bearer " + config.DeviceToken;
-            var bytes = Encoding.UTF8.GetBytes(body ?? "{}");
-            using (var stream = request.GetRequestStream())
+            if (!string.Equals(method, "GET", StringComparison.OrdinalIgnoreCase))
             {
-                stream.Write(bytes, 0, bytes.Length);
+                var bytes = Encoding.UTF8.GetBytes(body ?? "{}");
+                using (var stream = request.GetRequestStream())
+                {
+                    stream.Write(bytes, 0, bytes.Length);
+                }
             }
             try
             {
@@ -2634,10 +3320,25 @@ namespace CodexPlusLocalHelper
 
         private void SetAutoSwitchResult(string text)
         {
+            SetAutoSwitchResult(text, "");
+        }
+
+        private void SetAutoSwitchResult(string text, string logKey)
+        {
             var next = text ?? "";
-            var changed = _lastAutoSwitchResult != next;
             _lastAutoSwitchResult = next;
-            if (changed && !string.IsNullOrEmpty(text)) Log("自动切换：" + text);
+            if (string.IsNullOrEmpty(next)) return;
+
+            var key = string.IsNullOrEmpty(logKey) ? next : logKey;
+            var now = DateTime.UtcNow;
+            var shouldLog = key != _lastAutoSwitchLogKey
+                || _lastAutoSwitchLogAt == DateTime.MinValue
+                || (now - _lastAutoSwitchLogAt).TotalSeconds >= AutoSwitchRepeatedLogSeconds;
+            if (!shouldLog) return;
+
+            _lastAutoSwitchLogKey = key;
+            _lastAutoSwitchLogAt = now;
+            Log("自动切换：" + next);
         }
 
         private void ShowTrayTip(string title, string text)
@@ -2685,14 +3386,11 @@ namespace CodexPlusLocalHelper
             }
 
             string source;
-            var threadId = CodexLogRuntimeMonitor.TryReadMostRecentThreadId(out source);
-            if (string.IsNullOrWhiteSpace(threadId)) return null;
-            return new CodexRestoreTarget
-            {
-                ThreadId = threadId,
-                Source = source,
-                Url = "codex://threads/" + Uri.EscapeDataString(threadId)
-            };
+            var target = CodexLogRuntimeMonitor.TryReadBestRestoreTarget(out source);
+            if (target == null || string.IsNullOrWhiteSpace(target.ThreadId)) return null;
+            target.Source = string.IsNullOrWhiteSpace(target.Source) ? source : target.Source;
+            target.Url = "codex://threads/" + Uri.EscapeDataString(target.ThreadId);
+            return target;
         }
 
         private static string RestoreCodexWindow(CodexRestoreTarget target)
@@ -2700,13 +3398,156 @@ namespace CodexPlusLocalHelper
             if (target == null || string.IsNullOrWhiteSpace(target.Url)) return "未找到可恢复会话。";
             try
             {
-                Process.Start(new ProcessStartInfo(target.Url) { UseShellExecute = true });
-                return "已请求恢复会话窗口：" + ShortText(target.ThreadId, 12);
+                var attempts = target.IsGoal ? 4 : 3;
+                for (var i = 0; i < attempts; i++)
+                {
+                    Process.Start(new ProcessStartInfo(target.Url) { UseShellExecute = true });
+                    if (i < attempts - 1) Thread.Sleep(1400);
+                }
+                return "已请求恢复" + (target.IsGoal ? "目标任务" : "会话") + "窗口：" + ShortText(target.ThreadId, 12);
             }
             catch (Exception ex)
             {
                 return "恢复会话窗口失败：" + ex.Message;
             }
+        }
+
+        private static string RestoreCodexGoalIfNeeded(CodexRestoreTarget target)
+        {
+            if (target == null || !target.IsGoal || string.IsNullOrWhiteSpace(target.ThreadId)) return "";
+            var disabled = Environment.GetEnvironmentVariable("CODEX_DOCK_RESTORE_GOAL");
+            if (string.Equals(disabled, "0", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(disabled, "false", StringComparison.OrdinalIgnoreCase))
+            {
+                return "目标恢复已关闭：CODEX_DOCK_RESTORE_GOAL=" + disabled;
+            }
+
+            var exe = ResolveCodexCliPath();
+            if (string.IsNullOrEmpty(exe)) return "目标恢复失败：未找到 Codex app-server。";
+
+            Process process = null;
+            var outputLines = new List<string>();
+            var errorLines = new List<string>();
+            var outputLock = new object();
+            try
+            {
+                var info = new ProcessStartInfo(exe, "app-server --listen stdio://")
+                {
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardInput = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+                process = Process.Start(info);
+                if (process == null) return "目标恢复失败：app-server 启动失败。";
+
+                var stdout = new Thread(new ThreadStart(delegate
+                {
+                    try
+                    {
+                        string line;
+                        while ((line = process.StandardOutput.ReadLine()) != null)
+                        {
+                            lock (outputLock) outputLines.Add(line);
+                        }
+                    }
+                    catch { }
+                })) { IsBackground = true };
+                var stderr = new Thread(new ThreadStart(delegate
+                {
+                    try
+                    {
+                        string line;
+                        while ((line = process.StandardError.ReadLine()) != null)
+                        {
+                            lock (outputLock) errorLines.Add(line);
+                        }
+                    }
+                    catch { }
+                })) { IsBackground = true };
+                stdout.Start();
+                stderr.Start();
+
+                SendRpc(process, 1, "initialize", "{\"clientInfo\":{\"name\":\"codex-dock-helper\",\"version\":\"0.2.0\"},\"capabilities\":{\"experimentalApi\":true}}");
+                var init = WaitForRpcLine(outputLines, outputLock, 1, 4500);
+                if (string.IsNullOrEmpty(init))
+                {
+                    return "目标恢复失败：" + FirstError(errorLines, outputLock, "app-server 初始化超时");
+                }
+
+                SendRpc(process, 2, "thread/goal/get", "{\"threadId\":\"" + JsonEscape(target.ThreadId) + "\"}");
+                var goalLine = WaitForRpcLine(outputLines, outputLock, 2, 4500);
+                if (string.IsNullOrEmpty(goalLine)) return "目标恢复失败：读取目标状态超时。";
+                if (ContainsJsonError(goalLine)) return "目标恢复失败：" + RpcErrorMessage(goalLine);
+
+                var goalJson = ExtractJsonObject(goalLine, "goal");
+                if (string.IsNullOrEmpty(goalJson) || string.Equals(goalJson, "null", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "目标恢复跳过：当前线程没有目标状态。";
+                }
+
+                var status = MatchJsonString(goalJson, "status");
+                if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
+                {
+                    SendRpc(process, 3, "thread/resume", "{\"threadId\":\"" + JsonEscape(target.ThreadId) + "\",\"excludeTurns\":true}");
+                    WaitForRpcLine(outputLines, outputLock, 3, 3500);
+                    return "目标恢复：目标已处于 active。";
+                }
+
+                if (string.Equals(status, "complete", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(status, "blocked", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(status, "budgetLimited", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "目标恢复跳过：目标状态为 " + status + "。";
+                }
+
+                if (string.Equals(status, "paused", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(status, "usageLimited", StringComparison.OrdinalIgnoreCase))
+                {
+                    SendRpc(process, 3, "thread/goal/set", "{\"threadId\":\"" + JsonEscape(target.ThreadId) + "\",\"status\":\"active\"}");
+                    var setLine = WaitForRpcLine(outputLines, outputLock, 3, 4500);
+                    if (string.IsNullOrEmpty(setLine)) return "目标恢复失败：写入目标状态超时。";
+                    if (ContainsJsonError(setLine)) return "目标恢复失败：" + RpcErrorMessage(setLine);
+
+                    SendRpc(process, 4, "thread/resume", "{\"threadId\":\"" + JsonEscape(target.ThreadId) + "\",\"excludeTurns\":true}");
+                    WaitForRpcLine(outputLines, outputLock, 4, 3500);
+                    var nextStatus = MatchJsonString(setLine, "status");
+                    return "目标恢复：已将目标状态从 " + (string.IsNullOrEmpty(status) ? "unknown" : status) + " 恢复为 " + (string.IsNullOrEmpty(nextStatus) ? "active" : nextStatus) + "。";
+                }
+
+                return "目标恢复跳过：目标状态为 " + (string.IsNullOrEmpty(status) ? "unknown" : status) + "。";
+            }
+            catch (Exception ex)
+            {
+                return "目标恢复失败：" + ex.Message;
+            }
+            finally
+            {
+                try
+                {
+                    if (process != null && !process.HasExited) process.Kill();
+                }
+                catch { }
+                try
+                {
+                    if (process != null) process.Dispose();
+                }
+                catch { }
+            }
+        }
+
+        private static bool ContainsJsonError(string json)
+        {
+            return Regex.IsMatch(json ?? "", "\"error\"\\s*:\\s*\\{", RegexOptions.IgnoreCase);
+        }
+
+        private static string RpcErrorMessage(string json)
+        {
+            var error = ExtractJsonObject(json, "error");
+            var message = MatchJsonString(error, "message");
+            return string.IsNullOrEmpty(message) ? "app-server 返回错误。" : message;
         }
 
         private void ServeStatic(HttpListenerContext context)
@@ -2771,6 +3612,23 @@ namespace CodexPlusLocalHelper
                 case ".md": return "text/markdown; charset=utf-8";
                 default: return "application/octet-stream";
             }
+        }
+
+        private static string OauthCallbackHtml(string error, string callbackUrl)
+        {
+            var ok = string.IsNullOrEmpty(error);
+            var title = ok ? "授权已接收" : "授权失败";
+            var detail = ok
+                ? "Codex Dock 正在自动解析回调，可以关闭这个页面。"
+                : "授权服务返回错误：" + error;
+            return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+                + "<title>" + HtmlEscape(title) + "</title>"
+                + "<style>body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f6f6f6;color:#111;display:grid;place-items:center;min-height:100vh}"
+                + ".card{width:min(480px,calc(100vw - 32px));background:#fff;border:1px solid #ddd;border-radius:16px;padding:24px;box-shadow:0 18px 60px rgba(0,0,0,.12)}"
+                + "h1{font-size:22px;margin:0 0 8px}p{margin:0;color:#666;line-height:1.6}button{margin-top:18px;height:36px;border:1px solid #ddd;border-radius:999px;background:#111;color:#fff;padding:0 18px;font:inherit;cursor:pointer}</style>"
+                + "</head><body><main class=\"card\"><h1>" + HtmlEscape(title) + "</h1><p>" + HtmlEscape(detail) + "</p><button onclick=\"window.close()\">关闭页面</button></main>"
+                + "<script>(function(){var msg={type:'codex-dock-oauth-callback',url:" + JsString(callbackUrl) + "};function send(){try{if(window.opener&&!window.opener.closed)window.opener.postMessage(msg,'*');}catch(e){}}send();setTimeout(send,500);setTimeout(send,1500);})();</script>"
+                + "</body></html>";
         }
 
         private bool IsAllowedOrigin(HttpListenerRequest request)
@@ -2916,7 +3774,242 @@ namespace CodexPlusLocalHelper
                 BeginInvoke(new Action<string>(Log), text);
                 return;
             }
-            _logBox.AppendText("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + text + Environment.NewLine);
+            var now = DateTime.Now;
+            var uiLine = "[" + now.ToString("HH:mm:ss") + "] " + text;
+            WriteHelperLogLine("[" + now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + text);
+            _logBox.AppendText(uiLine + Environment.NewLine);
+        }
+
+        private void RunOnUi(Action action)
+        {
+            try
+            {
+                if (IsDisposed) return;
+                if (InvokeRequired)
+                {
+                    BeginInvoke(action);
+                    return;
+                }
+                action();
+            }
+            catch { }
+        }
+
+        private void ShowOperationProgress(string title, string detail, int percent)
+        {
+            RunOnUi(delegate
+            {
+                lock (_operationProgressLock)
+                {
+                    if (_operationProgressForm == null || _operationProgressForm.IsDisposed)
+                    {
+                        _operationProgressForm = new OperationProgressForm();
+                    }
+                    _operationProgressForm.SetStep(title, detail, percent);
+                    if (!_operationProgressForm.Visible)
+                    {
+                        if (Visible && WindowState != FormWindowState.Minimized)
+                        {
+                            _operationProgressForm.StartPosition = FormStartPosition.CenterParent;
+                            _operationProgressForm.Show(this);
+                        }
+                        else
+                        {
+                            _operationProgressForm.StartPosition = FormStartPosition.CenterScreen;
+                            _operationProgressForm.Show();
+                        }
+                    }
+                    _operationProgressForm.Activate();
+                }
+            });
+        }
+
+        private void UpdateOperationProgress(int percent, string detail)
+        {
+            RunOnUi(delegate
+            {
+                lock (_operationProgressLock)
+                {
+                    if (_operationProgressForm == null || _operationProgressForm.IsDisposed) return;
+                    _operationProgressForm.SetStep("", detail, percent);
+                }
+            });
+        }
+
+        private void CompleteOperationProgress(bool success, string detail)
+        {
+            RunOnUi(delegate
+            {
+                OperationProgressForm form = null;
+                lock (_operationProgressLock)
+                {
+                    if (_operationProgressForm == null || _operationProgressForm.IsDisposed) return;
+                    form = _operationProgressForm;
+                    form.SetCompleted(success, detail);
+                }
+
+                var timer = new System.Windows.Forms.Timer();
+                timer.Interval = success ? 900 : 2600;
+                timer.Tick += delegate
+                {
+                    timer.Stop();
+                    timer.Dispose();
+                    lock (_operationProgressLock)
+                    {
+                        if (form != null && !form.IsDisposed)
+                        {
+                            form.Close();
+                        }
+                        if (_operationProgressForm == form)
+                        {
+                            _operationProgressForm = null;
+                        }
+                    }
+                };
+                timer.Start();
+            });
+        }
+
+        private static void WriteHelperLogLine(string line)
+        {
+            try
+            {
+                lock (HelperLogFileLock)
+                {
+                    var path = HelperLogPath();
+                    RotateHelperLogIfNeeded(path);
+                    File.AppendAllText(path, line + Environment.NewLine, new UTF8Encoding(false));
+                }
+            }
+            catch { }
+        }
+
+        private static void RotateHelperLogIfNeeded(string path)
+        {
+            try
+            {
+                var file = new FileInfo(path);
+                if (!file.Exists || file.Length < HelperLogMaxBytes) return;
+
+                var oldest = path + "." + HelperLogBackups.ToString(CultureInfo.InvariantCulture);
+                if (File.Exists(oldest)) File.Delete(oldest);
+                for (var i = HelperLogBackups - 1; i >= 1; i--)
+                {
+                    var source = path + "." + i.ToString(CultureInfo.InvariantCulture);
+                    var target = path + "." + (i + 1).ToString(CultureInfo.InvariantCulture);
+                    if (!File.Exists(source)) continue;
+                    if (File.Exists(target)) File.Delete(target);
+                    File.Move(source, target);
+                }
+                File.Move(path, path + ".1");
+            }
+            catch { }
+        }
+
+        private sealed class OperationProgressForm : Form
+        {
+            private readonly Label _titleLabel;
+            private readonly Label _detailLabel;
+            private readonly Label _percentLabel;
+            private readonly ProgressBar _progressBar;
+
+            public OperationProgressForm()
+            {
+                Text = "Codex Dock Helper";
+                Width = 460;
+                Height = 210;
+                MinimumSize = new Size(420, 190);
+                MaximumSize = new Size(520, 240);
+                FormBorderStyle = FormBorderStyle.FixedDialog;
+                MaximizeBox = false;
+                MinimizeBox = false;
+                ShowInTaskbar = false;
+                BackColor = Color.FromArgb(13, 17, 12);
+                ForeColor = Color.FromArgb(243, 241, 232);
+                Font = new Font("Microsoft YaHei UI", 9F);
+                Padding = new Padding(22);
+
+                var badge = new Label
+                {
+                    Text = "Doc",
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Font = new Font("Segoe UI", 13F, FontStyle.Bold),
+                    ForeColor = Color.FromArgb(229, 255, 106),
+                    BackColor = Color.FromArgb(31, 38, 24),
+                    Location = new Point(22, 22),
+                    Size = new Size(48, 48),
+                };
+                Controls.Add(badge);
+
+                _titleLabel = new Label
+                {
+                    Text = "正在执行",
+                    Font = new Font("Microsoft YaHei UI", 13F, FontStyle.Bold),
+                    ForeColor = Color.FromArgb(243, 241, 232),
+                    BackColor = Color.Transparent,
+                    Location = new Point(86, 22),
+                    Size = new Size(320, 28),
+                    AutoEllipsis = true,
+                };
+                Controls.Add(_titleLabel);
+
+                _detailLabel = new Label
+                {
+                    Text = "",
+                    Font = new Font("Microsoft YaHei UI", 9F, FontStyle.Regular),
+                    ForeColor = Color.FromArgb(181, 190, 169),
+                    BackColor = Color.Transparent,
+                    Location = new Point(88, 54),
+                    Size = new Size(322, 42),
+                    AutoEllipsis = true,
+                };
+                Controls.Add(_detailLabel);
+
+                _percentLabel = new Label
+                {
+                    Text = "0%",
+                    Font = new Font("Segoe UI", 10F, FontStyle.Bold),
+                    ForeColor = Color.FromArgb(86, 218, 197),
+                    BackColor = Color.Transparent,
+                    TextAlign = ContentAlignment.MiddleRight,
+                    Location = new Point(334, 108),
+                    Size = new Size(76, 22),
+                };
+                Controls.Add(_percentLabel);
+
+                _progressBar = new ProgressBar
+                {
+                    Style = ProgressBarStyle.Continuous,
+                    Minimum = 0,
+                    Maximum = 100,
+                    Value = 0,
+                    Location = new Point(22, 136),
+                    Size = new Size(388, 18),
+                    Anchor = AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
+                };
+                Controls.Add(_progressBar);
+            }
+
+            public void SetStep(string title, string detail, int percent)
+            {
+                if (!string.IsNullOrWhiteSpace(title)) _titleLabel.Text = title;
+                _detailLabel.Text = detail ?? "";
+                var value = Math.Max(0, Math.Min(100, percent));
+                _progressBar.Style = ProgressBarStyle.Continuous;
+                _progressBar.Value = value;
+                _percentLabel.Text = value.ToString(CultureInfo.InvariantCulture) + "%";
+                _percentLabel.ForeColor = Color.FromArgb(86, 218, 197);
+            }
+
+            public void SetCompleted(bool success, string detail)
+            {
+                _titleLabel.Text = success ? "任务已完成" : "任务失败";
+                _detailLabel.Text = detail ?? "";
+                _progressBar.Style = ProgressBarStyle.Continuous;
+                _progressBar.Value = success ? 100 : Math.Max(6, _progressBar.Value);
+                _percentLabel.Text = success ? "100%" : "失败";
+                _percentLabel.ForeColor = success ? Color.FromArgb(86, 218, 197) : Color.FromArgb(255, 116, 116);
+            }
         }
 
         private sealed class AuthWriteResult
@@ -2931,6 +4024,10 @@ namespace CodexPlusLocalHelper
             public string CloudBase = "";
             public string DeviceToken = "";
             public string DeviceKey = "";
+            public string DeviceTokenExpiresAt = "";
+            public string CloudLastSyncAt = "";
+            public string LastSwitchAt = "";
+            public string LastSwitchLabel = "";
             public int FiveHourThreshold = 5;
             public int OneWeekThreshold = 5;
             public int PollSeconds = 15;
@@ -2938,7 +4035,7 @@ namespace CodexPlusLocalHelper
             public int GlobalCooldownSeconds = 180;
             public int CooldownMinutes = 10;
             public bool OnlyWhenIdle = true;
-            public int IdleSeconds = 30;
+            public int IdleSeconds = 10;
             public int ActivityQuietSeconds = 120;
             public int CpuQuietSeconds = 90;
             public int CpuBusyPercent = 3;
@@ -2951,6 +4048,10 @@ namespace CodexPlusLocalHelper
                     CloudBase = CloudBase,
                     DeviceToken = DeviceToken,
                     DeviceKey = DeviceKey,
+                    DeviceTokenExpiresAt = DeviceTokenExpiresAt,
+                    CloudLastSyncAt = CloudLastSyncAt,
+                    LastSwitchAt = LastSwitchAt,
+                    LastSwitchLabel = LastSwitchLabel,
                     FiveHourThreshold = FiveHourThreshold,
                     OneWeekThreshold = OneWeekThreshold,
                     PollSeconds = PollSeconds,
@@ -2979,7 +4080,7 @@ namespace CodexPlusLocalHelper
                 if (GlobalCooldownSeconds > 1800) GlobalCooldownSeconds = 1800;
                 if (CooldownMinutes < 0) CooldownMinutes = 0;
                 if (CooldownMinutes > 240) CooldownMinutes = 240;
-                if (IdleSeconds < 15) IdleSeconds = 15;
+                if (IdleSeconds < 10) IdleSeconds = 10;
                 if (IdleSeconds > 1800) IdleSeconds = 1800;
                 if (ActivityQuietSeconds < 30) ActivityQuietSeconds = 30;
                 if (ActivityQuietSeconds > 1800) ActivityQuietSeconds = 1800;
@@ -3005,6 +4106,10 @@ namespace CodexPlusLocalHelper
             public string ThreadId = "";
             public string Url = "";
             public string Source = "";
+            public string Title = "";
+            public string Cwd = "";
+            public bool IsGoal;
+            public string Reason = "";
         }
 
         private sealed class ProtocolProbeResult
@@ -3024,10 +4129,11 @@ namespace CodexPlusLocalHelper
             private const int SQLITE_ROW = 100;
             private const int SQLITE_DONE = 101;
             private const int SQLITE_OPEN_READONLY = 0x00000001;
-            private const int InitialBackfillRows = 1000;
+            private const int InitialBackfillRows = 12000;
             private const int InitialBackfillSeconds = 900;
-            private const int IncrementalLimit = 600;
-            private const int IdleStableSeconds = 30;
+            private const int IncrementalLimit = 8000;
+            private const int IdleStableSeconds = 10;
+            private const int OpenTaskSilentCloseSeconds = 75;
             private const int LongTaskSeconds = 1800;
             private const int PendingTriggerSeconds = 1800;
 
@@ -3035,6 +4141,7 @@ namespace CodexPlusLocalHelper
             private long _lastSeenLogId;
             private int _taskEventCount;
             private bool _openTask;
+            private bool _openToolCall;
             private DateTime _openTaskSince = DateTime.MinValue;
             private DateTime _lastTaskAt = DateTime.MinValue;
             private string _lastTaskEvent = "";
@@ -3042,6 +4149,13 @@ namespace CodexPlusLocalHelper
             private string _pendingSwitchReason = "";
             private string _pendingSwitchType = "";
             private string _lastError = "";
+
+            public void ClearPendingSwitch()
+            {
+                _pendingSwitchReason = "";
+                _pendingSwitchType = "";
+                _lastTriggerAt = DateTime.MinValue;
+            }
 
             [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
             private static extern int sqlite3_open_v2(string filename, out IntPtr db, int flags, IntPtr vfs);
@@ -3073,33 +4187,163 @@ namespace CodexPlusLocalHelper
             [DllImport("winsqlite3.dll", CallingConvention = CallingConvention.Cdecl)]
             private static extern int sqlite3_busy_timeout(IntPtr db, int ms);
 
-            public static string TryReadMostRecentThreadId(out string source)
+            public static CodexRestoreTarget TryReadBestRestoreTarget(out string source)
             {
                 source = "";
                 try
                 {
                     var userCodex = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
                     var logsPath = Path.Combine(userCodex, "logs_2.sqlite");
+                    var statePath = Path.Combine(userCodex, "state_5.sqlite");
+
+                    var taskThread = TryReadScalarString(logsPath, RecentTaskThreadSql());
+                    if (IsThreadId(taskThread))
+                    {
+                        var target = TryReadStateTargetById(statePath, taskThread, "logs_2.sqlite task-thread", "最近任务日志线程");
+                        if (target != null)
+                        {
+                            source = target.Source;
+                            return target;
+                        }
+
+                        source = "logs_2.sqlite task-thread";
+                        return new CodexRestoreTarget
+                        {
+                            ThreadId = taskThread.Trim(),
+                            Source = source,
+                            Reason = "最近任务日志线程"
+                        };
+                    }
+
+                    var goalTarget = TryReadBestStateTarget(statePath, true);
+                    if (goalTarget != null)
+                    {
+                        source = goalTarget.Source;
+                        return goalTarget;
+                    }
+
                     var fromLogs = TryReadScalarString(logsPath, "SELECT thread_id FROM logs WHERE thread_id IS NOT NULL AND thread_id <> '' ORDER BY id DESC LIMIT 1");
                     if (IsThreadId(fromLogs))
                     {
+                        var target = TryReadStateTargetById(statePath, fromLogs, "logs_2.sqlite", "最近日志线程");
+                        if (target != null)
+                        {
+                            source = target.Source;
+                            return target;
+                        }
+
                         source = "logs_2.sqlite";
-                        return fromLogs;
+                        return new CodexRestoreTarget
+                        {
+                            ThreadId = fromLogs.Trim(),
+                            Source = source,
+                            Reason = "最近日志线程"
+                        };
                     }
 
-                    var statePath = Path.Combine(userCodex, "state_5.sqlite");
-                    var fromState = TryReadScalarString(statePath, "SELECT id FROM threads ORDER BY updated_at DESC LIMIT 1");
-                    if (IsThreadId(fromState))
+                    var latestTarget = TryReadBestStateTarget(statePath, false);
+                    if (latestTarget != null)
                     {
-                        source = "state_5.sqlite";
-                        return fromState;
+                        source = latestTarget.Source;
+                        return latestTarget;
                     }
                 }
                 catch
                 {
                     source = "";
                 }
-                return "";
+                return null;
+            }
+
+            public static string TryReadMostRecentThreadId(out string source)
+            {
+                var target = TryReadBestRestoreTarget(out source);
+                return target == null ? "" : target.ThreadId;
+            }
+
+            private static string RecentTaskThreadSql()
+            {
+                return "SELECT thread_id FROM logs WHERE thread_id IS NOT NULL AND thread_id <> ''"
+                    + " AND (feedback_log_body LIKE '%op.dispatch.user_input%'"
+                    + " OR feedback_log_body LIKE '%session_task.turn%'"
+                    + " OR feedback_log_body LIKE '%thread/goal/set%'"
+                    + " OR feedback_log_body LIKE '%event.kind=response.created%'"
+                    + " OR feedback_log_body LIKE '%event.kind=response.completed%'"
+                    + " OR feedback_log_body LIKE '%event.kind=response.failed%'"
+                    + " OR feedback_log_body LIKE '%turn/completed%'"
+                    + " OR feedback_log_body LIKE '%app-server event: item/started%'"
+                    + " OR feedback_log_body LIKE '%app-server event: item/completed%')"
+                    + " ORDER BY id DESC LIMIT 1";
+            }
+
+            private static CodexRestoreTarget TryReadStateTargetById(string statePath, string threadId, string source, string reason)
+            {
+                if (!IsThreadId(threadId)) return null;
+                var where = "id = '" + SqlString(threadId.Trim()) + "'";
+                return TryReadStateTarget(statePath, where, "updated_at DESC", source, reason);
+            }
+
+            private static CodexRestoreTarget TryReadBestStateTarget(string statePath, bool goalOnly)
+            {
+                var goalExpr = GoalTextSql();
+                var where = "(archived IS NULL OR archived = 0)";
+                if (goalOnly) where += " AND " + goalExpr + " LIKE '%/goal%'";
+                return TryReadStateTarget(
+                    statePath,
+                    where,
+                    "CASE WHEN " + goalExpr + " LIKE '%/goal%' THEN 1 ELSE 0 END DESC, updated_at DESC",
+                    goalOnly ? "state_5.sqlite goal-thread" : "state_5.sqlite latest-thread",
+                    goalOnly ? "最近目标任务线程" : "最近状态线程");
+            }
+
+            private static CodexRestoreTarget TryReadStateTarget(string statePath, string where, string orderBy, string source, string reason)
+            {
+                if (string.IsNullOrWhiteSpace(statePath) || !File.Exists(statePath)) return null;
+                try
+                {
+                    using (var reader = new SqliteLogReader(statePath))
+                    {
+                        var goalExpr = GoalTextSql();
+                        var sql = "SELECT id, COALESCE(title,''), COALESCE(cwd,''), "
+                            + "CASE WHEN " + goalExpr + " LIKE '%/goal%' THEN '1' ELSE '0' END "
+                            + "FROM threads WHERE " + where + " ORDER BY " + orderBy + " LIMIT 1";
+                        foreach (var row in reader.QueryTextRows(sql, 4))
+                        {
+                            if (row.Length < 4 || !IsThreadId(row[0])) continue;
+                            return new CodexRestoreTarget
+                            {
+                                ThreadId = row[0].Trim(),
+                                Title = row[1],
+                                Cwd = StripLongPathPrefix(row[2]),
+                                IsGoal = string.Equals(row[3], "1", StringComparison.OrdinalIgnoreCase),
+                                Source = source,
+                                Reason = reason
+                            };
+                        }
+                    }
+                }
+                catch
+                {
+                    return null;
+                }
+                return null;
+            }
+
+            private static string GoalTextSql()
+            {
+                return "lower(COALESCE(title,'') || ' ' || COALESCE(first_user_message,'') || ' ' || COALESCE(preview,''))";
+            }
+
+            private static string SqlString(string value)
+            {
+                return (value ?? "").Replace("'", "''");
+            }
+
+            private static string StripLongPathPrefix(string value)
+            {
+                if (string.IsNullOrEmpty(value)) return "";
+                if (value.StartsWith(@"\\?\", StringComparison.OrdinalIgnoreCase)) return value.Substring(4);
+                return value;
             }
 
             private static string TryReadScalarString(string path, string sql)
@@ -3142,13 +4386,21 @@ namespace CodexPlusLocalHelper
                             var since = UnixSeconds(DateTime.UtcNow.AddSeconds(-InitialBackfillSeconds));
                             var maxId = reader.QueryScalarLong("SELECT COALESCE(MAX(id),0) FROM logs");
                             var startId = Math.Max(0, maxId - InitialBackfillRows);
-                            ProcessRows(reader.QueryRows("SELECT id,ts,ts_nanos,target,feedback_log_body FROM logs WHERE id >= " + startId.ToString(CultureInfo.InvariantCulture) + " OR ts >= " + since.ToString(CultureInfo.InvariantCulture) + " ORDER BY id ASC LIMIT " + (InitialBackfillRows * 3).ToString(CultureInfo.InvariantCulture)));
+                            ProcessRows(reader.QueryRows("SELECT id,ts,ts_nanos,target,feedback_log_body FROM (SELECT id,ts,ts_nanos,target,feedback_log_body FROM logs WHERE id >= " + startId.ToString(CultureInfo.InvariantCulture) + " OR ts >= " + since.ToString(CultureInfo.InvariantCulture) + " ORDER BY id DESC LIMIT " + InitialBackfillRows.ToString(CultureInfo.InvariantCulture) + ") ORDER BY id ASC"));
                             _initialized = true;
                             if (_lastSeenLogId <= 0) _lastSeenLogId = maxId;
                         }
                         else
                         {
-                            ProcessRows(reader.QueryRows("SELECT id,ts,ts_nanos,target,feedback_log_body FROM logs WHERE id > " + _lastSeenLogId.ToString(CultureInfo.InvariantCulture) + " ORDER BY id ASC LIMIT " + IncrementalLimit.ToString(CultureInfo.InvariantCulture)));
+                            var maxId = reader.QueryScalarLong("SELECT COALESCE(MAX(id),0) FROM logs");
+                            if (maxId - _lastSeenLogId > IncrementalLimit)
+                            {
+                                ProcessRows(reader.QueryRows("SELECT id,ts,ts_nanos,target,feedback_log_body FROM (SELECT id,ts,ts_nanos,target,feedback_log_body FROM logs WHERE id > " + _lastSeenLogId.ToString(CultureInfo.InvariantCulture) + " ORDER BY id DESC LIMIT " + IncrementalLimit.ToString(CultureInfo.InvariantCulture) + ") ORDER BY id ASC"));
+                            }
+                            else
+                            {
+                                ProcessRows(reader.QueryRows("SELECT id,ts,ts_nanos,target,feedback_log_body FROM logs WHERE id > " + _lastSeenLogId.ToString(CultureInfo.InvariantCulture) + " ORDER BY id ASC LIMIT " + IncrementalLimit.ToString(CultureInfo.InvariantCulture)));
+                            }
                         }
                     }
 
@@ -3171,6 +4423,15 @@ namespace CodexPlusLocalHelper
                     if (classification.Kind == "none") continue;
 
                     var eventAt = RowTime(row);
+                    if (classification.StartsTool)
+                    {
+                        _openToolCall = true;
+                    }
+                    if (classification.EndsTool)
+                    {
+                        _openToolCall = false;
+                    }
+
                     if (classification.Kind == "trigger")
                     {
                         _pendingSwitchReason = classification.Label;
@@ -3179,13 +4440,26 @@ namespace CodexPlusLocalHelper
                         _lastTaskAt = eventAt;
                         _lastTaskEvent = classification.Label;
                         _taskEventCount++;
-                        _openTask = false;
+                        if (classification.EndsTask)
+                        {
+                            _openTask = false;
+                            _openToolCall = false;
+                        }
+                        continue;
+                    }
+
+                    if (classification.Kind == "tool_complete")
+                    {
+                        _lastTaskAt = eventAt;
+                        _lastTaskEvent = classification.Label;
+                        _taskEventCount++;
                         continue;
                     }
 
                     if (classification.Kind == "complete")
                     {
                         _openTask = false;
+                        _openToolCall = false;
                         _lastTaskAt = eventAt;
                         _lastTaskEvent = classification.Label;
                         _taskEventCount++;
@@ -3212,10 +4486,13 @@ namespace CodexPlusLocalHelper
                 var idleSeconds = _lastTaskAt == DateTime.MinValue ? InitialBackfillSeconds : Math.Max(0, (now - _lastTaskAt).TotalSeconds);
                 var pendingReason = _pendingSwitchReason;
                 var pendingType = _pendingSwitchType;
+                var pendingAt = _lastTriggerAt;
                 if (_lastTriggerAt != DateTime.MinValue && (now - _lastTriggerAt).TotalSeconds > PendingTriggerSeconds)
                 {
+                    ClearPendingSwitch();
                     pendingReason = "";
                     pendingType = "";
+                    pendingAt = DateTime.MinValue;
                 }
 
                 var status = new CodexRuntimeStatus
@@ -3231,8 +4508,17 @@ namespace CodexPlusLocalHelper
                     IdleSeconds = idleSeconds,
                     PendingSwitchReason = pendingReason,
                     PendingSwitchType = pendingType,
+                    PendingSwitchAt = pendingAt,
                     CheckedAt = now
                 };
+
+                if (_openTask && !_openToolCall && idleSeconds >= OpenTaskSilentCloseSeconds)
+                {
+                    _openTask = false;
+                    status.LastTaskEvent = string.IsNullOrEmpty(_lastTaskEvent) ? "静默闭合" : _lastTaskEvent + "（静默闭合）";
+                    status.ActiveThreadCount = 0;
+                    status.ThreadCount = 0;
+                }
 
                 if (_openTask)
                 {
@@ -3260,7 +4546,7 @@ namespace CodexPlusLocalHelper
                 {
                     status.State = "cooling";
                     status.Label = "冷却中";
-                    status.Detail = "任务刚结束，等待稳定空闲。";
+                    status.Detail = "最近有任务日志，等待稳定空闲。";
                     status.SafeToSwitch = false;
                     status.StableSeconds = idleSeconds;
                     return status;
@@ -3286,6 +4572,7 @@ namespace CodexPlusLocalHelper
                 status.IdleSeconds = -1;
                 status.PendingSwitchReason = _pendingSwitchReason;
                 status.PendingSwitchType = _pendingSwitchType;
+                status.PendingSwitchAt = _lastTriggerAt;
                 status.SafeToSwitch = false;
                 return status;
             }
@@ -3296,18 +4583,37 @@ namespace CodexPlusLocalHelper
                 var b = (body ?? "").ToLowerInvariant();
                 if (string.IsNullOrEmpty(t) && string.IsNullOrEmpty(b)) return LogClassification.None();
 
-                var trigger = IsGeneratedContentEvent(t, b) ? LogClassification.None() : ClassifyTrigger(b);
-                if (trigger.Kind != "none") return trigger;
+                if (IsToolArgumentPayloadEvent(b))
+                {
+                    return LogClassification.Activity("工具参数生成中");
+                }
+
+                if (IsToolEchoEvent(t, b)) return LogClassification.None();
+
+                var visibleLimit = ClassifyVisibleLimitBanner(t, b);
+                if (visibleLimit.Kind != "none") return visibleLimit;
+
+                if (ContainsAny(b,
+                    "event.kind=response.failed",
+                    "\"type\":\"response.failed\""))
+                {
+                    if (!IsTrustedResponseFailureEvent(t, b)) return LogClassification.None();
+                    var trigger = ClassifyTrigger(t, b);
+                    if (trigger.Kind != "none")
+                    {
+                        trigger.EndsTask = true;
+                        return trigger;
+                    }
+                    return LogClassification.Complete("任务失败");
+                }
 
                 if (ContainsAny(b,
                     "event.kind=response.completed",
-                    "event.kind=response.failed",
                     "\"type\":\"response.completed\"",
-                    "\"type\":\"response.failed\"",
                     "turn/completed",
                     "turn.completed"))
                 {
-                    return LogClassification.Complete(ContainsAny(b, "failed", "error") ? "任务失败" : "任务完成");
+                    return LogClassification.Complete("任务完成");
                 }
 
                 if (ContainsAny(b,
@@ -3324,30 +4630,151 @@ namespace CodexPlusLocalHelper
 
                 if (ContainsAny(b,
                     "output item item=functioncall",
-                    "otel.name=\"function_call\"",
-                    "tool_name=\"shell_command\"",
-                    "tool_name=\"exec_command\"",
-                    "shell_command",
-                    "exec_command"))
+                    "\"type\":\"response.output_item.done\""))
                 {
-                    if (t == "codex_core::stream_events_utils" || t == "codex_core::spawn" || t.IndexOf("codex_api::", StringComparison.OrdinalIgnoreCase) >= 0)
+                    if (ContainsAny(b, "functioncall", "\"type\":\"function_call\"")
+                        && (t == "codex_core::stream_events_utils" || t == "codex_core::spawn" || t.IndexOf("codex_api::", StringComparison.OrdinalIgnoreCase) >= 0 || t == "log"))
                     {
-                        return LogClassification.Activity("工具执行中");
+                        return LogClassification.ToolStarted("工具执行中");
                     }
                 }
 
-                if (ContainsAny(b,
-                    "session_task.turn",
-                    "run_sampling_request",
-                    "stream_request:model_client.stream_responses"))
+                if (t == "codex_app_server::outgoing_message" && ContainsAny(b, "app-server event: item/started"))
                 {
-                    if (t.IndexOf("codex_api::", StringComparison.OrdinalIgnoreCase) >= 0 || t.IndexOf("codex_core::", StringComparison.OrdinalIgnoreCase) >= 0)
+                    return LogClassification.Activity("任务进行中");
+                }
+
+                if (t == "codex_app_server::outgoing_message" && ContainsAny(b, "app-server event: item/completed"))
+                {
+                    return LogClassification.ToolComplete("工具或消息完成");
+                }
+
+                if (ContainsAny(b,
+                    "dispatch_tool_call_with_code_mode_result",
+                    "handle_tool_call_with_source:dispatch_tool_call",
+                    "tool call result",
+                    "tool_call_result"))
+                {
+                    if (t.IndexOf("codex_core::", StringComparison.OrdinalIgnoreCase) >= 0 || t.IndexOf("codex_otel.", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
-                        return LogClassification.Activity("任务进行中");
+                        return LogClassification.ToolComplete("工具完成");
                     }
                 }
 
                 return LogClassification.None();
+            }
+
+            private static bool IsToolArgumentPayloadEvent(string body)
+            {
+                return ContainsAny(body,
+                    "event.kind=response.function_call_arguments.delta",
+                    "event.kind=response.function_call_arguments.done",
+                    "\"type\":\"response.function_call_arguments.delta\"",
+                    "\"type\":\"response.function_call_arguments.done\"");
+            }
+
+            private static bool ShouldInspectStandaloneTrigger(string target, string body)
+            {
+                if (IsGeneratedContentEvent(target, body)) return false;
+                if (IsToolEchoEvent(target, body)) return false;
+                if (ContainsAny(body,
+                    "codex.user_prompt",
+                    "op.dispatch.user_input",
+                    "codex.websocket_request",
+                    "message_from_assistant",
+                    "output item item=message",
+                    "tool_name=\"shell_command\"",
+                    "tool_name=\"exec_command\""))
+                {
+                    return false;
+                }
+                if (target == "codex_core::spawn") return false;
+                if (target == "log" && !ContainsAny(body, "response.failed", "request failed", "exception", "api error", "api_error")) return false;
+                return true;
+            }
+
+            private static bool IsToolEchoEvent(string target, string body)
+            {
+                var t = (target ?? "").ToLowerInvariant();
+                var b = body ?? "";
+                if (ContainsAny(b,
+                    "otel.name=\"custom_tool_call\"",
+                    "otel.name=custom_tool_call",
+                    "toolcall:",
+                    "toolcall ",
+                    "tool_name=",
+                    "tool_name=\"",
+                    "tool_name:",
+                    "tool_name=shell_command",
+                    "tool_name=exec_command",
+                    "toolcall: shell_command",
+                    "toolcall: exec_command",
+                    "toolcall: apply_patch",
+                    "toolcall: update_plan",
+                    "event.name=\"codex.tool_result\"",
+                    "event.name=codex.tool_result",
+                    "spawn_child_async",
+                    "dispatch_tool_call",
+                    "handle_tool_call",
+                    "function_call_arguments",
+                    "\"command\":\"",
+                    "\"command\": \"",
+                    "\\\"command\\\":",
+                    "tool_uses",
+                    "recipient_name",
+                    "functions.shell_command",
+                    "multi_tool_use.parallel",
+                    "apply_patch",
+                    "update_plan"))
+                {
+                    return true;
+                }
+                return t == "codex_core::spawn";
+            }
+
+            private static LogClassification ClassifyVisibleLimitBanner(string target, string body)
+            {
+                if (string.IsNullOrEmpty(body)) return LogClassification.None();
+                if (!IsTrustedVisibleLimitEvent(target, body)) return LogClassification.None();
+                if (ContainsAny(body,
+                    "codex.user_prompt",
+                    "op.dispatch.user_input",
+                    "thread/goal/set",
+                    "\"role\":\"user\"",
+                    "\"role\": \"user\""))
+                {
+                    return LogClassification.None();
+                }
+                var hasCanonicalLimit = ContainsAny(body,
+                    "you've hit your usage limit",
+                    "you’ve hit your usage limit",
+                    "you have hit your usage limit",
+                    "you've reached your usage limit",
+                    "you’ve reached your usage limit",
+                    "temporarily unavailable because of usage limits");
+                var hasCodexUsageLink = ContainsAny(body,
+                    "chatgpt.com/codex/settings/usage",
+                    "upgrade to pro");
+                if (hasCanonicalLimit && hasCodexUsageLink)
+                {
+                    return LogClassification.Trigger("额度或限流触发，任务结束后切换", "quota");
+                }
+                return LogClassification.None();
+            }
+
+            private static bool IsTrustedVisibleLimitEvent(string target, string body)
+            {
+                if (IsToolEchoEvent(target, body)) return false;
+                if (IsGeneratedContentEvent(target, body)) return false;
+                var t = (target ?? "").ToLowerInvariant();
+                var b = body ?? "";
+                if (t.IndexOf("codex_otel.", StringComparison.OrdinalIgnoreCase) >= 0
+                    && ContainsAny(b, "event.name=\"codex.sse_event\"", "event.name=codex.sse_event", "error.message="))
+                {
+                    return true;
+                }
+                if (t == "codex_core::session::turn" && ContainsAny(b, "turn error:")) return true;
+                return false;
             }
 
             private static bool IsGeneratedContentEvent(string target, string body)
@@ -3375,7 +4802,7 @@ namespace CodexPlusLocalHelper
                 return false;
             }
 
-            private static LogClassification ClassifyTrigger(string body)
+            private static LogClassification ClassifyTrigger(string target, string body)
             {
                 if (string.IsNullOrEmpty(body)) return LogClassification.None();
 
@@ -3386,7 +4813,13 @@ namespace CodexPlusLocalHelper
                     return LogClassification.Trigger("账号疑似停用或封禁", "account_disabled");
                 }
 
-                if (ContainsAny(body, "token has been invalidated", "authentication token has been invalidated")
+                if (ContainsAny(body,
+                        "token has been invalidated",
+                        "authentication token has been invalidated",
+                        "refresh token was already used",
+                        "access token could not be refreshed",
+                        "could not be refreshed",
+                        "invalid_grant")
                     || ContainsAny(body, "invalid_request_error")
                     || ContainsHttpStatus(body, "401"))
                 {
@@ -3403,36 +4836,110 @@ namespace CodexPlusLocalHelper
                 return LogClassification.None();
             }
 
+            private static bool IsTrustedResponseFailureEvent(string target, string body)
+            {
+                if (IsToolEchoEvent(target, body)) return false;
+                if (IsGeneratedContentEvent(target, body)) return false;
+                if (IsTaskTurnSummaryOnlyEvent(body)) return false;
+                if (ContainsAny(body,
+                    "codex.user_prompt",
+                    "op.dispatch.user_input",
+                    "thread/goal/set",
+                    "\"role\":\"user\"",
+                    "\"role\": \"user\"",
+                    "\"role\":\"assistant\"",
+                    "\"role\": \"assistant\"",
+                    "message_from_assistant",
+                    "output item item=message"))
+                {
+                    return false;
+                }
+
+                var t = (target ?? "").ToLowerInvariant();
+                if (t.IndexOf("codex_otel.", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                if (t.IndexOf("codex_api::", StringComparison.OrdinalIgnoreCase) >= 0
+                    && ContainsAny(body, "event.name=\"codex.sse_event\"", "event.name=codex.sse_event", "error.message=", "\"error\":", "\"error\": {"))
+                {
+                    return true;
+                }
+                return false;
+            }
+
+            private static bool IsTaskTurnSummaryOnlyEvent(string body)
+            {
+                if (!ContainsAny(body,
+                    "otel.name=\"session_task.turn\"",
+                    "otel.name=session_task.turn",
+                    "otel.name=\"session_task.run\"",
+                    "session_task.turn"))
+                {
+                    return false;
+                }
+
+                return !ContainsAny(body,
+                    "event.name=\"codex.sse_event\"",
+                    "event.name=codex.sse_event",
+                    "error.message=",
+                    "http.status_code=",
+                    "status_code=",
+                    "\"status\":",
+                    "\"error\":",
+                    "\"error\": {");
+            }
+
             private static bool LooksLikeAccountDisabled(string body)
             {
                 if (string.IsNullOrEmpty(body)) return false;
-                return Regex.IsMatch(body, @"\b(account|user|organization)\b.{0,48}\b(deactivated|disabled|suspended|blocked)\b", RegexOptions.IgnoreCase)
-                    || Regex.IsMatch(body, @"\b(deactivated|disabled|suspended|blocked)\b.{0,48}\b(account|user|organization)\b", RegexOptions.IgnoreCase)
-                    || ContainsAny(body, "account has been blocked", "account_deactivated", "account_disabled", "organization_deactivated", "organization_disabled");
+                return ContainsAny(body,
+                    "account_deactivated",
+                    "account_disabled",
+                    "organization_deactivated",
+                    "organization_disabled",
+                    "account has been blocked",
+                    "account is blocked",
+                    "account was blocked",
+                    "account has been deactivated",
+                    "account is deactivated",
+                    "account has been disabled",
+                    "account is disabled",
+                    "user has been suspended",
+                    "user is suspended",
+                    "organization has been suspended",
+                    "organization is suspended",
+                    "organization has been deactivated",
+                    "organization is deactivated",
+                    "organization has been disabled",
+                    "organization is disabled");
             }
 
             private static bool LooksLikeErrorContext(string body)
             {
+                var hasStatus = ContainsHttpStatus(body, "401") || ContainsHttpStatus(body, "429");
+                var hasStructuredError = ContainsAny(body, "\"error\":{", "\"error\": {", "error=");
+                var hasKnownLimitOrAuthText = ContainsAny(body,
+                    "token has been invalidated",
+                    "authentication token has been invalidated",
+                    "refresh token was already used",
+                    "access token could not be refreshed",
+                    "could not be refreshed",
+                    "invalid_grant",
+                    "too many requests",
+                    "rate limit",
+                    "usage limit",
+                    "insufficient_quota",
+                    "temporarily unavailable because of usage limits");
+
                 return ContainsAny(body,
                     "\"type\":\"response.failed\"",
                     "event.kind=response.failed",
-                    "\"error\":{",
-                    "\"error\": {",
                     "request failed",
                     "exception",
                     "api error",
                     "api_error",
-                    "status=401",
-                    "status=429",
-                    "status_code=401",
-                    "status_code=429",
-                    "http.status_code=401",
-                    "http.status_code=429",
-                    "\"status\":401",
-                    "\"status\":429",
-                    "-> 401",
-                    "-> 429",
-                    "invalid_request_error");
+                    "invalid_request_error",
+                    "otel.status_code=\"error\"",
+                    "level=error")
+                    || (hasStructuredError && (hasStatus || hasKnownLimitOrAuthText));
             }
 
             private static bool ContainsHttpStatus(string body, string code)
@@ -3560,6 +5067,34 @@ namespace CodexPlusLocalHelper
                     return result;
                 }
 
+                public IEnumerable<string[]> QueryTextRows(string sql, int columnCount)
+                {
+                    var result = new List<string[]>();
+                    IntPtr stmt;
+                    Prepare(sql, out stmt);
+                    try
+                    {
+                        while (true)
+                        {
+                            var rc = sqlite3_step(stmt);
+                            if (rc == SQLITE_ROW)
+                            {
+                                var row = new string[Math.Max(0, columnCount)];
+                                for (var i = 0; i < row.Length; i++) row[i] = ColumnText(stmt, i);
+                                result.Add(row);
+                                continue;
+                            }
+                            if (rc == SQLITE_DONE) break;
+                            throw new InvalidOperationException("SQLite 查询失败：" + rc);
+                        }
+                    }
+                    finally
+                    {
+                        sqlite3_finalize(stmt);
+                    }
+                    return result;
+                }
+
                 private void Prepare(string sql, out IntPtr stmt)
                 {
                     var rc = sqlite3_prepare_v2(_db, sql, -1, out stmt, IntPtr.Zero);
@@ -3609,6 +5144,9 @@ namespace CodexPlusLocalHelper
                 public string Kind = "none";
                 public string Label = "";
                 public string TriggerType = "";
+                public bool EndsTask;
+                public bool StartsTool;
+                public bool EndsTool;
 
                 public static LogClassification None()
                 {
@@ -3618,6 +5156,16 @@ namespace CodexPlusLocalHelper
                 public static LogClassification Activity(string label)
                 {
                     return new LogClassification { Kind = "activity", Label = label };
+                }
+
+                public static LogClassification ToolStarted(string label)
+                {
+                    return new LogClassification { Kind = "activity", Label = label, StartsTool = true };
+                }
+
+                public static LogClassification ToolComplete(string label)
+                {
+                    return new LogClassification { Kind = "tool_complete", Label = label, EndsTool = true };
                 }
 
                 public static LogClassification Complete(string label)
@@ -3661,6 +5209,7 @@ namespace CodexPlusLocalHelper
             public double IdleSeconds = -1;
             public string PendingSwitchReason = "";
             public string PendingSwitchType = "";
+            public DateTime PendingSwitchAt = DateTime.MinValue;
             public DateTime CheckedAt = DateTime.UtcNow;
 
             public static CodexRuntimeStatus Unknown(string detail)
@@ -3790,6 +5339,7 @@ namespace CodexPlusLocalHelper
                     IdleSeconds = IdleSeconds,
                     PendingSwitchReason = PendingSwitchReason,
                     PendingSwitchType = PendingSwitchType,
+                    PendingSwitchAt = PendingSwitchAt,
                     CheckedAt = CheckedAt
                 };
             }
@@ -3824,6 +5374,7 @@ namespace CodexPlusLocalHelper
                     + "\"last_task_event_at\":\"" + JsonEscape(LastTaskEventAt == DateTime.MinValue ? "" : LastTaskEventAt.ToString("o")) + "\","
                     + "\"pending_switch_reason\":\"" + JsonEscape(PendingSwitchReason) + "\","
                     + "\"pending_switch_type\":\"" + JsonEscape(PendingSwitchType) + "\","
+                    + "\"pending_switch_at\":\"" + JsonEscape(PendingSwitchAt == DateTime.MinValue ? "" : PendingSwitchAt.ToString("o")) + "\","
                     + "\"checked_at\":\"" + JsonEscape(CheckedAt == DateTime.MinValue ? "" : CheckedAt.ToString("o")) + "\""
                     + "}";
             }

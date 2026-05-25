@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Codex Dock</title>
     <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="%23f9f9f9"/><path d="M9 10h14M9 16h14M9 22h14" stroke="%230d0d0d" stroke-width="2" stroke-linecap="round"/></svg>' />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260525-oauth-rt2" />
   </head>
   <body>
     <div class="shell">
@@ -397,6 +397,7 @@
               <h3>账号</h3>
               <div id="settingsAccountState" class="setting-box"></div>
               <form id="changePasswordForm" class="stack-form">
+                <input class="visually-hidden-field" type="text" autocomplete="username" aria-hidden="true" tabindex="-1" />
                 <label>
                   <span>当前密码</span>
                   <input id="currentPassword" type="password" autocomplete="current-password" />
@@ -472,17 +473,17 @@
             <button class="import-source-card active" type="button" data-import-mode="oauth">
               <span class="source-icon">↻</span>
               <strong>OAuth 网页登录</strong>
-              <small>打开授权页，粘贴回调链接解析。</small>
+              <small>Helper 在线时自动接收回调。</small>
             </button>
             <button class="import-source-card" type="button" data-import-mode="session">
               <span class="source-icon">⌁</span>
-              <strong>Session JSON</strong>
-              <small>登录 ChatGPT 后复制 session JSON。</small>
+              <strong>Session JSON（仅 AT）</strong>
+              <small>只能登记账号，当前不能直接用于 Codex。</small>
             </button>
             <button class="import-source-card" type="button" data-import-mode="device">
               <span class="source-icon">↥</span>
-              <strong>同步当前设备</strong>
-              <small>读取本机已登录的 auth.json。</small>
+              <strong>导入当前设备</strong>
+              <small>只导入当前 Codex 账号。</small>
             </button>
             <button class="import-source-card" type="button" data-import-mode="file">
               <span class="source-icon">↓</span>
@@ -495,7 +496,7 @@
             <div class="auth-method-panel oauth-panel">
               <div>
                 <strong>OAuth 网页登录</strong>
-                <span>打开授权页完成登录后，把浏览器地址栏里的回调链接粘贴回来解析。</span>
+                <span>Helper 在线时会自动接收回调并解析；未自动返回时再手动粘贴。</span>
               </div>
               <button id="openOauthAuthBtn" type="button">打开授权页面</button>
               <label>
@@ -503,8 +504,8 @@
                 <input id="oauthAuthUrl" readonly />
               </label>
               <label>
-                <span>回调链接</span>
-                <textarea id="oauthCallbackInput" spellcheck="false" placeholder="粘贴浏览器跳转后的完整回调链接"></textarea>
+                <span>回调链接（备用）</span>
+                <textarea id="oauthCallbackInput" spellcheck="false" placeholder="自动接收失败时，可粘贴完整回调地址，或只粘贴 code=...&state=..."></textarea>
               </label>
               <div class="auth-acquire-actions">
                 <button id="copyOauthUrlBtn" type="button">复制授权链接</button>
@@ -516,8 +517,8 @@
           <section class="import-mode-panel" data-import-panel="session">
             <div class="auth-method-panel">
               <div>
-                <strong>Session JSON</strong>
-                <span>先登录 ChatGPT，再打开 Session JSON 页面，复制全部内容粘贴到这里。</span>
+                <strong>Session JSON（仅 AT）</strong>
+                <span>ChatGPT Session 页面目前通常只能拿到 AT。导入后可登记账号、识别套餐和邮箱，但缺少 RT，当前不能用于 Codex 切换；要可用请重新登录 Codex 获取 RT。</span>
               </div>
               <div class="auth-acquire-actions">
                 <button type="button" data-auth-action="open-chatgpt-login">打开 ChatGPT 登录</button>
@@ -527,7 +528,7 @@
             </div>
             <label>
               <span>Session / auth JSON</span>
-              <textarea id="sessionInput" spellcheck="false" placeholder="粘贴 auth.json、/api/auth/session、CPA JSON、Sub JSON，或包含 accounts/sessions/items/data 的数组结构"></textarea>
+              <textarea id="sessionInput" spellcheck="false" placeholder="粘贴 auth.json、/api/auth/session、CPA JSON、Sub JSON，或包含 accounts/sessions/items/data 的数组结构。Session JSON 多数只含 AT，导入后需重新登录 Codex 获取 RT 才能用于 Codex。"></textarea>
             </label>
             <button id="previewImportBtn" type="button">解析粘贴内容</button>
           </section>
@@ -535,12 +536,12 @@
           <section class="import-mode-panel" data-import-panel="device">
             <div class="auth-method-panel">
               <div>
-                <strong>同步当前设备登录</strong>
-                <span>Dock Helper 在线时，可直接读取本机 .codex/auth.json 并纳入账号池。</span>
+                <strong>导入当前设备登录</strong>
+                <span>只用于导入当前 Codex 正在登录的账号。不要用当前本机 auth 去更新另一个 AT-only 账号；那会变成错误账号。</span>
               </div>
               <div class="auth-acquire-actions">
-                <button type="button" data-auth-action="sync-local-auth">同步本机 auth</button>
-                <button type="button" data-auth-action="copy-codex-login">复制 Codex 登录命令</button>
+                <button type="button" data-auth-action="sync-local-auth">导入当前 auth</button>
+                <button type="button" data-auth-action="copy-codex-login">复制登录命令</button>
               </div>
             </div>
           </section>
@@ -581,6 +582,20 @@
     </div>
 
     <div class="toast" id="toast" hidden></div>
-    <script src="app.js"></script>
+    <script src="account-core.js?v=20260525-oauth-rt2"></script>
+    <script src="platform-clients.js?v=20260525-oauth-rt2"></script>
+    <script src="format-core.js?v=20260525-oauth-rt2"></script>
+    <script src="progress-ui.js?v=20260525-oauth-rt2"></script>
+    <script src="shell-ui.js?v=20260525-oauth-rt2"></script>
+    <script src="dialog-ui.js?v=20260525-oauth-rt2"></script>
+    <script src="settings-ui.js?v=20260525-oauth-rt2"></script>
+    <script src="account-list-ui.js?v=20260525-oauth-rt2"></script>
+    <script src="account-detail-ui.js?v=20260525-oauth-rt2"></script>
+    <script src="audit-core.js?v=20260525-oauth-rt2"></script>
+    <script src="admin-ui.js?v=20260525-oauth-rt2"></script>
+    <script src="panels-ui.js?v=20260525-oauth-rt2"></script>
+    <script src="import-core.js?v=20260525-oauth-rt2"></script>
+    <script src="import-ui.js?v=20260525-oauth-rt2"></script>
+    <script src="app.js?v=20260525-oauth-rt2"></script>
   </body>
 </html>

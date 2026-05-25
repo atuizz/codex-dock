@@ -2,6 +2,8 @@
 
 账号池管理、额度查看、智能切换和 Dock Helper 一键执行。
 
+商业化打磨路线图见 `docs/commercial-hardening-roadmap.md`。
+
 已部署地址：
 
 ```text
@@ -10,7 +12,7 @@ https://codex.woai.pro
 
 ## 当前架构
 
-- 控制台：`index.html`、`app.js`、`styles.css`，部署到 Cloudflare Worker Static Assets；未登录默认使用浏览器本地账号池。
+- 控制台：`index.html`、`account-core.js`、`platform-clients.js`、`format-core.js`、`progress-ui.js`、`shell-ui.js`、`dialog-ui.js`、`settings-ui.js`、`account-list-ui.js`、`account-detail-ui.js`、`audit-core.js`、`admin-ui.js`、`panels-ui.js`、`import-core.js`、`import-ui.js`、`app.js`、`styles.css`，部署到 Cloudflare Worker Static Assets；未登录默认使用浏览器本地账号池。
 - 云端 API：`cloud-worker/worker.js`，处理注册、登录、账号导入、额度快照、切换 payload、设备、审计记录和管理员接口。
 - 云端数据库：Cloudflare D1，数据库名 `codex-cloud-console`。
 - token 存储：`account_secrets.encrypted_auth_json`，使用 Worker secret `TOKEN_ENCRYPTION_KEY` 加密落库。
@@ -18,7 +20,7 @@ https://codex.woai.pro
 
 ## 使用模型
 
-- 默认免登录：打开 `https://codex.woai.pro` 后即可导入本地账号、同步本机 auth、刷新额度和切换。
+- 默认免登录：打开 `https://codex.woai.pro` 后即可导入本地账号、检查本机 auth、刷新额度和切换。
 - 登录只用于云同步：登录后会弹出同步确认，可选择合并并同步、只使用本地，或拉取云端覆盖本地。
 - 第一个注册用户自动成为管理员；管理员只能管理云控制台用户和统计，不能查看其他用户 token 明文。
 
@@ -61,11 +63,15 @@ npx wrangler secret put TOKEN_ENCRYPTION_KEY
 npx wrangler deploy
 ```
 
+已有线上库升级时，改用 `npx wrangler d1 migrations apply codex-cloud-console --remote` 应用增量迁移，避免重复执行完整 schema。
+
+线上 D1 以实际 schema 和 `d1_migrations` 账本共同作为运维依据。若 `npx wrangler d1 migrations list codex-cloud-console --remote` 显示待迁移，但远端列/表已经存在，先核对 `sqlite_master`、`PRAGMA table_info(...)` 和 `d1_migrations`，不要直接重复执行会撞列的历史迁移。
+
 ## 切换链路
 
 1. 控制台优先从 `codex-local-store-v5` 读取本地账号池。
-2. 若账号有本地 token，浏览器直接生成项目二格式 `auth.json` payload。
-3. 若账号只有云端密文，登录后由云端解密并返回项目二格式 payload。
+2. 若账号有本地 token，浏览器先确认是否带可用 RT；AT-only 默认不可用于 Codex。
+3. 若账号只有云端密文，登录后由云端裁判账号状态，默认只为 `rt_ready` 返回项目二格式 payload。
 4. 浏览器把 payload 发给 `127.0.0.1:18766/api/apply-auth`。
 5. Dock Helper 关闭 Codex、写入 auth、通过 Windows Shell AppID 启动 Codex。
 6. 已登录时云端记录审计；离线本地切换不强制写云审计。
@@ -85,7 +91,16 @@ npx wrangler deploy
 - `POST /api/accounts/:id/switch-payload`
 - `GET /api/devices`
 - `POST /api/devices/register`
+- `POST /api/devices/auto-switch-token`
+- `DELETE /api/devices/auto-switch-token`
 - `GET /api/audit`
+- `GET /api/settings/auto-switch`
+- `PATCH /api/settings/auto-switch`
+- `GET /api/helper/auto-switch/config`
+- `POST /api/helper/auto-switch/heartbeat`
+- `POST /api/helper/auto-switch/current-usage`
+- `POST /api/helper/auto-switch/next`
+- `POST /api/helper/auto-switch/audit`
 - `GET /api/admin/summary`
 - `GET /api/admin/users`
 - `PATCH /api/admin/users/:id`

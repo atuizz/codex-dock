@@ -1,14 +1,55 @@
 const localStoreKey = "codex-local-store-v5";
 const previousStoreKey = "codex-local-store-v4";
 const legacyStoreKey = "codex-account-switcher-store-v3";
-const deviceKeyStorage = "codex-plus-device-key-v1";
-const cachedEmailStorage = "codex-cloud-console-email-v1";
+const deviceKeyStorage = "codex-dock-device-key-v1";
+const previousDeviceKeyStorage = "codex-plus-device-key-v1";
+const cachedEmailStorage = "codex-dock-email-v1";
+const previousCachedEmailStorage = "codex-cloud-console-email-v1";
 const chatgptLoginUrl = "https://chatgpt.com/auth/login";
 const chatgptSessionUrl = "https://chatgpt.com/api/auth/session";
 const codexLoginCommand = "codex login";
 const oauthClientId = "app_EMoamEEZ73f0CkXaXp7hrann";
 const oauthRedirectUri = "http://localhost:1455/auth/callback";
 const oauthPkceStorage = "codex-dock-oauth-pkce-v1";
+const oauthPkceHistoryStorage = "codex-dock-oauth-pkce-history-v1";
+const { auditTitle, auditDescription } = window.CodexAuditCore;
+const {
+  escapeHtml,
+  shortId,
+  formatTime,
+  formatRefreshTime,
+  formatResetTime,
+  planLabel,
+  planClass,
+  formatTokenTime,
+  formatBytes,
+  errorSeverity,
+} = window.CodexFormatCore;
+if (!window.CodexSettingsUi) {
+  throw new Error("CodexSettingsUi 未加载，请检查 settings-ui.js。");
+}
+const settingsUi = window.CodexSettingsUi.createSettingsUi({ escapeHtml });
+if (!window.CodexAccountListUi) {
+  throw new Error("CodexAccountListUi 未加载，请检查 account-list-ui.js。");
+}
+if (!window.CodexAccountDetailUi) {
+  throw new Error("CodexAccountDetailUi 未加载，请检查 account-detail-ui.js。");
+}
+if (!window.CodexAdminUi) {
+  throw new Error("CodexAdminUi 未加载，请检查 admin-ui.js。");
+}
+if (!window.CodexPanelsUi) {
+  throw new Error("CodexPanelsUi 未加载，请检查 panels-ui.js。");
+}
+if (!window.CodexProgressUi) {
+  throw new Error("CodexProgressUi 未加载，请检查 progress-ui.js。");
+}
+if (!window.CodexShellUi) {
+  throw new Error("CodexShellUi 未加载，请检查 shell-ui.js。");
+}
+if (!window.CodexDialogUi) {
+  throw new Error("CodexDialogUi 未加载，请检查 dialog-ui.js。");
+}
 
 const defaultAccountFilters = {
   plan: "all",
@@ -20,7 +61,8 @@ const defaultAccountFilters = {
 const defaultSmartSwitchSettings = {
   paidOnly: true,
   preferRt: true,
-  allowAt: true,
+  allowAt: false,
+  showExperimentalAt: false,
   avoidCurrent: true,
   avoidLow5h: true,
   avoidLow7d: true,
@@ -35,14 +77,15 @@ const defaultAutoSwitchSettings = {
   idlePollSeconds: 300,
   paidOnly: true,
   preferRt: true,
-  allowAt: true,
+  allowAt: false,
+  showExperimentalAt: false,
   avoidCurrent: true,
   avoidLow5h: true,
   avoidLow7d: true,
   cooldownMinutes: 10,
   globalCooldownSeconds: 180,
   onlyWhenIdle: true,
-  idleSeconds: 30,
+  idleSeconds: 10,
   activityQuietSeconds: 120,
   cpuQuietSeconds: 90,
   cpuBusyPercent: 3,
@@ -113,10 +156,137 @@ const state = {
   oauthAuthUrl: "",
   oauthCodeVerifier: "",
   oauthState: "",
+  oauthCallbackPoll: null,
+  lastOauthCallbackUrl: "",
 };
 
-const decoder = new TextDecoder();
 const $ = (id) => document.getElementById(id);
+if (!window.CodexAccountCore) {
+  throw new Error("CodexAccountCore 未加载，请检查 account-core.js。");
+}
+const {
+  decodeJwtPayload,
+  bestPlan,
+  explainError,
+  normalizeUsage,
+  newestUsage,
+  parseImportEntries,
+  parseSession,
+  authFingerprint,
+  accountDedupeKey,
+  hasUsableRefreshToken,
+  accessTokenExpiry,
+  accountPlan,
+  normalizeLocalAccount,
+  normalizeCloudAccount,
+} = window.CodexAccountCore;
+if (!window.CodexImportCore) {
+  throw new Error("CodexImportCore 未加载，请检查 import-core.js。");
+}
+const {
+  importStatusClass,
+  importIdentityKeys,
+  buildPendingImportItems: buildPendingImportItemsCore,
+  normalizePendingImportStatuses: normalizePendingImportStatusesCore,
+  summarizeImportPreview,
+  accountToImportPayload,
+  findImportedAccounts,
+  previewImportEntries,
+  hasUsageSnapshot,
+} = window.CodexImportCore.createImportCore({
+  accountCore: window.CodexAccountCore,
+  formatCore: window.CodexFormatCore,
+  tokenState,
+});
+if (!window.CodexImportUi) {
+  throw new Error("CodexImportUi 未加载，请检查 import-ui.js。");
+}
+if (!window.CodexPlatformClients) {
+  throw new Error("CodexPlatformClients 未加载，请检查 platform-clients.js。");
+}
+const {
+  createCloudApiClient,
+  createHelperClient,
+  helperBaseCandidates,
+  isKnownHelperHealth,
+} = window.CodexPlatformClients;
+const cloudApi = createCloudApiClient();
+const api = (path, options = {}) => cloudApi.request(path, options);
+const accountListUi = window.CodexAccountListUi.createAccountListUi({
+  formatCore: window.CodexFormatCore,
+  escapeHtml,
+  shortId,
+  formatRefreshTime,
+  planLabel,
+  planClass,
+  errorSeverity,
+  explainError,
+  accountPlan,
+  tokenState,
+  usageIssue,
+  accountActionMode,
+  sourceLabel,
+});
+const accountDetailUi = window.CodexAccountDetailUi.createAccountDetailUi({
+  formatCore: window.CodexFormatCore,
+  escapeHtml,
+  shortId,
+  formatTime,
+  formatResetTime,
+  planLabel,
+  planClass,
+  errorSeverity,
+  explainError,
+  accountPlan,
+  tokenState,
+  usageIssue,
+  canUseAccount,
+  sourceLabel,
+});
+const adminUi = window.CodexAdminUi.createAdminUi({
+  formatCore: window.CodexFormatCore,
+  auditCore: window.CodexAuditCore,
+  escapeHtml,
+  shortId,
+  formatTime,
+  auditTitle,
+  auditDescription,
+});
+const panelsUi = window.CodexPanelsUi.createPanelsUi({
+  formatCore: window.CodexFormatCore,
+  auditCore: window.CodexAuditCore,
+  escapeHtml,
+  formatTime,
+  auditTitle,
+  auditDescription,
+});
+const progressUi = window.CodexProgressUi.createProgressUi({
+  escapeHtml,
+});
+const shellUi = window.CodexShellUi.createShellUi({
+  formatCore: window.CodexFormatCore,
+  escapeHtml,
+  formatBytes,
+  cloudBackupEnabled,
+  canUseAccount,
+  resolveCurrentAccountId,
+  accountPlan,
+  tokenState,
+});
+const dialogUi = window.CodexDialogUi.createDialogUi({
+  escapeHtml,
+});
+const importUi = window.CodexImportUi.createImportUi({
+  formatCore: window.CodexFormatCore,
+  escapeHtml,
+  shortId,
+  importStatusClass,
+  summarizeImportPreview,
+});
+
+function helperClient() {
+  return createHelperClient(state.helperBase);
+}
 
 function toast(message) {
   const el = $("toast");
@@ -132,46 +302,8 @@ function showImportResult(result) {
   const el = $("importResult");
   if (!el) return;
   el.hidden = false;
-  const title = result.preview ? "核查结果" : "导入完成";
-  const refreshTotal = result.cloud ? (result.cloud.refreshed || 0) + (result.cloud.refreshFailed || 0) : 0;
-  const cloudText = result.cloud
-    ? `<span>云端：新增 ${result.cloud.added || 0} · 更新 ${result.cloud.updated || 0} · 失败 ${result.cloud.failed || 0}${refreshTotal ? ` · 额度刷新 ${result.cloud.refreshed || 0}/${refreshTotal}` : ""}</span>`
-    : "";
-  el.innerHTML = `
-    <strong>${escapeHtml(title)}</strong>
-    <span>${escapeHtml(result.message || `新增 ${result.added || 0} · 更新 ${result.updated || 0} · 失败 ${result.failed || 0}`)}</span>
-    ${cloudText}
-  `;
+  el.innerHTML = importUi.renderImportResult(result);
   renderImportPreview();
-}
-
-function authAcquirePanel(reason = "") {
-  return `
-    <div class="auth-acquire-panel compact">
-      <div>
-        <strong>${escapeHtml(reason || "重新获取授权")}</strong>
-        <span>按来源选择 Session 或 OAuth，不混用。</span>
-      </div>
-      <div class="auth-method-columns">
-        <div>
-          <strong>Session</strong>
-          <div class="auth-acquire-actions">
-            <button type="button" data-auth-action="open-import-session">去导入 Session</button>
-            <button type="button" data-auth-action="open-session-json">打开 Session JSON</button>
-            <button type="button" data-auth-action="copy-session-url">复制地址</button>
-          </div>
-        </div>
-        <div>
-          <strong>OAuth</strong>
-          <div class="auth-acquire-actions">
-            <button type="button" data-auth-action="open-import-oauth">去导入 OAuth</button>
-            <button type="button" data-auth-action="open-oauth-login">打开授权页</button>
-            <button type="button" data-auth-action="copy-oauth-url">复制授权链接</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
 }
 
 function randomBase64Url(byteLength = 32) {
@@ -189,28 +321,84 @@ async function sha256Base64Url(value) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function rememberOauthPkce(verifier, stateValue) {
-  const payload = { verifier, state: stateValue, redirectUri: oauthRedirectUri, clientId: oauthClientId, createdAt: Date.now() };
+function isFreshOauthPkce(payload) {
+  return Boolean(payload?.verifier && payload?.state && Date.now() - Number(payload.createdAt || 0) < 30 * 60 * 1000);
+}
+
+function readOauthPkceHistory() {
+  const history = {};
+  try {
+    const parsed = JSON.parse(localStorage.getItem(oauthPkceHistoryStorage) || "{}");
+    for (const [key, payload] of Object.entries(parsed || {})) {
+      if (isFreshOauthPkce(payload)) history[key] = payload;
+    }
+  } catch {
+    // Ignore broken cache; a fresh authorization link will rebuild it.
+  }
+  try {
+    const current = JSON.parse(localStorage.getItem(oauthPkceStorage) || "{}");
+    if (isFreshOauthPkce(current)) history[current.state] = current;
+  } catch {
+    // Ignore legacy cache parse errors.
+  }
+  return history;
+}
+
+function writeOauthPkceHistory(history) {
+  const fresh = Object.values(history || {})
+    .filter(isFreshOauthPkce)
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))
+    .slice(0, 12)
+    .reduce((acc, payload) => {
+      acc[payload.state] = payload;
+      return acc;
+    }, {});
+  localStorage.setItem(oauthPkceHistoryStorage, JSON.stringify(fresh));
+}
+
+function rememberOauthPkce(verifier, stateValue, authUrl = state.oauthAuthUrl || "") {
+  const payload = { verifier, state: stateValue, redirectUri: oauthRedirectUri, clientId: oauthClientId, createdAt: Date.now(), authUrl };
   state.oauthCodeVerifier = verifier;
   state.oauthState = stateValue;
   localStorage.setItem(oauthPkceStorage, JSON.stringify(payload));
+  const history = readOauthPkceHistory();
+  history[stateValue] = payload;
+  writeOauthPkceHistory(history);
 }
 
-function oauthPkce() {
+function oauthPkce(stateValue = "") {
+  if (stateValue) return readOauthPkceHistory()[stateValue] || {};
   try {
     const payload = JSON.parse(localStorage.getItem(oauthPkceStorage) || "{}");
-    if (payload?.verifier && Date.now() - Number(payload.createdAt || 0) < 30 * 60 * 1000) return payload;
+    if (isFreshOauthPkce(payload)) return payload;
   } catch {
     return {};
   }
   return {};
 }
 
-async function refreshOauthAuthorizeUrl() {
+function forgetOauthPkce(stateValue) {
+  if (!stateValue) return;
+  const current = oauthPkce();
+  if (current.state === stateValue) localStorage.removeItem(oauthPkceStorage);
+  const history = readOauthPkceHistory();
+  delete history[stateValue];
+  writeOauthPkceHistory(history);
+}
+
+async function refreshOauthAuthorizeUrl(options = {}) {
+  const reuse = options.reuse !== false;
+  const existing = reuse ? oauthPkce() : {};
+  if (existing?.verifier && existing?.state && existing?.authUrl) {
+    state.oauthCodeVerifier = existing.verifier;
+    state.oauthState = existing.state;
+    state.oauthAuthUrl = existing.authUrl;
+    if ($("oauthAuthUrl")) $("oauthAuthUrl").value = state.oauthAuthUrl;
+    return state.oauthAuthUrl;
+  }
   const verifier = randomBase64Url(64);
   const stateValue = randomBase64Url(18);
   const challenge = await sha256Base64Url(verifier);
-  rememberOauthPkce(verifier, stateValue);
   const params = new URLSearchParams({
     response_type: "code",
     client_id: oauthClientId,
@@ -222,21 +410,32 @@ async function refreshOauthAuthorizeUrl() {
     state: stateValue,
   });
   state.oauthAuthUrl = `https://auth.openai.com/oauth/authorize?${params.toString()}`;
+  rememberOauthPkce(verifier, stateValue, state.oauthAuthUrl);
   if ($("oauthAuthUrl")) $("oauthAuthUrl").value = state.oauthAuthUrl;
   return state.oauthAuthUrl;
 }
 
-async function currentOauthAuthorizeUrl() {
-  if (state.oauthAuthUrl) return state.oauthAuthUrl;
+async function resetOauthAuthorizeUrl() {
+  localStorage.removeItem(oauthPkceStorage);
+  state.oauthAuthUrl = "";
+  state.oauthCodeVerifier = "";
+  state.oauthState = "";
+  return refreshOauthAuthorizeUrl({ reuse: false });
+}
+
+async function currentOauthAuthorizeUrl(options = {}) {
+  if (options.fresh) return refreshOauthAuthorizeUrl({ reuse: false });
+  const current = oauthPkce();
+  if (state.oauthAuthUrl && current.authUrl === state.oauthAuthUrl) return state.oauthAuthUrl;
   return refreshOauthAuthorizeUrl();
 }
 
 async function handleAuthAcquireAction(action) {
-  if (action === "open-import-session" || action === "open-import-oauth") {
+  if (action === "open-import-session" || action === "open-import-oauth" || action === "open-import-file") {
     closeModal("accountDetailModal");
     setDrawer(true);
-    setImportMode(action === "open-import-oauth" ? "oauth" : "session");
-    toast(action === "open-import-oauth" ? "已打开 OAuth 导入。" : "已打开 Session 导入。");
+    setImportMode(action === "open-import-file" ? "file" : (action === "open-import-oauth" ? "oauth" : "session"));
+    toast(action === "open-import-file" ? "请导入该账号自己的 auth.json。" : (action === "open-import-oauth" ? "已打开 OAuth 导入。" : "已打开 Session 导入。"));
     return;
   }
   if (action === "open-chatgpt-login") {
@@ -255,15 +454,18 @@ async function handleAuthAcquireAction(action) {
   }
   if (action === "copy-codex-login") {
     await navigator.clipboard.writeText(codexLoginCommand);
-    toast("Codex 登录命令已复制。执行后点击“同步本机 auth”。");
+    toast("Codex 登录命令已复制。它会改变当前 Codex 登录态，只用于登录你要导入的目标账号。");
     return;
   }
   if (action === "open-oauth-login") {
-    window.open(await currentOauthAuthorizeUrl(), "_blank", "noopener,noreferrer");
+    window.open(await currentOauthAuthorizeUrl({ fresh: true }), "_blank");
+    startOauthCallbackPolling();
+    toast(state.helperReady ? "授权完成后会自动返回，无需复制链接。" : "Helper 未连接时需要手动粘贴回调链接。");
     return;
   }
   if (action === "copy-oauth-url") {
-    await navigator.clipboard.writeText(await currentOauthAuthorizeUrl());
+    await navigator.clipboard.writeText(await currentOauthAuthorizeUrl({ fresh: true }));
+    startOauthCallbackPolling();
     toast("OAuth 授权链接已复制。");
     return;
   }
@@ -272,101 +474,16 @@ async function handleAuthAcquireAction(action) {
   }
 }
 
-function importStatusClass(status) {
-  if (status === "新增") return "ok";
-  if (status === "更新") return "ok";
-  return "bad";
-}
-
-function importIdentityKeys(account) {
-  const keys = new Set();
-  const dedupe = accountDedupeKey(account);
-  if (dedupe && !dedupe.startsWith("id:")) keys.add(dedupe);
-  const accountId = String(account?.accountId || account?.account_id || account?.session?.tokens?.account_id || "").trim().toLowerCase();
-  if (accountId) keys.add(`account:${accountId}`);
-  const email = String(account?.email || account?.session?.email || "").trim().toLowerCase();
-  if (email) keys.add(`email:${email}`);
-  const fingerprint = authFingerprint(account?.session);
-  if (fingerprint && fingerprint.replace(/\|/g, "")) keys.add(`token:${fingerprint}`);
-  return [...keys];
-}
-
-function existingImportKeys() {
-  const keys = new Set();
-  const sources = state.user ? state.cloudAccounts : state.localAccounts;
-  for (const account of sources) {
-    for (const key of importIdentityKeys(account)) keys.add(key);
-  }
-  return keys;
-}
-
-function accountExistsInImportKeys(account, existing) {
-  return importIdentityKeys(account).some((key) => existing.has(key));
-}
-
 function buildPendingImportItems(entries, sourceName) {
-  const existing = existingImportKeys();
-  return entries.map((entry) => {
-    if (!entry.ok || !entry.session) {
-      return {
-        id: crypto.randomUUID(),
-        ok: false,
-        status: "无法解析",
-        sourceName,
-        error: entry.error || "解析失败",
-        accountName: entry.sourceName || "未知账号",
-      };
-    }
-    const session = entry.session;
-    const account = normalizeLocalAccount({
-      id: crypto.randomUUID(),
-      name: entry.accountName || session.email || shortId(session.tokens.account_id) || "未命名账号",
-      email: session.email || "",
-      group: "默认",
-      priority: "normal",
-      usageNote: sourceName,
-      expiryNote: session.expires || "",
-      accountId: session.tokens.account_id || "",
-      expiresAt: session.expires || "",
-      planType: session.profile?.plan || "",
-      usage: hasUsageSnapshot(session.usage) ? normalizeUsage(session.usage, session.profile?.plan) : null,
-      session,
-    });
-    const existsInPool = accountExistsInImportKeys(account, existing);
-    const token = tokenState(account);
-    return {
-      id: crypto.randomUUID(),
-      ok: true,
-      status: existsInPool ? "更新" : "新增",
-      sourceName,
-      account,
-      accountName: account.name,
-      email: account.email,
-      accountId: account.accountId,
-      plan: planLabel(accountPlan(account)),
-      tokenLabel: token.label,
-      hasRt: hasUsableRefreshToken(account),
-    };
+  return buildPendingImportItemsCore(entries, sourceName, {
+    existingAccounts: state.user ? state.cloudAccounts : state.localAccounts,
   });
 }
 
 function normalizePendingImportStatuses(items) {
-  const existing = existingImportKeys();
-  const seen = new Set();
-  const normalized = [];
-  for (const item of items) {
-    if (!item.ok || !item.account) {
-      normalized.push(item);
-      continue;
-    }
-    const keys = importIdentityKeys(item.account);
-    if (keys.some((key) => seen.has(key))) continue;
-    const existsInPool = accountExistsInImportKeys(item.account, existing);
-    item.status = existsInPool ? "更新" : "新增";
-    keys.forEach((key) => seen.add(key));
-    normalized.push(item);
-  }
-  return normalized;
+  return normalizePendingImportStatusesCore(items, {
+    existingAccounts: state.user ? state.cloudAccounts : state.localAccounts,
+  });
 }
 
 function renderImportPreview() {
@@ -374,54 +491,29 @@ function renderImportPreview() {
   const summary = $("importPreviewSummary");
   const confirm = $("confirmImportBtn");
   if (!list || !summary || !confirm) return;
-  const items = state.pendingImportItems;
-  const importable = items.filter((item) => item.ok);
-  const added = items.filter((item) => item.status === "新增").length;
-  const updated = items.filter((item) => item.status === "更新").length;
-  const failed = items.filter((item) => item.status === "无法解析").length;
+  const rendered = importUi.renderImportPreview(state.pendingImportItems, {
+    importCompleted: state.importCompleted,
+    operationActive: state.operationProgress.active,
+  });
   const finish = $("finishImportBtn");
   const clear = $("clearFormBtn");
-  confirm.hidden = state.importCompleted;
-  confirm.disabled = !importable.length || state.operationProgress.active;
-  finish.hidden = !state.importCompleted;
-  finish.classList.toggle("primary", state.importCompleted);
-  clear.textContent = state.importCompleted ? "继续导入" : "清空预览";
-  clear.classList.toggle("soft-action", !state.importCompleted);
-  summary.textContent = items.length
-    ? `解析到 ${items.length} 个，新增 ${added} 个，更新 ${updated} 个，失败 ${failed} 个`
-    : "还没有待导入账号";
-  if (!items.length) {
-    list.innerHTML = '<div class="empty small">选择文件或粘贴 JSON 后，先在这里预览解析结果。</div>';
-    return;
-  }
-  list.innerHTML = items.map((item) => `
-    <div class="import-preview-item ${item.ok ? "" : "bad"}">
-      <div class="import-preview-main">
-        <strong>${escapeHtml(item.email || item.accountName || "未知账号")}</strong>
-        <span>${escapeHtml(item.accountName || item.accountId || item.error || "")}</span>
-      </div>
-      ${item.ok ? `
-        <div class="import-preview-meta">
-          <span>${escapeHtml(item.plan || "未知")}</span>
-          <span>${escapeHtml(item.tokenLabel || "无 token")}</span>
-          <span>${item.hasRt ? "有 RT" : "仅 AT"}</span>
-          <span>${escapeHtml(shortId(item.accountId || ""))}</span>
-          <span>${escapeHtml(item.sourceName || "导入内容")}</span>
-        </div>
-      ` : `<div class="import-preview-meta"><span>${escapeHtml(item.sourceName || "导入内容")}</span><span>${escapeHtml(item.error || "解析失败")}</span></div>`}
-      <span class="import-status ${importStatusClass(item.status)}">${escapeHtml(item.status)}</span>
-      ${item.error ? `<span class="import-error">${escapeHtml(item.error)}</span>` : ""}
-    </div>
-  `).join("");
+  confirm.hidden = rendered.confirmHidden;
+  confirm.disabled = rendered.confirmDisabled;
+  finish.hidden = rendered.finishHidden;
+  finish.classList.toggle("primary", rendered.finishPrimary);
+  clear.textContent = rendered.clearText;
+  clear.classList.toggle("soft-action", rendered.clearSoft);
+  summary.textContent = rendered.summaryText;
+  list.innerHTML = rendered.listHtml;
 }
 
 function setImportMode(mode) {
   state.importMode = mode;
   document.querySelectorAll("[data-import-mode]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.importMode === mode);
+    button.classList.toggle("active", importUi.modeIsActive(mode, button.dataset.importMode));
   });
   document.querySelectorAll("[data-import-panel]").forEach((panel) => {
-    panel.classList.toggle("active", panel.dataset.importPanel === mode);
+    panel.classList.toggle("active", importUi.modeIsActive(mode, panel.dataset.importPanel));
   });
   if (mode === "oauth") refreshOauthAuthorizeUrl().catch(() => toast("OAuth 授权链接生成失败。"));
 }
@@ -460,25 +552,20 @@ function renderCommandAttachments() {
   const list = $("commandAttachments");
   if (!list) return;
   list.hidden = !state.commandFiles.length;
-  list.innerHTML = state.commandFiles.map((file, index) => `
-    <button class="attachment-chip" type="button" data-attachment-index="${index}" title="移除 ${escapeHtml(file.name)}">
-      <span>${escapeHtml(file.name)}</span>
-      <small>${formatBytes(file.size)}</small>
-      <strong aria-hidden="true">×</strong>
-    </button>
-  `).join("");
+  list.innerHTML = shellUi.renderCommandAttachments(state.commandFiles);
 }
 
 function renderShellState() {
   const button = $("quickSwitchBtn");
   const shell = $("commandShell");
   if (!button || !shell) return;
-  const hasFiles = state.commandFiles.length > 0;
-  button.textContent = hasFiles ? "解析导入" : "智能切换";
-  button.disabled = hasFiles
-    ? false
-    : !state.accounts.some(canUseAccount);
-  shell.classList.toggle("has-attachments", hasFiles);
+  const view = shellUi.commandShellState({
+    files: state.commandFiles,
+    accounts: state.accounts,
+  });
+  button.textContent = view.quickSwitchText;
+  button.disabled = view.quickSwitchDisabled;
+  shell.classList.toggle("has-attachments", view.hasFiles);
 }
 
 function renderToolbarState(filtered = visibleAccounts()) {
@@ -490,13 +577,17 @@ function renderToolbarState(filtered = visibleAccounts()) {
     if ($(id)) $(id).value = filters[key] || "all";
   }
   document.querySelectorAll("[data-layout]").forEach((button) => button.classList.toggle("active", button.dataset.layout === state.accountLayout));
-  const selected = filtered.filter((account) => state.selectedBulkIds.has(account.id));
-  $("bulkCount").textContent = selected.length ? `已选择 ${selected.length} 个账号` : `当前结果 ${filtered.length} 个`;
-  $("bulkBar").classList.toggle("has-selection", selected.length > 0);
-  $("bulkRefreshBtn").disabled = !selected.length || !state.helperReady;
-  $("bulkExportBtn").disabled = !selected.length;
-  $("bulkDeleteBtn").disabled = !selected.length;
-  $("bulkPrioritySelect").disabled = !selected.length;
+  const view = shellUi.toolbarState({
+    filtered,
+    selectedBulkIds: state.selectedBulkIds,
+    helperReady: state.helperReady,
+  });
+  $("bulkCount").textContent = view.bulkText;
+  $("bulkBar").classList.toggle("has-selection", view.hasSelection);
+  $("bulkRefreshBtn").disabled = view.refreshDisabled;
+  $("bulkExportBtn").disabled = view.exportDisabled;
+  $("bulkDeleteBtn").disabled = view.deleteDisabled;
+  $("bulkPrioritySelect").disabled = view.priorityDisabled;
 }
 
 function parseImportTextToPreview() {
@@ -527,10 +618,39 @@ function parseImportTextToPreview() {
   }
 }
 
-function callbackParams(raw) {
+function normalizeOauthCallbackValue(raw) {
   const text = String(raw || "").trim();
   if (!text) throw new Error("请先粘贴回调链接。");
-  const value = text.startsWith("http") ? text : `${oauthRedirectUri}${text.startsWith("?") || text.startsWith("#") ? text : `?${text}`}`;
+  const cleaned = text
+    .replace(/&amp;/g, "&")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim();
+  const compact = cleaned.replace(/\s+/g, "");
+  const sources = [cleaned, compact];
+  for (const source of sources) {
+    const callbackUrl = source.match(/https?:\/\/(?:localhost|127\.0\.0\.1):1455\/auth\/callback[^\s"'<>]*/i)
+      || source.match(/(?:localhost|127\.0\.0\.1):1455\/auth\/callback[^\s"'<>]*/i);
+    if (callbackUrl) {
+      const value = callbackUrl[0].replace(/[),.;，。]+$/g, "");
+      return /^https?:\/\//i.test(value) ? value : `http://${value}`;
+    }
+  }
+  const anyUrl = compact.match(/https?:\/\/[^\s"'<>]+/i);
+  if (anyUrl) return anyUrl[0].replace(/[),.;，。]+$/g, "");
+  const paramMatch = compact.match(/(?:^|[?#&])((?:code|access_token|accessToken|id_token|idToken|refresh_token|refreshToken)=[^"'<>]+)/);
+  if (paramMatch) {
+    const query = paramMatch[1].replace(/^[?#&]/, "");
+    return `${oauthRedirectUri}?${query}`;
+  }
+  const bareParam = compact.match(/\b((?:code|access_token|accessToken|id_token|idToken|refresh_token|refreshToken)=[^"'<>]+)/);
+  if (bareParam) return `${oauthRedirectUri}?${bareParam[1]}`;
+  if (/^(?:localhost|127\.0\.0\.1):1455\/auth\/callback/i.test(compact)) return `http://${compact}`;
+  if (/^https?:\/\//i.test(compact)) return compact;
+  return `${oauthRedirectUri}${compact.startsWith("?") || compact.startsWith("#") ? compact : `?${compact}`}`;
+}
+
+function callbackParams(raw) {
+  const value = normalizeOauthCallbackValue(raw);
   const url = new URL(value);
   const params = new URLSearchParams(url.search);
   if (url.hash) {
@@ -554,24 +674,38 @@ async function exchangeOauthCode(code, pkce) {
   return result.token || result;
 }
 
-async function parseOauthCallbackToPreview() {
+async function parseOauthCallbackToPreview(rawCallback = null) {
   try {
-    const params = callbackParams($("oauthCallbackInput").value);
+    const callbackSource = typeof rawCallback === "string" ? rawCallback : $("oauthCallbackInput").value;
+    const params = callbackParams(callbackSource);
     let accessToken = params.get("access_token") || params.get("accessToken") || "";
     let idToken = params.get("id_token") || params.get("idToken") || "";
     let refreshToken = params.get("refresh_token") || params.get("refreshToken") || "";
     const code = params.get("code") || "";
+    let usedOauthCode = false;
     if (!accessToken && code) {
-      const pkce = oauthPkce();
       const returnedState = params.get("state") || "";
-      if (!pkce.verifier) throw new Error("授权链接已过期，请重新打开授权页面。");
-      if (returnedState && pkce.state && returnedState !== pkce.state) throw new Error("授权状态不匹配，请重新打开授权页面。");
-      const token = await exchangeOauthCode(code, pkce);
+      const pkce = returnedState ? oauthPkce(returnedState) : oauthPkce();
+      if (!pkce.verifier) throw new Error("OAuth code 已收到，但找不到对应授权链接的 PKCE 记录。请点“打开授权页面”重新授权，不要复用旧回调。");
+      let token;
+      try {
+        token = await exchangeOauthCode(code, pkce);
+      } catch (error) {
+        const detail = String(error.message || "换取 token 失败");
+        const reason = /could not validate|invalid_grant|expired|code|verifier/i.test(detail)
+          ? "授权回调已失效、已被使用，或和当前授权链接不匹配"
+          : detail;
+        throw new Error(`OAuth code 已收到，但换 token 失败：${reason}。请点“打开授权页面”重新授权，并使用刚打开页面返回的回调。`);
+      }
       accessToken = token.access_token || token.accessToken || "";
       idToken = token.id_token || token.idToken || "";
       refreshToken = token.refresh_token || token.refreshToken || "";
+      usedOauthCode = true;
+      forgetOauthPkce(returnedState || pkce.state);
     }
-    if (!accessToken && !idToken && !refreshToken) throw new Error("回调链接里没有 token。");
+    if (!accessToken && !idToken && !refreshToken) {
+      throw new Error(usedOauthCode ? "OAuth code 已收到，但没有换到 token，请重新打开授权页面。" : "回调链接里没有 token 或 code。");
+    }
     const authJson = {
       auth_mode: "chatgpt",
       OPENAI_API_KEY: null,
@@ -599,6 +733,76 @@ async function parseOauthCallbackToPreview() {
     state.importCompleted = false;
     renderImportPreview();
   }
+}
+
+function stopOauthCallbackPolling() {
+  if (state.oauthCallbackPoll) {
+    clearInterval(state.oauthCallbackPoll);
+    state.oauthCallbackPoll = null;
+  }
+}
+
+async function latestOauthCallbackAny() {
+  if (!state.helperReady || !state.helperBase) return null;
+  try {
+    return await helperClient().oauthCallbackLatest("");
+  } catch {
+    return null;
+  }
+}
+
+function startOauthCallbackPolling() {
+  stopOauthCallbackPolling();
+  const pkce = oauthPkce();
+  const startedAt = Date.now();
+  state.oauthCallbackPoll = setInterval(async () => {
+    if (!state.helperReady || !state.helperBase) return;
+    if (Date.now() - startedAt > 3 * 60 * 1000) {
+      stopOauthCallbackPolling();
+      toast("未检测到 OAuth 回调，可手动粘贴回调链接解析。");
+      return;
+    }
+    try {
+      const result = await helperClient().oauthCallbackLatest(pkce.state || state.oauthState || "");
+      if (result?.pending) {
+        const latest = await latestOauthCallbackAny();
+        const receivedAt = latest?.receivedAt ? new Date(latest.receivedAt).getTime() : 0;
+        if (latest && !latest.pending && latest.url && receivedAt >= startedAt - 3000) {
+          if ($("oauthCallbackInput")) $("oauthCallbackInput").value = latest.url;
+          stopOauthCallbackPolling();
+          await parseOauthCallbackToPreview(latest.url);
+          toast("已自动接收 OAuth 回调。");
+        }
+        return;
+      }
+      stopOauthCallbackPolling();
+      if (result.error) {
+        toast(`OAuth 授权失败：${result.error}`);
+        return;
+      }
+      if (result.url && $("oauthCallbackInput")) $("oauthCallbackInput").value = result.url;
+      await parseOauthCallbackToPreview(result.url || `?code=${encodeURIComponent(result.code || "")}&state=${encodeURIComponent(result.state || "")}`);
+      toast("已自动接收 OAuth 回调。");
+    } catch {
+      stopOauthCallbackPolling();
+    }
+  }, 1200);
+}
+
+function isTrustedOauthCallbackOrigin(origin) {
+  return origin === "http://localhost:1455" || origin === "http://127.0.0.1:1455";
+}
+
+async function handleOauthCallbackMessage(event) {
+  if (!isTrustedOauthCallbackOrigin(event.origin)) return;
+  const data = event.data || {};
+  if (data.type !== "codex-dock-oauth-callback" || !data.url) return;
+  if (state.lastOauthCallbackUrl === data.url) return;
+  state.lastOauthCallbackUrl = data.url;
+  stopOauthCallbackPolling();
+  if ($("oauthCallbackInput")) $("oauthCallbackInput").value = data.url;
+  await parseOauthCallbackToPreview(data.url);
+  toast("已自动接收 OAuth 回调。");
 }
 
 async function parseImportFilesToPreview(fileList) {
@@ -681,413 +885,13 @@ function finishProgress(summary) {
 }
 
 function renderOperationProgress() {
-  const progress = state.operationProgress;
   if (!$("progressTitle")) return;
-  const total = progress.items.length;
-  const completed = progress.items.filter((item) => item.status === "已完成").length;
-  const failed = progress.items.filter((item) => item.status === "失败").length;
-  const done = completed + failed;
-  const percent = total ? Math.round((done / total) * 100) : 0;
-  $("progressTitle").textContent = progress.title || "正在处理";
-  $("progressSummary").textContent = progress.done
-    ? progress.summary
-    : `${done}/${total} 已处理，失败 ${failed}`;
-  $("progressMeterBar").style.width = `${percent}%`;
-  $("progressCloseBtn").disabled = !progress.done;
-  $("progressList").innerHTML = progress.items.map((item) => `
-    <div class="progress-item ${item.status === "失败" ? "bad" : item.status === "已完成" ? "ok" : ""}">
-      <strong>${escapeHtml(item.label)}</strong>
-      <span>${escapeHtml(item.status)}${item.detail ? ` · ${escapeHtml(item.detail)}` : ""}</span>
-    </div>
-  `).join("");
-}
-
-function base64ToBytes(value) {
-  return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
-}
-
-function decodeJwtPayload(token) {
-  if (!token || !token.includes(".")) return null;
-  try {
-    const payload = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = payload.padEnd(Math.ceil(payload.length / 4) * 4, "=");
-    return JSON.parse(decoder.decode(base64ToBytes(padded)));
-  } catch {
-    return null;
-  }
-}
-
-async function api(path, options = {}) {
-  const init = {
-    method: options.method || "GET",
-    credentials: "include",
-    headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(options.headers || {}),
-    },
-  };
-  if (options.body) {
-    init.body = typeof options.body === "string" ? options.body : JSON.stringify(options.body);
-  }
-  const response = await fetch(path, init);
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || result.ok === false) {
-    throw new Error(result.error || `请求失败：${response.status}`);
-  }
-  return result;
-}
-
-function numeric(value) {
-  if (value === null || value === undefined || value === "") return NaN;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : NaN;
-}
-
-function clampPercent(value) {
-  return Math.max(0, Math.min(100, Math.round(Number(value))));
-}
-
-function unixToIso(value) {
-  const number = numeric(value);
-  if (!Number.isFinite(number)) return "";
-  return new Date(number * 1000).toISOString();
-}
-
-function canonicalPlan(value) {
-  const plan = String(value || "").trim().toLowerCase();
-  if (plan === "chatgptplus") return "plus";
-  if (["plus", "pro", "team", "enterprise", "free"].includes(plan)) return plan;
-  return plan;
-}
-
-function planRank(value) {
-  const plan = canonicalPlan(value);
-  if (plan === "enterprise") return 5;
-  if (plan === "team") return 4;
-  if (plan === "pro") return 3;
-  if (plan === "plus") return 2;
-  if (plan === "free") return 1;
-  return 0;
-}
-
-function bestPlan(...values) {
-  let best = "";
-  for (const value of values) {
-    const plan = canonicalPlan(value);
-    if (!plan) continue;
-    if (!best || planRank(plan) > planRank(best)) best = plan;
-  }
-  return best;
-}
-
-function normalizeUsageWindow(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const usedPercent = numeric(raw.used_percent ?? raw.usedPercent ?? raw.used);
-  const remainingPercent = numeric(raw.remaining_percent ?? raw.remainingPercent);
-  const resolvedUsed = Number.isFinite(usedPercent)
-    ? usedPercent
-    : Number.isFinite(remainingPercent) ? 100 - remainingPercent : NaN;
-  const resolvedRemaining = Number.isFinite(remainingPercent)
-    ? remainingPercent
-    : Number.isFinite(resolvedUsed) ? 100 - resolvedUsed : NaN;
-  return {
-    used_percent: Number.isFinite(resolvedUsed) ? clampPercent(resolvedUsed) : null,
-    remaining_percent: Number.isFinite(resolvedRemaining) ? clampPercent(resolvedRemaining) : null,
-    window_seconds: numeric(raw.window_seconds ?? raw.windowSeconds ?? raw.limit_window_seconds ?? raw.limitWindowSeconds),
-    reset_at: raw.reset_at ?? raw.resetAt ?? raw.resets_at ?? raw.resetsAt ?? null,
-  };
-}
-
-function emptyUsage(planType = "") {
-  return {
-    fetched_at: null,
-    refreshed_at: "",
-    plan_type: planType || "",
-    five_hour: null,
-    one_week: null,
-    credits: null,
-    status: "未刷新",
-    error: "",
-  };
-}
-
-function normalizeUsage(raw, fallbackPlan = "") {
-  if (!raw || typeof raw !== "object") return emptyUsage(fallbackPlan);
-  const planType = bestPlan(raw.plan_type, raw.planType, fallbackPlan);
-  const fetchedAt = raw.fetched_at ?? raw.fetchedAt ?? null;
-  const refreshedAt = raw.refreshed_at || raw.refreshedAt || unixToIso(fetchedAt) || "";
-  const error = explainError(raw.error || raw.message || "");
-  return {
-    fetched_at: fetchedAt,
-    refreshed_at: refreshedAt,
-    plan_type: planType,
-    five_hour: normalizeUsageWindow(raw.five_hour || raw.fiveHour || raw.short_window || raw.shortWindow),
-    one_week: normalizeUsageWindow(raw.one_week || raw.oneWeek || raw.long_window || raw.longWindow),
-    credits: raw.credits || null,
-    status: error ? "刷新失败" : (raw.status || (refreshedAt ? "已刷新" : "未刷新")),
-    error,
-  };
-}
-
-function newestUsage(a, b, fallbackPlan = "") {
-  const aa = normalizeUsage(a, fallbackPlan);
-  const bb = normalizeUsage(b, fallbackPlan);
-  const at = new Date(aa.refreshed_at || aa.fetched_at || 0).getTime() || 0;
-  const bt = new Date(bb.refreshed_at || bb.fetched_at || 0).getTime() || 0;
-  const chosen = bt > at ? bb : aa;
-  chosen.plan_type = bestPlan(aa.plan_type, bb.plan_type, fallbackPlan);
-  return chosen;
-}
-
-function objectAt(source, key) {
-  return source && typeof source[key] === "object" && source[key] !== null ? source[key] : null;
-}
-
-function pick(source, keys) {
-  for (const key of keys) {
-    if (source && source[key] !== undefined && source[key] !== null && source[key] !== "") {
-      if (typeof source[key] === "object") continue;
-      return source[key];
-    }
-  }
-  return "";
-}
-
-function pickAny(sources, keys) {
-  for (const source of sources) {
-    const value = pick(source, keys);
-    if (value) return value;
-  }
-  return "";
-}
-
-function hasTokenishFields(source) {
-  if (!source || typeof source !== "object") return false;
-  const direct = ["access_token", "accessToken", "refresh_token", "refreshToken", "id_token", "idToken", "session_token", "sessionToken"];
-  if (direct.some((key) => source[key])) return true;
-  return ["tokens", "token", "auth", "authorization", "session", "chatgpt_session", "authJson"].some((key) => {
-    const value = source[key];
-    return value && typeof value === "object" && direct.some((field) => value[field]);
-  });
-}
-
-function normalizeImportSources(parsed) {
-  if (Array.isArray(parsed)) return parsed;
-  for (const key of ["accounts", "sessions", "items", "data", "results", "list"]) {
-    if (Array.isArray(parsed?.[key])) return parsed[key];
-  }
-  if (parsed?.authJson && typeof parsed.authJson === "object") return [parsed.authJson];
-  if (parsed && typeof parsed === "object" && !hasTokenishFields(parsed)) {
-    const objectValues = Object.values(parsed).filter((value) => value && typeof value === "object" && hasTokenishFields(value));
-    if (objectValues.length > 1) return objectValues;
-  }
-  return [parsed];
-}
-
-function extractAuthSource(source) {
-  const tokens = objectAt(source, "tokens") || objectAt(source, "token") || {};
-  const auth = objectAt(source, "auth") || objectAt(source, "authorization") || {};
-  const session = objectAt(source, "session") || objectAt(source, "chatgpt_session") || {};
-  const sessionTokens = objectAt(session, "tokens") || objectAt(session, "token") || {};
-  const sessionProfile = objectAt(session, "profile") || {};
-  const user = objectAt(source, "user") || objectAt(source, "account") || objectAt(source, "profile") || {};
-  const subscription = objectAt(source, "subscription") || objectAt(source, "plan") || {};
-  const sourceType = pick(source, ["type", "source", "provider", "format"]) || "";
-  const kind = source.auth_mode === "chatgpt" && source.tokens
-    ? "auth.json"
-    : (/sub/i.test(sourceType) || source.sub2 || source.subscription_url ? "sub" : "cpa");
-
-  return {
-    kind,
-    id_token: pickAny([source, tokens, auth, sessionTokens, session], ["id_token", "idToken"]),
-    access_token: pickAny([source, tokens, auth, sessionTokens, session], ["access_token", "accessToken"]),
-    refresh_token: pickAny([source, tokens, auth, sessionTokens, session], ["refresh_token", "refreshToken"]),
-    session_token: pickAny([source, tokens, auth, sessionTokens, session], ["session_token", "sessionToken", "__Secure-next-auth.session-token", "token"]),
-    account_id: pickAny([source, tokens, auth, sessionTokens, user], ["account_id", "accountId", "chatgpt_account_id", "chatgptAccountId", "id"]),
-    email: pickAny([source, session, user], ["email", "mail"]),
-    name: pickAny([source, user], ["name", "display_name", "displayName", "label"]),
-    plan_type: pickAny([source, sessionProfile, subscription], ["plan_type", "planType", "plan"]) || pick(subscription, ["type"]),
-    chatgpt_plan_type: pickAny([source, sessionProfile, subscription], ["chatgpt_plan_type", "chatgptPlanType", "name"]),
-    expires: pickAny([source, session], ["expires", "expires_at", "expiresAt", "expired_at", "expiredAt"]),
-    usage: source.usage_snapshot || source.usage || null,
-  };
-}
-
-function parseSessionSource(source) {
-  const extracted = extractAuthSource(source || {});
-  const accessToken = extracted.access_token || "";
-  const refreshToken = extracted.refresh_token || "";
-  const idToken = extracted.id_token || "";
-  const accessPayload = decodeJwtPayload(accessToken) || {};
-  const idPayload = decodeJwtPayload(idToken) || {};
-  const authPayload = accessPayload["https://api.openai.com/auth"] || idPayload["https://api.openai.com/auth"] || {};
-  const profilePayload = accessPayload["https://api.openai.com/profile"] || idPayload["https://api.openai.com/profile"] || {};
-  const accountId = extracted.account_id
-    || authPayload.chatgpt_account_id
-    || authPayload.chatgpt_account_user_id
-    || "";
-  const email = extracted.email || profilePayload.email || "";
-  const expires = extracted.expires || jwtExpiryText(accessToken) || "";
-  const plan = extracted.plan_type || extracted.chatgpt_plan_type || authPayload.chatgpt_plan_type || "";
-  const usage = normalizeUsage(extracted.usage, plan);
-
-  if (!accessToken) {
-    throw new Error("没有识别到 access_token。请粘贴完整 session JSON 或 Codex auth.json。");
-  }
-
-  return {
-    accountName: extracted.name || email || accountId || "",
-    session: {
-      sourceType: extracted.kind,
-      email,
-      expires,
-      profile: { plan },
-      usage,
-      tokens: {
-        id_token: idToken || accessToken,
-        access_token: accessToken,
-        refresh_token: refreshToken,
-        account_id: accountId,
-        session_token: extracted.session_token || "",
-      },
-    },
-  };
-}
-
-function parseImportEntries(input) {
-  const parsed = typeof input === "string" ? JSON.parse(input) : input;
-  const sources = normalizeImportSources(parsed);
-  return sources.map((source, index) => {
-    try {
-      return {
-        ok: true,
-        sourceIndex: index,
-        sourceName: source?.email || source?.name || `#${index + 1}`,
-        ...parseSessionSource(source),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        sourceIndex: index,
-        sourceName: source?.email || source?.name || `#${index + 1}`,
-        error: error.message || "解析失败",
-      };
-    }
-  });
-}
-
-function parseSession(input) {
-  const entries = parseImportEntries(input);
-  const first = entries.find((entry) => entry.ok);
-  if (!first) throw new Error(entries[0]?.error || "没有识别到可导入账号。");
-  return first.session;
-}
-
-function jwtExpiryText(token) {
-  const payload = decodeJwtPayload(token);
-  if (!payload?.exp) return "";
-  return new Date(payload.exp * 1000).toISOString();
-}
-
-function authFingerprint(session) {
-  const tokens = session?.tokens || {};
-  const access = tokens.access_token || "";
-  const refresh = tokens.refresh_token || "";
-  return [
-    tokens.account_id || "",
-    access.slice(0, 18),
-    access.slice(-18),
-    refresh.slice(0, 12),
-    refresh.slice(-12),
-  ].join("|");
-}
-
-function accountDedupeKey(account) {
-  const accountId = account.accountId || account.account_id || account.session?.tokens?.account_id || "";
-  if (accountId) return `account:${String(accountId).toLowerCase()}`;
-  const email = account.email || account.session?.email || "";
-  if (email) return `email:${String(email).toLowerCase()}`;
-  const fingerprint = authFingerprint(account.session);
-  if (fingerprint.replace(/\|/g, "")) return `token:${fingerprint}`;
-  return `id:${account.id || crypto.randomUUID()}`;
-}
-
-function hasUsableRefreshToken(account) {
-  if (account?.hasRefreshToken !== undefined) return Boolean(account.hasRefreshToken);
-  const tokens = account?.session?.tokens || {};
-  return Boolean(tokens.refresh_token && tokens.refresh_token !== tokens.access_token && tokens.refresh_token !== "rt_mock_token");
-}
-
-function accessTokenExpiry(account) {
-  if (account?.expiresAt) {
-    const date = new Date(account.expiresAt);
-    if (!Number.isNaN(date.getTime())) return date;
-  }
-  const payload = decodeJwtPayload(account?.session?.tokens?.access_token);
-  return payload?.exp ? new Date(payload.exp * 1000) : null;
-}
-
-function accountPlan(account) {
-  return bestPlan(account?.planType, account?.usage?.plan_type, account?.session?.profile?.plan) || "未知";
-}
-
-function normalizeLocalAccount(account) {
-  const session = account.session || null;
-  const tokens = session?.tokens || {};
-  const accessPayload = decodeJwtPayload(tokens.access_token || "") || {};
-  const idPayload = decodeJwtPayload(tokens.id_token || "") || {};
-  const authPayload = accessPayload["https://api.openai.com/auth"] || idPayload["https://api.openai.com/auth"] || {};
-  const profilePayload = accessPayload["https://api.openai.com/profile"] || idPayload["https://api.openai.com/profile"] || {};
-  const accountId = account.accountId || account.account_id || tokens.account_id || authPayload.chatgpt_account_id || "";
-  const email = account.email || session?.email || profilePayload.email || "";
-  const plan = bestPlan(account.planType, account.plan_type, account.usage?.plan_type, session?.profile?.plan, authPayload.chatgpt_plan_type);
-  const expiresAt = account.expiresAt || account.expires_at || session?.expires || (accessPayload.exp ? new Date(accessPayload.exp * 1000).toISOString() : "");
-  return {
-    id: account.id || crypto.randomUUID(),
-    localId: account.localId || account.local_id || account.id || "",
-    cloudId: account.cloudId || account.cloud_id || "",
-    name: account.name || email || accountId || "Unnamed Account",
-    email,
-    group: account.group || account.groupName || account.group_name || "默认",
-    priority: account.priority || "normal",
-    usageNote: account.usageNote || account.usage_note || "",
-    expiryNote: account.expiryNote || account.expiry_note || "",
-    accountId,
-    expiresAt,
-    hasRefreshToken: account.hasRefreshToken ?? account.has_refresh_token ?? hasUsableRefreshToken({ session }),
-    planType: plan,
-    usage: normalizeUsage(account.usage || session?.usage, plan),
-    session,
-    cloudOnly: Boolean(account.cloudOnly || account.cloud_only) && !session,
-    createdAt: account.createdAt || account.created_at || new Date().toISOString(),
-    updatedAt: account.updatedAt || account.updated_at || new Date().toISOString(),
-    lastSwitchAt: account.lastSwitchAt || account.last_switch_at || "",
-  };
-}
-
-function normalizeCloudAccount(account) {
-  const plan = bestPlan(account.planType, account.plan_type, account.usage?.plan_type);
-  return {
-    id: `cloud:${account.id}`,
-    localId: "",
-    cloudId: account.id,
-    name: account.name || account.email || "Unnamed Account",
-    email: account.email || "",
-    group: account.group || account.groupName || account.group_name || "默认",
-    priority: account.priority || "normal",
-    usageNote: account.usageNote || account.usage_note || "",
-    expiryNote: account.expiryNote || account.expiry_note || "",
-    accountId: account.accountId || account.account_id || "",
-    expiresAt: account.expiresAt || account.expires_at || "",
-    hasRefreshToken: Boolean(account.hasRefreshToken ?? account.has_refresh_token),
-    planType: plan,
-    usage: normalizeUsage(account.usage || account.usage_snapshot, plan),
-    session: null,
-    cloudOnly: true,
-    createdAt: account.createdAt || account.created_at || "",
-    updatedAt: account.updatedAt || account.updated_at || "",
-    lastSwitchAt: account.lastSwitchAt || account.last_switch_at || "",
-  };
+  const view = progressUi.renderOperationProgress(state.operationProgress);
+  $("progressTitle").textContent = view.title;
+  $("progressSummary").textContent = view.summary;
+  $("progressMeterBar").style.width = `${view.percent}%`;
+  $("progressCloseBtn").disabled = view.closeDisabled;
+  $("progressList").innerHTML = view.listHtml;
 }
 
 function mergeAccount(existing, incoming) {
@@ -1262,128 +1066,24 @@ function cloudBackupEnabled() {
   return Boolean(state.user && syncMode() !== "local-only");
 }
 
+function readMigratedLocalStorage(currentKey, previousKey) {
+  const current = localStorage.getItem(currentKey);
+  if (current) return current;
+  const previous = previousKey ? localStorage.getItem(previousKey) : "";
+  if (previous) {
+    localStorage.setItem(currentKey, previous);
+    localStorage.removeItem(previousKey);
+  }
+  return previous || "";
+}
+
+function writeMigratedLocalStorage(currentKey, value, previousKey = "") {
+  localStorage.setItem(currentKey, value);
+  if (previousKey) localStorage.removeItem(previousKey);
+}
+
 function selectedAccount() {
   return state.accounts.find((account) => account.id === state.selectedId) || null;
-}
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#039;",
-  })[char]);
-}
-
-function shortId(value) {
-  if (!value) return "未识别";
-  return value.length <= 16 ? value : `${value.slice(0, 8)}...${value.slice(-6)}`;
-}
-
-function formatTime(value) {
-  if (!value) return "无记录";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}
-
-function formatRefreshTime(value) {
-  if (!value) return "未刷新";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
-
-function formatResetTime(value) {
-  if (!value) return "重置未知";
-  const number = numeric(value);
-  const date = Number.isFinite(number) && number > 1000000000 ? new Date(number * 1000) : new Date(value);
-  if (Number.isNaN(date.getTime())) return "重置未知";
-  return `重置 ${date.toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`;
-}
-
-function planLabel(plan) {
-  const value = String(plan || "未知").toLowerCase();
-  if (value === "plus") return "Plus";
-  if (value === "pro") return "Pro";
-  if (value === "team") return "Team";
-  if (value === "enterprise") return "Enterprise";
-  if (value === "free") return "Free";
-  return plan || "未知";
-}
-
-function planClass(plan) {
-  const value = canonicalPlan(plan);
-  return value ? `plan-${value}` : "plan-unknown";
-}
-
-function formatTokenTime(date) {
-  if (!date || Number.isNaN(date.getTime())) return "未知";
-  return date.toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
-
-function formatBytes(value) {
-  const size = Number(value) || 0;
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function explainError(raw) {
-  const text = String(raw || "").trim();
-  if (!text) return "";
-  const lower = text.toLowerCase();
-  if (
-    text.includes("封") ||
-    text.includes("停用") ||
-    text.includes("账号已被禁用") ||
-    lower.includes("account_deactivated") ||
-    lower.includes("user_deactivated") ||
-    lower.includes("organization_deactivated") ||
-    lower.includes("account_disabled") ||
-    lower.includes("disabled account") ||
-    lower.includes("suspended") ||
-    lower.includes("banned")
-  ) {
-    return "账号不可用，请检查是否被停用";
-  }
-  if (/\b401\b/.test(text) || lower.includes("authentication token has been invalidated") || lower.includes("unauthorized")) {
-    return "Token 已失效，请重新登录";
-  }
-  if (/\b403\b/.test(text) || lower.includes("forbidden")) {
-    return "无权限访问，请检查账号状态";
-  }
-  if (/\b429\b/.test(text) || lower.includes("rate limit") || lower.includes("too many requests")) {
-    return "请求过于频繁，稍后再试";
-  }
-  if (/\b5\d\d\b/.test(text)) {
-    return "服务暂时不可用，稍后重试";
-  }
-  if (lower.includes("abort") || text.includes("请求被中止") || text.includes("连接被意外关闭")) {
-    return "请求中断，请重试";
-  }
-  if (lower.includes("network") || lower.includes("fetch failed") || text.includes("网络")) {
-    return "网络连接失败";
-  }
-  return text.length > 42 ? `${text.slice(0, 42)}...` : text;
-}
-
-function errorSeverity(label) {
-  const text = String(label || "").toLowerCase();
-  if (!text) return "neutral";
-  if (
-    text.includes("封") ||
-    text.includes("停用") ||
-    text.includes("账号已被禁用") ||
-    text.includes("账号不可用") ||
-    text.includes("banned") ||
-    text.includes("suspended") ||
-    text.includes("deactivated") ||
-    text.includes("disabled account")
-  ) {
-    return "bad";
-  }
-  return "warn";
 }
 
 function usageIssue(account) {
@@ -1404,10 +1104,78 @@ function debounce(fn, delay = 200) {
   };
 }
 
+function wait(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function hasAccountSecret(account) {
+  return Boolean(account && (account.session?.tokens?.access_token || (state.user && account.cloudId)));
+}
+
+function experimentalAtEnabled(settings = state.smartSwitchSettings) {
+  return Boolean(settings?.showExperimentalAt && settings?.allowAt);
+}
+
+function refreshTokenInvalidText(value) {
+  return /(?:invalid_grant|refresh token was already used|access token could not be refreshed|could not be refreshed|rt 已失效|refresh_token 已失效)/i.test(String(value || ""));
+}
+
+function accountCredentialKind(account) {
+  if (account?.credentialKind) return account.credentialKind;
+  if (hasUsableRefreshToken(account)) return "rt";
+  if (hasAccountSecret(account)) return "at";
+  return "unknown";
+}
+
+function codexBlockReason(account, settings = state.smartSwitchSettings) {
+  if (!hasAccountSecret(account)) return "missing_secret";
+  const explicit = account?.codexBlockReason || "";
+  const kind = accountCredentialKind(account);
+  const usage = normalizeUsage(account?.usage, accountPlan(account));
+  if (kind === "rt") {
+    if (explicit && explicit !== "at_unsupported" && explicit !== "rt_stale") return explicit;
+    if (refreshTokenInvalidText(usage.error)) return "rt_invalid";
+    return "";
+  }
+  if (!experimentalAtEnabled(settings)) return "at_unsupported";
+  const expiry = accessTokenExpiry(account);
+  if (expiry && expiry.getTime() <= Date.now()) return "token_expired";
+  return "";
+}
+
+function codexBlockLabel(reason) {
+  if (reason === "at_unsupported") return "不支持 Codex";
+  if (reason === "rt_invalid") return "RT 已失效";
+  if (reason === "token_expired") return "Token 已过期";
+  if (reason === "missing_secret") return "缺少密钥";
+  return "不可用";
+}
+
+function codexBlockDetail(reason) {
+  if (reason === "at_unsupported") return "缺少 RT，当前不能用于 Codex，请重新登录 Codex 获取 RT。";
+  if (reason === "rt_invalid") return "refresh_token 已失效或已被使用，请重新登录。";
+  if (reason === "token_expired") return "access_token 已过期且没有可用 RT。";
+  if (reason === "missing_secret") return "云端没有可下发的 auth 密文。";
+  return "";
+}
+
+function codexUsable(account, settings = state.smartSwitchSettings) {
+  return Boolean(account && hasAccountSecret(account) && !codexBlockReason(account, settings));
+}
+
 function tokenState(account) {
   if (!account) return { label: "未选择", className: "warn", score: 0, detail: "" };
-  if (!account.session && !account.cloudId) {
+  if (!hasAccountSecret(account)) {
     return { label: "无本地 token", className: "warn", score: 10, detail: "本地没有可用于切换的 auth/session 原文。" };
+  }
+  const block = codexBlockReason(account);
+  if (block) {
+    return {
+      label: codexBlockLabel(block),
+      className: block === "rt_invalid" || block === "token_expired" ? "bad" : "warn",
+      score: block === "at_unsupported" ? 2 : 5,
+      detail: codexBlockDetail(block),
+    };
   }
   const expiry = accessTokenExpiry(account);
   const hasRt = hasUsableRefreshToken(account);
@@ -1443,9 +1211,8 @@ function usagePenalty(account) {
 
 function accountScore(account) {
   const settings = state.smartSwitchSettings || defaultSmartSwitchSettings;
-  if (!canUseAccount(account)) return -9999;
+  if (!codexUsable(account, settings)) return -9999;
   if (settings.paidOnly && !isPaidPlan(account)) return -9000;
-  if (!settings.allowAt && !hasUsableRefreshToken(account)) return -8500;
   if (settings.avoidCurrent && isCurrentAccount(account)) return -8000;
   const usage = normalizeUsage(account?.usage, accountPlan(account));
   if (settings.avoidLow5h && Number.isFinite(usage.five_hour?.remaining_percent) && usage.five_hour.remaining_percent <= 30) return -7000;
@@ -1466,7 +1233,7 @@ function smartSwitchReasons(account) {
   const usage = normalizeUsage(account?.usage, accountPlan(account));
   const reasons = [];
   if (isPaidPlan(account)) reasons.push(planLabel(accountPlan(account)));
-  reasons.push(hasUsableRefreshToken(account) ? "RT" : "AT");
+  reasons.push(hasUsableRefreshToken(account) ? "可用 RT" : "AT 实验");
   if (Number.isFinite(usage.five_hour?.remaining_percent)) reasons.push(`5H ${usage.five_hour.remaining_percent}%`);
   if (Number.isFinite(usage.one_week?.remaining_percent)) reasons.push(`7D ${usage.one_week.remaining_percent}%`);
   if (account.priority === "primary") reasons.push("优先使用");
@@ -1475,7 +1242,7 @@ function smartSwitchReasons(account) {
 }
 
 function canUseAccount(account) {
-  return Boolean(account && (account.session?.tokens?.access_token || (state.user && account.cloudId)));
+  return codexUsable(account);
 }
 
 function isPaidPlan(account) {
@@ -1494,14 +1261,17 @@ function isExpiredWithoutRt(account) {
 }
 
 function isInvalidAccount(account) {
-  if (!canUseAccount(account)) return true;
+  if (!hasAccountSecret(account) || codexBlockReason(account)) return true;
   if (isExpiredWithoutRt(account)) return true;
   if (usageIssue(account)) return true;
   return false;
 }
 
 function tokenFilterValue(account) {
-  if (!canUseAccount(account)) return "missing";
+  if (!hasAccountSecret(account)) return "missing";
+  const block = codexBlockReason(account);
+  if (block === "at_unsupported") return "at";
+  if (block === "rt_invalid") return "expired";
   if (isExpiredWithoutRt(account)) return "expired";
   const expiry = accessTokenExpiry(account);
   if (expiry && expiry.getTime() - Date.now() < 24 * 60 * 60 * 1000) return "soon";
@@ -1518,6 +1288,8 @@ function usageFilterValue(account) {
 }
 
 function accountActionMode(account) {
+  const block = codexBlockReason(account);
+  if (block === "at_unsupported") return "update-rt";
   if (!canUseAccount(account)) return "unavailable";
   if (isExpiredWithoutRt(account) || usageIssue(account)) return "unavailable";
   return state.helperReady ? "direct-switch" : "download-auth";
@@ -1611,100 +1383,45 @@ function switchView(view) {
 }
 
 function renderShell() {
-  const total = state.accounts.length;
-  const localSecretCount = state.accounts.filter((account) => account.hasLocalSecret).length;
-  const cloudCount = state.cloudAccounts.length;
-  const cloudText = state.user ? `${state.user.email}${cloudBackupEnabled() ? " · 已同步" : ""}` : "未登录";
-  const helperText = state.helperReady ? "Helper 在线" : "Helper 未连接";
-  const codexStatus = state.codexStatus || {};
-  const codexLabel = state.helperReady
-    ? (codexStatus.label || "状态确认中")
-    : "Codex 未探测";
-  const codexClass = codexStatus.state === "idle"
-    ? "ready"
-    : ["active", "waiting", "cooling"].includes(codexStatus.state) ? "warn"
-      : codexStatus.state === "not_running" ? ""
-        : "warn";
-  const subtitles = {
-    accounts: "",
-    helper: "安装后即可自动写入 auth 并重启 Codex。",
-    admin: "查看用户、设备和最近操作。",
-  };
-  $("viewSubtitle").textContent = subtitles[state.currentView] || "";
+  const view = shellUi.shellViewModel(state);
+  $("viewSubtitle").textContent = view.viewSubtitle;
   if ($("homeHeadline")) {
-    $("homeHeadline").textContent = !state.authResolved ? "正在加载账号池" : (total ? "选择一个账号，或交给智能切换" : "导入账号后开始切换");
+    $("homeHeadline").textContent = view.homeHeadline;
   }
   if ($("homeSubcopy")) {
-    $("homeSubcopy").textContent = !state.authResolved ? "正在确认登录状态。" : (state.user ? "已开启多设备账号池。" : "登录后可在多台设备同步账号池。");
+    $("homeSubcopy").textContent = view.homeSubcopy;
   }
-  $("vaultTitle").textContent = !state.authResolved ? "账号池" : `${state.user ? "账号池" : "本地账号池"} · ${total} 个账号`;
-  $("vaultCopy").textContent = "";
-  $("sideCloudStatus").textContent = cloudText;
-  $("sideCloudStatus").className = state.user ? "ready" : "";
-  $("sideHelperStatus").textContent = helperText;
-  $("sideHelperStatus").className = state.helperReady ? "ready" : "warn";
-  $("syncPill").innerHTML = `<span class="status-dot ${state.user ? "ok" : ""}"></span>${escapeHtml(state.user ? (cloudBackupEnabled() ? "已同步" : "已登录") : "本地")}`;
-  $("syncPill").className = `status-pill ${state.user ? "ready" : ""}`;
-  const autoEnabled = Boolean(state.autoSwitchSettings?.enabled);
-  const autoAuthorized = Boolean(state.autoSwitchStatus?.helperAuthorized || state.helperInfo?.auto_switch?.authorized);
-  const autoRuntimeLabel = codexStatus.state === "idle"
-    ? "自动切换已开启 · 当前空闲"
-    : codexStatus.state === "active" ? "自动切换已开启 · 等待任务结束"
-      : codexStatus.state === "cooling" ? "自动切换已开启 · 等待稳定空闲"
-        : codexStatus.state === "unknown" ? "检测未知，已暂停自动切换"
-          : codexStatus.state === "not_running" ? "Codex 未运行，自动切换暂停"
-            : "自动切换已开启";
-  const autoLabel = !state.user
-    ? "自动切换需登录"
-    : !autoEnabled ? "自动切换未开启"
-      : !state.helperReady ? "自动切换待 Helper"
-        : !autoAuthorized ? "自动切换待授权"
-          : autoRuntimeLabel;
-  const autoClass = autoEnabled && autoAuthorized && state.helperReady && codexStatus.state === "idle"
-    ? "ready"
-    : autoEnabled ? "warn" : "";
-  $("autoSwitchPill").innerHTML = `<span class="status-dot ${autoClass === "ready" ? "ok" : autoClass === "warn" ? "warn" : ""}"></span>${escapeHtml(autoLabel)}`;
-  $("autoSwitchPill").className = `status-pill ${autoClass}`;
-  const helperLabel = state.currentAuthChecking ? "确认 auth" : (state.helperReady ? "Helper 在线" : "Helper 离线");
-  $("codexPill").innerHTML = `<span class="status-dot ${codexClass === "ready" ? "ok" : codexClass === "warn" ? "warn" : ""}"></span>${escapeHtml(codexLabel)}`;
-  $("codexPill").className = `status-pill ${codexClass}`;
-  $("helperPill").innerHTML = `<span class="status-dot ${state.helperReady ? "ok" : "warn"}"></span>${escapeHtml(helperLabel)}`;
-  $("helperPill").className = `status-pill ${state.helperReady ? "ready" : "warn"}`;
-  $("userMenuBtn").textContent = state.user ? state.user.email : "登录以同步";
-  $("sidebarLoginBtn").textContent = state.user ? "账号设置" : "登录以同步";
-  $("sidebarSyncCard").querySelector("strong").textContent = state.user ? "已登录" : "快速切换";
-  $("sidebarSyncCard").querySelector("span").textContent = state.user
-    ? (cloudBackupEnabled() ? "账号池会自动同步。" : "可在设置里开启同步。")
-    : "安装 Helper 后可一键切换。";
+  $("vaultTitle").textContent = view.vaultTitle;
+  $("vaultCopy").textContent = view.vaultCopy;
+  $("sideCloudStatus").textContent = view.sideCloudText;
+  $("sideCloudStatus").className = view.sideCloudClass;
+  $("sideHelperStatus").textContent = view.sideHelperText;
+  $("sideHelperStatus").className = view.sideHelperClass;
+  $("syncPill").innerHTML = view.syncPillHtml;
+  $("syncPill").className = view.syncPillClass;
+  $("autoSwitchPill").innerHTML = view.autoSwitchPillHtml;
+  $("autoSwitchPill").className = view.autoSwitchPillClass;
+  $("codexPill").innerHTML = view.codexPillHtml;
+  $("codexPill").className = view.codexPillClass;
+  $("helperPill").innerHTML = view.helperPillHtml;
+  $("helperPill").className = view.helperPillClass;
+  $("userMenuBtn").textContent = view.userMenuText;
+  $("sidebarLoginBtn").textContent = view.sidebarLoginText;
+  $("sidebarSyncCard").querySelector("strong").textContent = view.sidebarSyncTitle;
+  $("sidebarSyncCard").querySelector("span").textContent = view.sidebarSyncText;
   document.querySelectorAll(".admin-only").forEach((el) => {
-    el.hidden = state.user?.role !== "admin";
+    el.hidden = view.adminOnlyHidden;
   });
-  document.body.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
-  $("collapseSidebarBtn").setAttribute("aria-expanded", String(!state.sidebarCollapsed));
-  $("collapseSidebarBtn").setAttribute("aria-label", state.sidebarCollapsed ? "展开侧边栏" : "隐藏侧边栏");
-  $("refreshAllUsageBtn").disabled = !state.helperReady || !state.accounts.some(canUseAccount) || state.refreshingUsage;
-  $("importLocalAuthBtn").disabled = !state.helperReady;
+  document.body.classList.toggle("sidebar-collapsed", view.sidebarCollapsed);
+  $("collapseSidebarBtn").setAttribute("aria-expanded", view.sidebarExpanded);
+  $("collapseSidebarBtn").setAttribute("aria-label", view.sidebarToggleLabel);
+  $("refreshAllUsageBtn").disabled = view.refreshAllUsageDisabled;
+  $("importLocalAuthBtn").disabled = view.importLocalAuthDisabled;
   renderShellState();
 }
 
 function renderMetrics() {
-  const total = state.accounts.length;
-  const plusLike = state.accounts.filter((account) => ["plus", "pro", "team", "enterprise"].includes(String(accountPlan(account)).toLowerCase())).length;
-  const usageReady = state.accounts.filter((account) => account.usage?.refreshed_at && !account.usage?.error).length;
-  const attention = state.accounts.filter((account) => ["warn", "bad"].includes(tokenState(account).className)).length;
-  const current = resolveCurrentAccountId() ? 1 : 0;
-  $("metricsGrid").innerHTML = [
-    ["账号总数", total],
-    ["付费等级", plusLike],
-    ["额度已刷新", usageReady],
-    ["需处理账号", attention],
-    ["当前选择", current],
-  ].map(([label, value]) => `
-    <div class="metric">
-      <span>${label}</span>
-      <strong>${value}</strong>
-    </div>
-  `).join("");
+  $("metricsGrid").innerHTML = shellUi.renderMetrics(state.accounts);
 }
 
 function sourceLabel(account) {
@@ -1770,38 +1487,10 @@ function isCurrentAccount(account) {
   return Boolean(account && account.id === resolveCurrentAccountId());
 }
 
-function accountInitial(account) {
-  const seed = account.name || account.email || account.accountId || "?";
-  return seed.trim().slice(0, 1).toUpperCase() || "?";
-}
-
 function priorityLabel(value) {
   if (value === "primary") return "优先使用";
   if (value === "reserve") return "尽量少用";
   return "正常使用";
-}
-
-function quotaMini(window, label, usage = null) {
-  const issueLabel = usage?.error ? explainError(usage.error) : "";
-  const issue = issueLabel ? { label: issueLabel, className: errorSeverity(issueLabel) } : null;
-  if (!window) {
-    return `
-      <div class="quota-mini empty ${issue?.className || ""}" ${issue ? `title="${escapeHtml(issue.label)}"` : ""}>
-        <div class="quota-mini-head"><span>${escapeHtml(label)}</span><strong>${escapeHtml(issue ? "不可用" : "未刷新")}</strong></div>
-        <div class="mini-bar"><i style="width:0%"></i></div>
-      </div>
-    `;
-  }
-  const remaining = Number.isFinite(window.remaining_percent) ? window.remaining_percent : null;
-  const used = Number.isFinite(window.used_percent) ? window.used_percent : (remaining === null ? null : 100 - remaining);
-  const percent = remaining === null ? Math.max(0, 100 - (used || 0)) : remaining;
-  const className = percent <= 10 ? "bad" : percent <= 30 ? "warn" : "";
-  return `
-    <div class="quota-mini ${className}">
-      <div class="quota-mini-head"><span>${escapeHtml(label)}</span><strong>${percent}%</strong></div>
-      <div class="mini-bar"><i style="width:${percent}%"></i></div>
-    </div>
-  `;
 }
 
 function accountMatchesSearch(account, query) {
@@ -1821,211 +1510,37 @@ function accountMatchesSearch(account, query) {
 function renderAccounts() {
   const filtered = visibleAccounts();
   renderToolbarState(filtered);
-  $("accountGrid").className = `${state.accountLayout === "cards" ? "account-card-grid" : "account-list chat-list"} ${state.selectedBulkIds.size ? "bulk-mode" : ""}`;
-  if (!state.authResolved) {
-    $("accountGrid").innerHTML = `
-      <div class="empty">
-        <strong>正在加载账号池</strong>
-        <span>正在确认登录状态，登录后将直接显示云端账号。</span>
-      </div>
-    `;
-    return;
-  }
-  if (!filtered.length) {
-    $("accountGrid").innerHTML = `
-      <div class="empty">
-        <strong>${state.accounts.length ? "没有匹配账号" : "还没有账号"}</strong>
-        <span>${state.accounts.length ? "换个关键词或调整筛选。" : "导入 auth.json 后开始管理账号。"}</span>
-      </div>
-    `;
-    return;
-  }
-  const currentId = resolveCurrentAccountId();
-  const renderAction = (account, current) => {
-    const mode = accountActionMode(account);
-    const label = mode === "direct-switch" ? (current ? "重启" : "切换") : (mode === "download-auth" ? "下载 auth" : "不可用");
-    return `<button class="primary" data-account-action="switch" data-id="${escapeHtml(account.id)}" ${mode === "unavailable" ? "disabled" : ""}>${label}</button>`;
-  };
-  const renderMeta = (account) => {
-    const subItems = [account.email || account.accountId || "未识别邮箱", state.user ? "" : sourceLabel(account)].filter(Boolean);
-    return subItems.map((item, index) => `${index ? "<span>·</span>" : ""}<span>${escapeHtml(item)}</span>`).join("");
-  };
-  const renderRow = (account) => {
-    const token = tokenState(account);
-    const issue = usageIssue(account);
-    const plan = accountPlan(account);
-    const current = account.id === currentId;
-    const selected = state.selectedBulkIds.has(account.id);
-    return `
-      <div class="account-row ${account.id === state.selectedId ? "active" : ""} ${current ? "current" : ""}" data-id="${escapeHtml(account.id)}" role="button" tabindex="0">
-        <label class="bulk-check" title="选择账号"><input type="checkbox" data-bulk-id="${escapeHtml(account.id)}" ${selected ? "checked" : ""} /></label>
-        <div class="account-symbol">${escapeHtml(accountInitial(account))}</div>
-        <div class="account-row-main">
-          <div class="account-row-title">
-            <strong>${escapeHtml(account.name)}</strong>
-            ${current ? '<span class="current-chip">正在使用</span>' : ""}
-            <span class="plan-chip ${planClass(plan)}">${escapeHtml(planLabel(plan))}</span>
-          </div>
-          <div class="account-row-sub">${renderMeta(account)}</div>
-          <div class="account-row-status ${issue?.className || token.className}">
-            <span class="status-dot ${issue?.className || token.className}"></span>
-            <span>${escapeHtml(issue?.label || token.label)}</span>
-            <span>·</span>
-            <span>${escapeHtml(formatRefreshTime(account.usage?.refreshed_at))}</span>
-          </div>
-        </div>
-        <div class="account-row-quota">
-          ${quotaMini(account.usage?.five_hour, "5H", account.usage)}
-          ${quotaMini(account.usage?.one_week, "7D", account.usage)}
-        </div>
-        <div class="account-row-actions">
-          <button class="icon-action" data-account-action="refresh-usage" data-id="${escapeHtml(account.id)}" ${state.helperReady ? "" : "disabled"} title="刷新额度" aria-label="刷新额度">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5"></path><path d="M4 17v-5h5"></path><path d="M18.2 9A7 7 0 0 0 6.4 6.8L4 12"></path><path d="M5.8 15A7 7 0 0 0 17.6 17.2L20 12"></path></svg>
-          </button>
-          ${renderAction(account, current)}
-          <button class="subtle-danger" data-account-action="delete" data-id="${escapeHtml(account.id)}" title="删除账号">删除</button>
-        </div>
-      </div>
-    `;
-  };
-  const renderCard = (account) => {
-    const token = tokenState(account);
-    const issue = usageIssue(account);
-    const plan = accountPlan(account);
-    const current = account.id === currentId;
-    const selected = state.selectedBulkIds.has(account.id);
-    return `
-      <div class="account-card ${account.id === state.selectedId ? "active" : ""} ${current ? "current" : ""}" data-id="${escapeHtml(account.id)}" role="button" tabindex="0">
-        <div class="account-card-top">
-          <label class="bulk-check" title="选择账号"><input type="checkbox" data-bulk-id="${escapeHtml(account.id)}" ${selected ? "checked" : ""} /></label>
-          <div class="account-symbol">${escapeHtml(accountInitial(account))}</div>
-          <div class="account-card-identity">
-            <strong>${escapeHtml(account.name)}</strong>
-            <span>${escapeHtml(account.email || shortId(account.accountId))}</span>
-          </div>
-          <div class="account-card-badges">
-            ${current ? '<span class="current-chip">正在使用</span>' : ""}
-            <span class="plan-chip ${planClass(plan)}">${escapeHtml(planLabel(plan))}</span>
-          </div>
-        </div>
-        <div class="account-row-status ${issue?.className || token.className}">
-          <span class="status-dot ${issue?.className || token.className}"></span>
-          <span>${escapeHtml(issue?.label || token.label)}</span>
-          <span>·</span>
-          <span>${escapeHtml(formatRefreshTime(account.usage?.refreshed_at))}</span>
-        </div>
-        <div class="account-card-quota">
-          ${quotaMini(account.usage?.five_hour, "5H", account.usage)}
-          ${quotaMini(account.usage?.one_week, "7D", account.usage)}
-        </div>
-        <div class="account-row-actions">
-          <button class="icon-action" data-account-action="refresh-usage" data-id="${escapeHtml(account.id)}" ${state.helperReady ? "" : "disabled"} title="刷新额度" aria-label="刷新额度">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5"></path><path d="M4 17v-5h5"></path><path d="M18.2 9A7 7 0 0 0 6.4 6.8L4 12"></path><path d="M5.8 15A7 7 0 0 0 17.6 17.2L20 12"></path></svg>
-          </button>
-          ${renderAction(account, current)}
-          <button class="subtle-danger" data-account-action="delete" data-id="${escapeHtml(account.id)}" title="删除账号">删除</button>
-        </div>
-      </div>
-    `;
-  };
-  $("accountGrid").innerHTML = filtered.map((account) => state.accountLayout === "cards" ? renderCard(account) : renderRow(account)).join("");
-}
-
-function quotaCell(window, label, usage = null) {
-  const issue = usage?.error ? explainError(usage.error) : "";
-  const issueClass = issue ? errorSeverity(issue) : "";
-  if (!window) {
-    return `
-      <div class="quota-cell empty-quota ${issueClass}" ${issue ? `title="${escapeHtml(issue)}"` : ""}>
-        <strong>${escapeHtml(issue ? "不可用" : "未刷新")}</strong>
-        <span>${label}</span>
-        <div class="quota-bar"><i style="width:0%"></i></div>
-      </div>
-    `;
-  }
-  const remaining = Number.isFinite(window.remaining_percent) ? window.remaining_percent : null;
-  const used = Number.isFinite(window.used_percent) ? window.used_percent : (remaining === null ? null : 100 - remaining);
-  const percent = remaining === null ? Math.max(0, 100 - (used || 0)) : remaining;
-  const className = percent <= 10 ? "bad" : percent <= 30 ? "warn" : "";
-  return `
-    <div class="quota-cell ${className}">
-      <strong>${percent}% 剩余</strong>
-      <span>${escapeHtml(formatResetTime(window.reset_at))}</span>
-      <div class="quota-bar"><i style="width:${percent}%"></i></div>
-    </div>
-  `;
+  const rendered = accountListUi.renderAccountGrid({
+    accounts: filtered,
+    layout: state.accountLayout,
+    authResolved: state.authResolved,
+    totalAccounts: state.accounts.length,
+    selectedId: state.selectedId,
+    currentId: resolveCurrentAccountId(),
+    selectedBulkIds: state.selectedBulkIds,
+    userPresent: Boolean(state.user),
+    helperReady: state.helperReady,
+    operationActive: state.operationProgress.active,
+  });
+  $("accountGrid").className = rendered.className;
+  $("accountGrid").innerHTML = rendered.html;
 }
 
 function renderSelected() {
   const account = selectedAccount();
-  if (!account) {
-    $("selectedState").textContent = "未选择账号";
-    $("detailTitle").textContent = "当前选择";
-    $("selectedAccountPanel").innerHTML = '<div class="empty small">选择左侧账号后显示详情。</div>';
-    $("switchBtn").textContent = state.helperReady ? "立即切换" : "下载 auth.json";
-    $("switchBtn").disabled = true;
-    $("copyAuthBtn").disabled = true;
-    return;
-  }
-  const token = tokenState(account);
-  const issue = usageIssue(account);
-  const current = isCurrentAccount(account);
-  $("selectedState").textContent = [
-    account.email || "",
-    issue?.label || token.label,
-    planLabel(accountPlan(account)),
-  ].filter(Boolean).join(" · ");
-  $("detailTitle").textContent = account.name || "当前选择";
-  $("selectedAccountPanel").innerHTML = `
-    <div class="account-hero">
-      <div class="badge-row">
-        ${current ? '<span class="badge current-badge">正在使用</span>' : ""}
-        ${state.user ? "" : `<span class="badge">${escapeHtml(sourceLabel(account))}</span>`}
-        <span class="badge ${issue?.className || token.className}"><span class="status-dot ${issue?.className || token.className}"></span>${escapeHtml(issue?.label || token.label)}</span>
-        <span class="badge ${planClass(accountPlan(account))}">${escapeHtml(planLabel(accountPlan(account)))}</span>
-      </div>
-      <div class="quota-summary">
-        ${quotaCell(account.usage?.five_hour, "5H", account.usage)}
-        ${quotaCell(account.usage?.one_week, "7D", account.usage)}
-      </div>
-      <div class="signal-grid">
-        <div class="signal wide signal-with-action">
-          <span>邮箱</span>
-          <strong>${escapeHtml(account.email || "未识别")}</strong>
-          ${account.email ? `<button type="button" data-selected-action="copy-email" data-email="${escapeHtml(account.email)}">复制</button>` : ""}
-        </div>
-        <div class="signal"><span>名称</span><strong>${escapeHtml(account.name || "未命名")}</strong></div>
-        <div class="signal"><span>状态</span><strong>${escapeHtml(issue?.label || token.detail || token.label)}</strong></div>
-        <div class="signal"><span>套餐</span><strong>${escapeHtml(planLabel(accountPlan(account)))}</strong></div>
-        <div class="signal"><span>最近切换</span><strong>${escapeHtml(formatTime(account.lastSwitchAt))}</strong></div>
-        <div class="signal wide"><span>账号 ID</span><strong>${escapeHtml(shortId(account.accountId))}</strong></div>
-      </div>
-      ${issue || token.className === "warn" || !canUseAccount(account) ? authAcquirePanel("授权需要更新") : ""}
-      <div class="detail-edit">
-        <div class="detail-edit-head">
-          <strong>编辑</strong>
-          <span>备注和智能切换偏好只影响账号池管理。</span>
-        </div>
-        <div class="detail-edit-grid">
-          <label><span>名称</span><input id="editAccountName" value="${escapeHtml(account.name || "")}" /></label>
-          <label><span>分组</span><input id="editAccountGroup" value="${escapeHtml(account.group || "默认")}" /></label>
-          <label>
-            <span>智能切换偏好</span>
-            <select id="editAccountPriority">
-              <option value="primary" ${account.priority === "primary" ? "selected" : ""}>优先使用</option>
-              <option value="normal" ${account.priority !== "primary" && account.priority !== "reserve" ? "selected" : ""}>正常使用</option>
-              <option value="reserve" ${account.priority === "reserve" ? "selected" : ""}>尽量少用</option>
-            </select>
-          </label>
-          <label><span>备注</span><input id="editUsageNote" value="${escapeHtml(account.usageNote || "")}" /></label>
-        </div>
-        <button type="button" data-selected-action="save-details">保存修改</button>
-      </div>
-    </div>
-  `;
-  $("switchBtn").textContent = state.helperReady ? "立即切换" : "下载 auth.json";
-  $("switchBtn").disabled = !canUseAccount(account);
-  $("copyAuthBtn").disabled = !canUseAccount(account);
+  const rendered = accountDetailUi.renderSelectedAccount({
+    account,
+    current: isCurrentAccount(account),
+    userPresent: Boolean(state.user),
+    helperReady: state.helperReady,
+    operationActive: state.operationProgress.active,
+  });
+  $("selectedState").textContent = rendered.selectedState;
+  $("detailTitle").textContent = rendered.detailTitle;
+  $("selectedAccountPanel").innerHTML = rendered.panelHtml;
+  $("switchBtn").textContent = rendered.switchLabel;
+  $("switchBtn").disabled = rendered.switchDisabled;
+  $("copyAuthBtn").disabled = rendered.copyDisabled;
 }
 
 async function saveSelectedDetails() {
@@ -2050,233 +1565,61 @@ async function saveSelectedDetails() {
 }
 
 function renderAudit() {
-  const list = state.audit.slice(0, 8);
-  if (!list.length) {
-    $("auditList").innerHTML = '<div class="empty small">还没有云端运行记录。本地离线切换不会强制写云审计。</div>';
-    return;
-  }
-  $("auditList").innerHTML = list.map((item) => `
-    <div class="audit-item">
-      <span>${escapeHtml(formatTime(item.at || item.createdAt))}</span>
-      <strong>${escapeHtml(auditTitle(item))}</strong>
-      <span>${escapeHtml(auditDescription(item))}</span>
-    </div>
-  `).join("");
-}
-
-function auditTitle(item) {
-  const action = String(item.action || item.result || "").toLowerCase();
-  const result = String(item.result || "");
-  if (action.includes("switch")) return "账号已切换";
-  if (action.includes("import") || /added|updated|failed/i.test(result)) return "账号已更新";
-  if (action.includes("usage")) return "额度已刷新";
-  return item.accountName || "操作已记录";
-}
-
-function auditDescription(item) {
-  const result = String(item.result || "");
-  const match = result.match(/added:(\d+),updated:(\d+),failed:(\d+)/i);
-  if (match) {
-    const [, added, updated, failed] = match;
-    return `新增 ${added}，更新 ${updated}，失败 ${failed}`;
-  }
-  if (item.accountName) return item.accountName;
-  return result || "已完成";
+  $("auditList").innerHTML = panelsUi.renderAudit(state.audit);
 }
 
 function renderDevice() {
   const helper = state.helperInfo || {};
   const codex = state.codexStatus || {};
-  const idleSeconds = Number(codex.idle_seconds);
-  const stableSeconds = Number(codex.stable_seconds);
-  const idleText = Number.isFinite(idleSeconds) && idleSeconds >= 0
-    ? `${Math.floor(idleSeconds)} 秒`
-    : Number.isFinite(stableSeconds) && stableSeconds >= 0 ? `${Math.floor(stableSeconds)} 秒` : "未确认";
-  const lastEventTime = codex.last_task_event_at ? ` · ${formatTime(codex.last_task_event_at)}` : "";
-  const lastEvent = codex.last_task_event ? `${codex.last_task_event}${lastEventTime}` : "暂无近期任务事件";
-  const pendingReason = codex.pending_switch_reason || "无";
-  const switchSafety = codex.safe_to_switch ? "可安全切换" : "暂不切换";
   $("deviceKeyBox").textContent = state.deviceKey || "未生成";
-  const rows = [
-    ["连接", state.helperReady ? "在线" : "未连接"],
-    ["地址", state.helperReady ? helperDisplayBase() : "未探测到"],
-    ["端口", helper.port || "未识别"],
-    ["Codex 状态", state.helperReady ? (codex.label || "确认中") : "未探测"],
-    ["状态来源", state.helperReady ? codexStatusSourceLabel(codex) : "未连接"],
-    ["空闲时长", state.helperReady ? idleText : "未确认"],
-    ["最近任务", state.helperReady ? lastEvent : "未连接"],
-    ["待切换原因", state.helperReady ? pendingReason : "未连接"],
-    ["安全门", state.helperReady ? switchSafety : "未连接"],
-    ["当前 auth", state.currentAuthChecking ? "正在确认" : (resolveCurrentAccountId() ? "已识别" : "未匹配账号池")],
-    ["执行", "写入 auth 并重启 Codex"],
-  ];
-  $("devicePanel").innerHTML = `
-    <div class="device-grid">
-      ${rows.map(([label, value]) => `
-        <div class="device-row">
-          <span>${escapeHtml(label)}</span>
-          <strong>${escapeHtml(value)}</strong>
-        </div>
-      `).join("")}
-    </div>
-    <p class="muted-line">Helper 只读取本机任务日志中的事件类型，不展示或上传对话内容。</p>
-  `;
+  $("devicePanel").innerHTML = panelsUi.renderDevice({
+    helperReady: state.helperReady,
+    helper,
+    codex,
+    helperBase: helperDisplayBase(),
+    currentAuthChecking: state.currentAuthChecking,
+    currentAuthMatched: Boolean(resolveCurrentAccountId()),
+  });
 }
 
 function renderSecurity() {
   const account = selectedAccount();
-  if (!account) {
-    $("authPreview").textContent = "选择账号后显示摘要。";
-    $("tokenWarning").hidden = true;
-    return;
-  }
-  $("authPreview").textContent = JSON.stringify({
-    account_id: account.accountId || "",
-    email: account.email || "",
-    plan_type: accountPlan(account),
-    expires_at: account.expiresAt || "",
-    has_refresh_token: hasUsableRefreshToken(account),
-  }, null, 2);
+  const summary = panelsUi.securitySummary(account, {
+    accountPlan,
+    hasUsableRefreshToken,
+    userPresent: Boolean(state.user),
+  });
+  $("authPreview").textContent = summary.preview;
   const warning = $("tokenWarning");
-  if (!account.hasLocalSecret && account.cloudId && !state.user) {
-    warning.hidden = false;
-    warning.textContent = "这个账号只有云端元数据，需要登录云账号后才能获取切换 payload。";
-  } else if (!hasUsableRefreshToken(account)) {
-    warning.hidden = false;
-    warning.textContent = "这个账号的 refresh_token 缺失或是占位值，长期可用性取决于 Codex 是否还能刷新。";
-  } else {
-    warning.hidden = true;
-    warning.textContent = "";
-  }
+  warning.hidden = summary.warningHidden;
+  warning.textContent = summary.warningText;
 }
 
 function renderSettings() {
   const codex = state.codexStatus || {};
-  $("settingsAccountState").innerHTML = state.user
-    ? `<strong>${escapeHtml(state.user.email)}</strong><span>${state.user.role === "admin" ? "管理员账号" : "同步账号"} · ${state.user.status === "disabled" ? "已停用" : "可用"}</span><button id="logoutInlineBtn" type="button">退出登录</button>`
-    : `<strong>未登录</strong><span>本地账号池仍可使用；登录后可同步云端。</span><button id="loginInlineBtn" type="button">登录或注册</button>`;
+  $("settingsAccountState").innerHTML = settingsUi.renderAccountState({ user: state.user });
   $("changePasswordForm").hidden = !state.user;
-  $("settingsHelperState").innerHTML = `
-    <strong>${state.helperReady ? "Helper 在线" : "Helper 离线"}</strong>
-    <span>${escapeHtml(state.helperReady ? `Codex：${codex.label || "状态确认中"}` : "未安装时可下载 auth.json 手动替换。")}</span>
-    ${state.helperReady && codex.detail ? `<span>${escapeHtml(codex.detail)}</span>` : ""}
-    ${state.helperReady && codex.pending_switch_reason ? `<span>${escapeHtml(codex.pending_switch_reason)}</span>` : ""}
-  `;
-  $("backupCloudState").innerHTML = state.user
-    ? `
-      <label class="setting-toggle">
-        <span><strong>自动备份到云端</strong><small>登录后导入的账号自动保存到云端。本机离线副本 ${state.localAccounts.length} 个。</small></span>
-        <input id="autoBackupCloudToggle" type="checkbox" ${cloudBackupEnabled() ? "checked" : ""} />
-      </label>
-    `
-    : `<strong>自动备份到云端</strong><span>登录后可开启。未登录时账号只保存在当前浏览器。</span>`;
+  $("settingsHelperState").innerHTML = settingsUi.renderHelperState({ helperReady: state.helperReady, codex });
+  $("backupCloudState").innerHTML = settingsUi.renderBackupCloudState({
+    user: state.user,
+    localAccountCount: state.localAccounts.length,
+    cloudBackupEnabled: cloudBackupEnabled(),
+  });
   renderSmartSwitchSettings();
 }
 
 function renderSmartSwitchSettings() {
   const target = $("smartSettingsState");
   if (!target) return;
-  const settings = state.smartSwitchSettings;
-  const auto = state.autoSwitchSettings || defaultAutoSwitchSettings;
-  const authorized = Boolean(state.autoSwitchStatus?.helperAuthorized || state.helperInfo?.auto_switch?.authorized);
-  const autoStateText = !state.user
-    ? "登录后可开启。"
-    : !state.helperReady ? "等待 Dock Helper 在线。"
-      : authorized ? "本机 Helper 已授权。"
-        : "需要授权本机 Helper。";
-  target.innerHTML = `
-    <div class="settings-section-title">自动切换</div>
-    <label class="setting-toggle">
-      <span><strong>后台自动切换</strong><small>账号耗尽、限流或授权失效时，Helper 会静默切换到可用账号。</small></span>
-      <input type="checkbox" data-auto-switch-setting="enabled" ${auto.enabled ? "checked" : ""} ${state.user ? "" : "disabled"} />
-    </label>
-    <div class="setting-box compact">
-      <strong>${escapeHtml(autoStateText)}</strong>
-      <span>触发阈值：5H ≤ ${Number(auto.fiveHourThreshold || 5)}%，7D ≤ ${Number(auto.oneWeekThreshold || 5)}%。额度检查约 ${Number(state.helperInfo?.auto_switch?.effective_poll_seconds || auto.pollSeconds || 15)} 秒一次。</span>
-      <div class="setting-actions inline">
-        <button id="authorizeAutoSwitchBtn" type="button" ${state.user && state.helperReady ? "" : "disabled"}>${authorized ? "重新授权 Helper" : "授权本机 Helper"}</button>
-        <button id="revokeAutoSwitchBtn" type="button" ${state.user && authorized ? "" : "disabled"}>解除授权</button>
-      </div>
-    </div>
-    <label class="setting-toggle">
-      <span><strong>只用付费账号</strong><small>自动切换只选择 Plus、Pro 或 Team。</small></span>
-      <input type="checkbox" data-auto-switch-setting="paidOnly" ${auto.paidOnly ? "checked" : ""} ${state.user ? "" : "disabled"} />
-    </label>
-    <label class="setting-toggle">
-      <span><strong>优先 RT</strong><small>优先选择长期可刷新账号。</small></span>
-      <input type="checkbox" data-auto-switch-setting="preferRt" ${auto.preferRt ? "checked" : ""} ${state.user ? "" : "disabled"} />
-    </label>
-    <label class="setting-toggle">
-      <span><strong>允许 AT</strong><small>关闭后，只选择带 RT 的账号。</small></span>
-      <input type="checkbox" data-auto-switch-setting="allowAt" ${auto.allowAt ? "checked" : ""} ${state.user ? "" : "disabled"} />
-    </label>
-    <label class="setting-toggle">
-      <span><strong>避开当前账号</strong><small>自动切换不会重新选中当前账号。</small></span>
-      <input type="checkbox" data-auto-switch-setting="avoidCurrent" ${auto.avoidCurrent ? "checked" : ""} ${state.user ? "" : "disabled"} />
-    </label>
-    <label class="setting-toggle">
-      <span><strong>只在空闲时切换</strong><small>根据本机任务日志判断 Codex 是否空闲，避免打断正在执行的任务。</small></span>
-      <input type="checkbox" data-auto-switch-setting="onlyWhenIdle" ${auto.onlyWhenIdle !== false ? "checked" : ""} ${state.user ? "" : "disabled"} />
-    </label>
-    <label class="setting-line">
-      <span><strong>空闲保护</strong><small>连续空闲达到该时间后才允许自动重启 Codex。</small></span>
-      <select data-auto-switch-setting="idleSeconds" ${state.user ? "" : "disabled"}>
-        <option value="30" ${Number(auto.idleSeconds || 30) === 30 ? "selected" : ""}>30 秒</option>
-        <option value="60" ${Number(auto.idleSeconds) === 60 ? "selected" : ""}>1 分钟</option>
-        <option value="90" ${Number(auto.idleSeconds) === 90 ? "selected" : ""}>90 秒</option>
-        <option value="120" ${Number(auto.idleSeconds) === 120 ? "selected" : ""}>2 分钟</option>
-      </select>
-    </label>
-    <label class="setting-line">
-      <span><strong>切换冷却</strong><small>自动切换后账号暂时不再参与候选。</small></span>
-      <select data-auto-switch-setting="cooldownMinutes" ${state.user ? "" : "disabled"}>
-        <option value="10" ${auto.cooldownMinutes === 10 ? "selected" : ""}>10 分钟</option>
-        <option value="30" ${auto.cooldownMinutes === 30 ? "selected" : ""}>30 分钟</option>
-        <option value="60" ${auto.cooldownMinutes === 60 ? "selected" : ""}>1 小时</option>
-      </select>
-    </label>
-    <div class="settings-section-title">手动智能切换</div>
-    <label class="setting-toggle">
-      <span><strong>只使用付费账号</strong><small>智能切换优先选择 Plus、Pro 或 Team。</small></span>
-      <input type="checkbox" data-smart-setting="paidOnly" ${settings.paidOnly ? "checked" : ""} />
-    </label>
-    <label class="setting-toggle">
-      <span><strong>优先 RT</strong><small>有 RT 的账号会获得更高分。</small></span>
-      <input type="checkbox" data-smart-setting="preferRt" ${settings.preferRt ? "checked" : ""} />
-    </label>
-    <label class="setting-toggle">
-      <span><strong>允许 AT</strong><small>关闭后，只选择带 RT 的账号。</small></span>
-      <input type="checkbox" data-smart-setting="allowAt" ${settings.allowAt ? "checked" : ""} />
-    </label>
-    <label class="setting-toggle">
-      <span><strong>避开当前账号</strong><small>尽量不要重复选中正在使用的账号。</small></span>
-      <input type="checkbox" data-smart-setting="avoidCurrent" ${settings.avoidCurrent ? "checked" : ""} />
-    </label>
-    <label class="setting-toggle">
-      <span><strong>避开 5H 低余量</strong><small>5H 余量低于 30% 时跳过。</small></span>
-      <input type="checkbox" data-smart-setting="avoidLow5h" ${settings.avoidLow5h ? "checked" : ""} />
-    </label>
-    <label class="setting-toggle">
-      <span><strong>避开 7D 低余量</strong><small>7D 余量低于 30% 时跳过。</small></span>
-      <input type="checkbox" data-smart-setting="avoidLow7d" ${settings.avoidLow7d ? "checked" : ""} />
-    </label>
-    <label class="setting-line">
-      <span><strong>切换冷却</strong><small>最近切换过的账号暂时不参与智能切换。</small></span>
-      <select data-smart-setting="cooldownMinutes">
-        <option value="0" ${settings.cooldownMinutes === 0 ? "selected" : ""}>不限制</option>
-        <option value="10" ${settings.cooldownMinutes === 10 ? "selected" : ""}>10 分钟</option>
-        <option value="30" ${settings.cooldownMinutes === 30 ? "selected" : ""}>30 分钟</option>
-        <option value="60" ${settings.cooldownMinutes === 60 ? "selected" : ""}>1 小时</option>
-      </select>
-    </label>
-  `;
-}
-
-function codexStatusSourceLabel(status = {}) {
-  if (status.source === "logs_2.sqlite") return "任务日志";
-  if (status.source === "process") return "进程检测";
-  if (!status.protocol_connected) return "任务日志";
-  return "任务日志";
+  target.innerHTML = settingsUi.renderSmartSwitchSettings({
+    user: state.user,
+    helperReady: state.helperReady,
+    helperInfo: state.helperInfo,
+    autoSwitchStatus: state.autoSwitchStatus,
+    autoSettings: state.autoSwitchSettings,
+    smartSettings: state.smartSwitchSettings,
+    defaultAutoSwitchSettings,
+  });
 }
 
 function renderAdmin() {
@@ -2286,69 +1629,17 @@ function renderAdmin() {
   if ($("adminStatusFilter")) $("adminStatusFilter").value = state.adminFilters.status || "";
   if ($("adminAuditSearch")) $("adminAuditSearch").value = state.adminFilters.auditQuery || "";
   if ($("adminAuditActionFilter")) $("adminAuditActionFilter").value = state.adminFilters.auditAction || "";
-  if (state.adminSummary) {
-    const summary = state.adminSummary;
-    $("adminSummary").innerHTML = [
-      ["用户数", summary.users],
-      ["启用用户", summary.activeUsers],
-      ["账号数", summary.accounts],
-      ["设备数", state.adminDevices.length],
-      ["在线 session", summary.onlineSessions],
-      ["24h 导入", summary.imports24h],
-      ["24h 切换", summary.switches24h],
-    ].map(([label, value]) => `
-      <div class="metric flat">
-        <span>${label}</span>
-        <strong>${value ?? 0}</strong>
-      </div>
-    `).join("");
-  }
-  $("adminUsers").innerHTML = state.adminUsers.length ? `
-    <table class="admin-table">
-      <thead>
-        <tr>
-          <th></th>
-          <th>用户</th>
-          <th>角色</th>
-          <th>状态</th>
-          <th>账号</th>
-          <th>会话</th>
-          <th>最近活跃</th>
-          <th>操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${state.adminUsers.map((user) => `
-          <tr>
-            <td><input type="checkbox" data-admin-user-select="${escapeHtml(user.id)}" ${state.selectedAdminUserIds.has(user.id) ? "checked" : ""} /></td>
-            <td><button class="table-link" data-admin-action="user-summary" data-id="${escapeHtml(user.id)}"><strong>${escapeHtml(user.email)}</strong><span>${escapeHtml(shortId(user.id))}</span></button></td>
-            <td>${escapeHtml(user.role === "admin" ? "管理员" : "用户")}</td>
-            <td>${escapeHtml(user.status === "disabled" ? "已停用" : "可用")}</td>
-            <td>${user.accountCount || 0}</td>
-            <td>${user.sessionCount || 0}</td>
-            <td>${escapeHtml(formatTime(user.lastSeenAt || user.lastLoginAt))}</td>
-            <td>
-              <div class="row-actions">
-                <button data-admin-action="toggle-status" data-id="${escapeHtml(user.id)}" data-status="${escapeHtml(user.status)}">${user.status === "active" ? "禁用" : "启用"}</button>
-                <button data-admin-action="toggle-role" data-id="${escapeHtml(user.id)}" data-role="${escapeHtml(user.role)}">${user.role === "admin" ? "降级" : "升管"}</button>
-                <button data-admin-action="reset-password" data-id="${escapeHtml(user.id)}">重置密码</button>
-                <button data-admin-action="kick" data-id="${escapeHtml(user.id)}">踢下线</button>
-              </div>
-            </td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-  ` : '<div class="empty small">暂无用户数据。</div>';
-  const selectedCount = state.selectedAdminUserIds.size;
-  $("adminSelectAllBtn").textContent = selectedCount ? `已选 ${selectedCount}` : "选择结果";
-  $("adminAudit").innerHTML = state.adminAudit.length ? state.adminAudit.slice(0, 30).map((item) => `
-    <div class="audit-item">
-      <span>${escapeHtml(formatTime(item.createdAt))}</span>
-      <strong>${escapeHtml(item.userEmail || "未知用户")} · ${escapeHtml(auditTitle(item))}</strong>
-      <span>${escapeHtml(auditDescription(item))}</span>
-    </div>
-  `).join("") : '<div class="empty small">暂无审计记录。</div>';
+  const rendered = adminUi.renderAdmin({
+    summary: state.adminSummary,
+    users: state.adminUsers,
+    audit: state.adminAudit,
+    devices: state.adminDevices,
+    selectedIds: state.selectedAdminUserIds,
+  });
+  $("adminSummary").innerHTML = rendered.summaryHtml;
+  $("adminUsers").innerHTML = rendered.usersHtml;
+  $("adminSelectAllBtn").textContent = rendered.selectAllLabel;
+  $("adminAudit").innerHTML = rendered.auditHtml;
 }
 
 function toggleSidebar() {
@@ -2358,19 +1649,10 @@ function toggleSidebar() {
 }
 
 async function checkHelper() {
-  const candidates = [
-    "http://127.0.0.1:18766",
-    "http://127.0.0.1:18767",
-    "http://127.0.0.1:18768",
-    "http://127.0.0.1:18769",
-    "http://127.0.0.1:18770",
-  ];
-  for (const base of candidates) {
+  for (const base of helperBaseCandidates()) {
     try {
-      const response = await fetch(`${base}/api/health`, { cache: "no-store" });
-      const result = await response.json();
-      const knownHelper = result.mode === "local-helper" || result.mode === "native-helper" || result.mode === "codex-plus-helper";
-      if (response.ok && result.ok && knownHelper) {
+      const result = await createHelperClient(base).health();
+      if (isKnownHelperHealth(result)) {
         state.helperReady = true;
         state.helperBase = base;
         state.helperInfo = result;
@@ -2409,10 +1691,8 @@ async function refreshHelperRuntimeStatus() {
   try {
     const previousCheck = state.autoSwitchStatus.lastCheck || "";
     const previousSwitch = state.autoSwitchStatus.lastSwitch || "";
-    const response = await fetch(`${state.helperBase}/api/health`, { cache: "no-store" });
-    const result = await response.json();
-    const knownHelper = result.mode === "local-helper" || result.mode === "native-helper" || result.mode === "codex-plus-helper";
-    if (!response.ok || !result.ok || !knownHelper) return false;
+    const result = await helperClient().health();
+    if (!isKnownHelperHealth(result)) return false;
     state.helperInfo = result;
     state.codexProxy = result.codex_proxy || result.codexProxy || state.codexProxy;
     state.codexStatus = result.codex_status || result.codexStatus || state.codexStatus;
@@ -2446,9 +1726,7 @@ async function configureCodexProxy(action) {
     return;
   }
   try {
-    const response = await fetch(`${state.helperBase}/api/codex/proxy/${action}`, { method: "POST" });
-    const result = await response.json();
-    if (!response.ok || result.ok === false) throw new Error(result.error || "状态监控配置失败");
+    const result = await helperClient().configureProxy(action);
     state.codexProxy = result.codex_proxy || result.codexProxy || state.codexProxy;
     state.helperInfo = { ...(state.helperInfo || {}), codex_proxy: state.codexProxy };
     renderDevice();
@@ -2465,9 +1743,8 @@ async function detectCurrentAuth() {
   renderAccounts();
   renderDevice();
   try {
-    const response = await fetch(`${state.helperBase}/api/current-auth`, { cache: "no-store" });
-    const result = await response.json();
-    if (!response.ok || !result.ok || !result.authJson) {
+    const result = await helperClient().currentAuth();
+    if (!result.authJson) {
       state.localAuthFingerprint = "";
       state.currentAuthKey = "";
       state.currentAuthAccount = null;
@@ -2540,6 +1817,7 @@ async function loadCloudData() {
     accountName: item.accountName || item.account_name || "",
     result: item.result || item.action || "",
     action: item.action || "",
+    metadata: item.metadata || {},
   }));
   render();
 }
@@ -2585,11 +1863,7 @@ async function registerDevice() {
       },
     });
     if (state.helperReady) {
-      await fetch(`${state.helperBase}/api/pair`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deviceKey: state.deviceKey, cloudUserId: state.user.id }),
-      }).catch(() => {});
+      await helperClient().pair({ deviceKey: state.deviceKey, cloudUserId: state.user.id }).catch(() => {});
     }
   } catch {
     // Device registration should not block switching.
@@ -2626,13 +1900,7 @@ async function saveAutoSwitchSettings(patch = {}) {
 
 async function configureHelperAutoSwitch(config) {
   if (!state.helperReady) throw new Error("Dock Helper 未连接");
-  const response = await fetch(`${state.helperBase}/api/auto-switch/configure`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  });
-  const result = await response.json().catch(() => ({}));
-  if (!response.ok || result.ok === false) throw new Error(result.error || "Helper 配置失败");
+  const result = await helperClient().configureAutoSwitch(config);
   state.helperInfo = { ...(state.helperInfo || {}), auto_switch: result.auto_switch || result.autoSwitch || {} };
   state.autoSwitchStatus.helperAuthorized = Boolean(state.helperInfo.auto_switch?.authorized);
   state.autoSwitchStatus.lastCheck = state.helperInfo.auto_switch?.last_check || "";
@@ -2667,6 +1935,7 @@ async function authorizeAutoSwitchHelper() {
       enabled: true,
       cloudBase: tokenResult.cloudBase || window.location.origin,
       deviceToken: tokenResult.deviceToken,
+      tokenExpiresAt: tokenResult.tokenExpiresAt || "",
       deviceKey: state.deviceKey,
       settings,
     });
@@ -2696,13 +1965,15 @@ async function revokeAutoSwitchHelper() {
   }
 }
 
-function normalizeAuthPayload(session) {
+function normalizeAuthPayload(session, options = {}) {
   const tokens = session?.tokens || {};
   const accessToken = tokens.access_token || "";
   if (!accessToken) throw new Error("账号缺少 access_token");
-  const refreshToken = tokens.refresh_token && tokens.refresh_token !== accessToken
-    ? tokens.refresh_token
-    : "rt_mock_token";
+  const hasRefreshToken = tokens.refresh_token && tokens.refresh_token !== accessToken && tokens.refresh_token !== "rt_mock_token";
+  if (!hasRefreshToken && !options.allowAtExperimental) {
+    throw new Error("AT 账号当前不支持 Codex 使用，请重新登录 Codex 获取 RT。");
+  }
+  const refreshToken = hasRefreshToken ? tokens.refresh_token : "rt_mock_token";
   return {
     auth_mode: "chatgpt",
     OPENAI_API_KEY: null,
@@ -2717,15 +1988,19 @@ function normalizeAuthPayload(session) {
 }
 
 async function fetchSwitchPayload(account, audit = true) {
+  const allowAtExperimental = Boolean(experimentalAtEnabled(state.smartSwitchSettings) && !hasUsableRefreshToken(account));
+  if (!codexUsable(account, state.smartSwitchSettings)) {
+    throw new Error(codexBlockDetail(codexBlockReason(account, state.smartSwitchSettings)) || "账号当前不可用于 Codex。");
+  }
   if (account.session?.tokens?.access_token) {
-    return normalizeAuthPayload(account.session);
+    return normalizeAuthPayload(account.session, { allowAtExperimental });
   }
   if (!state.user || !account.cloudId) {
     throw new Error("这个账号没有本地 token，登录云账号后才能切换。");
   }
   const result = await api(`/api/accounts/${encodeURIComponent(account.cloudId)}/switch-payload`, {
     method: "POST",
-    body: { deviceKey: state.deviceKey, audit },
+    body: { deviceKey: state.deviceKey, audit, allowAtExperimental },
   });
   if (!result.authJson) throw new Error("云端没有返回 auth payload");
   return result.authJson;
@@ -2743,9 +2018,65 @@ async function downloadAccountAuth(account, options = {}) {
   return authJson;
 }
 
+function restoreTargetDetail(target) {
+  if (!target?.available) return "未识别目标，将使用 Codex 默认窗口";
+  const name = target.title || target.cwd || target.thread_id || "目标窗口";
+  return target.is_goal ? `目标任务：${name}` : `窗口：${name}`;
+}
+
+function codexStatusDetail(codex) {
+  if (!codex) return "等待状态回传";
+  const label = codex.label || codex.state || "状态确认中";
+  const running = Number(codex.running_process_count || 0);
+  return running > 0 ? `${label}，进程 ${running}` : label;
+}
+
+async function waitForCodexRestartProgress(itemIndex, accepted) {
+  if (!accepted) {
+    updateProgressItem(itemIndex, "已完成", "auth 已写入");
+    return;
+  }
+
+  let lastDetail = "等待 Codex 重启";
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await wait(attempt === 0 ? 900 : 1300);
+    try {
+      const result = await helperClient().codexStatus();
+      const codex = result.codex_status || {};
+      state.codexStatus = codex;
+      state.codexProxy = result.codex_proxy || state.codexProxy;
+      state.helperInfo = {
+        ...(state.helperInfo || {}),
+        codex_status: codex,
+        codex_proxy: result.codex_proxy || state.helperInfo?.codex_proxy,
+      };
+      renderShell();
+      lastDetail = codexStatusDetail(codex);
+      updateProgressItem(itemIndex, "处理中", lastDetail);
+
+      const stateName = String(codex.state || "");
+      const runningCount = Number(codex.running_process_count || 0);
+      const label = String(codex.label || "");
+      if (runningCount > 0 && stateName !== "not_running" && label !== "Codex 未运行") {
+        updateProgressItem(itemIndex, "已完成", lastDetail);
+        return;
+      }
+    } catch (error) {
+      lastDetail = error.message || "等待 Helper 状态回传";
+      updateProgressItem(itemIndex, "处理中", lastDetail);
+    }
+  }
+
+  updateProgressItem(itemIndex, "已完成", `${lastDetail}，后台仍会继续恢复`);
+}
+
 async function applySelectedAccount() {
   const account = selectedAccount();
   if (!account) return;
+  if (state.operationProgress.active) {
+    toast("已有切换任务正在进行。");
+    return;
+  }
   if (!state.helperReady) {
     try {
       await downloadAccountAuth(account);
@@ -2754,20 +2085,47 @@ async function applySelectedAccount() {
     }
     return;
   }
+  let activeStep = 0;
+  openProgress("正在切换账号", [
+    { id: "payload", label: "获取账号授权" },
+    { id: "target", label: "定位目标窗口" },
+    { id: "helper", label: "交给 Dock Helper" },
+    { id: "restart", label: "重启并恢复目标" },
+    { id: "audit", label: "同步云端记录" },
+  ]);
   try {
+    activeStep = 0;
+    updateProgressItem(activeStep, "处理中", account.name || account.email || "准备 auth");
     const authJson = await fetchSwitchPayload(account, true);
-    const response = await fetch(`${state.helperBase}/api/apply-auth`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ authJson, launch: true, restart: true, deviceKey: state.deviceKey }),
+    updateProgressItem(activeStep, "已完成", "auth 已准备");
+
+    activeStep = 1;
+    updateProgressItem(activeStep, "处理中", "读取 Codex 当前目标");
+    const target = await helperClient().restoreTarget().catch(() => null);
+    updateProgressItem(activeStep, "已完成", restoreTargetDetail(target));
+
+    activeStep = 2;
+    updateProgressItem(activeStep, "处理中", "写入 auth 并请求重启");
+    const result = await helperClient().applyAuth({
+      authJson,
+      launch: true,
+      restart: true,
+      deviceKey: state.deviceKey,
+      allowAtExperimental: Boolean(experimentalAtEnabled(state.smartSwitchSettings) && !hasUsableRefreshToken(account)),
     });
-    const result = await response.json();
-    if (!response.ok || !result.ok) throw new Error(result.error || "Helper 执行失败");
+    updateProgressItem(activeStep, "已完成", result.launch_mode || "Helper 已接管");
+
+    activeStep = 3;
+    updateProgressItem(activeStep, "处理中", result.accepted ? "等待 Codex 回到目标窗口" : "确认重启结果");
+    await waitForCodexRestartProgress(activeStep, Boolean(result.accepted));
+
     account.lastSwitchAt = new Date().toISOString();
     state.currentAuthKey = accountDedupeKey(account);
     state.currentAuthAccount = account;
     state.localAuthFingerprint = accountFingerprint(account);
     updateLocalAccount(account);
+    activeStep = 4;
+    updateProgressItem(activeStep, "处理中", state.user && account.cloudId ? "写入审计并刷新列表" : "本地账号已更新");
     if (state.user && account.cloudId) {
       await api("/api/audit", {
         method: "POST",
@@ -2783,8 +2141,16 @@ async function applySelectedAccount() {
     } else {
       render();
     }
+    updateProgressItem(activeStep, "已完成", "记录已更新");
+    finishProgress(result.accepted ? "后台切换已接管，Codex 正在恢复目标任务。" : "切换完成，Codex 已重启。");
+    renderAccounts();
+    renderSelected();
     toast(result.accepted ? "后台切换已接管，Codex 会自动重启。" : "切换完成，Codex 已重启。");
   } catch (error) {
+    updateProgressItem(activeStep, "失败", error.message || "切换失败");
+    finishProgress(error.message || "切换失败。");
+    renderAccounts();
+    renderSelected();
     toast(error.message || "切换失败。");
   }
 }
@@ -2801,12 +2167,7 @@ async function refreshAccountUsage(id, options = {}) {
     renderAccounts();
     renderSelected();
     const authJson = await fetchSwitchPayload(account, false);
-    const response = await fetch(`${state.helperBase}/api/usage/preview`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ authJson, deviceKey: state.deviceKey }),
-    });
-    const result = await response.json();
+    const result = await helperClient().previewUsage({ authJson, deviceKey: state.deviceKey });
     const snapshot = result.usage_snapshot || result.usage || {};
     const normalized = normalizeUsage(snapshot, accountPlan(account));
     normalized.plan_type = bestPlan(accountPlan(account), normalized.plan_type);
@@ -2874,7 +2235,10 @@ async function refreshAllUsage() {
 async function smartSwitchBestAccount() {
   const account = bestAccount();
   if (!account) {
-    toast("没有可切换账号。");
+    const hasAtOnly = state.accounts.some((item) => accountCredentialKind(item) === "at");
+    toast(hasAtOnly
+      ? "没有可用 RT 账号。AT 账号当前不支持 Codex。"
+      : "没有可切换账号。");
     return;
   }
   state.selectedId = account.id;
@@ -2919,19 +2283,6 @@ function updateLocalAccount(account) {
   saveLocalStore();
 }
 
-function accountToImportPayload(account) {
-  return {
-    name: account.name,
-    email: account.email,
-    group: account.group || "默认",
-    priority: account.priority || "normal",
-    usageNote: account.usageNote || "",
-    expiryNote: account.expiryNote || "",
-    session: account.session,
-    usage: account.usage || null,
-  };
-}
-
 async function uploadLocalToCloud(accounts = state.localAccounts) {
   if (!state.user) return { added: 0, updated: 0, failed: 0 };
   const payload = accounts.filter((account) => account.session?.tokens?.access_token).map(accountToImportPayload);
@@ -2972,6 +2323,7 @@ async function importParsedEntries(entries, defaults = {}) {
       session,
     };
   });
+  const atOnly = accounts.filter((account) => !hasUsableRefreshToken(account)).length;
   const result = upsertLocalAccounts(accounts);
   let cloud = null;
   if (cloudBackupEnabled()) {
@@ -2982,7 +2334,7 @@ async function importParsedEntries(entries, defaults = {}) {
     }
   }
   render();
-  return { added: result.added, updated: result.updated, skipped: 0, failed, total: entries.length, cloud };
+  return { added: result.added, updated: result.updated, skipped: 0, failed, total: entries.length, cloud, atOnly };
 }
 
 async function confirmPendingImport() {
@@ -2999,6 +2351,7 @@ async function confirmPendingImport() {
   showImportResult({ message: cloudBackupEnabled() ? "正在写入账号池并备份到云端..." : "正在写入本地账号池..." });
   try {
     const accounts = importable.map((item) => item.account);
+    const atOnly = accounts.filter((account) => !hasUsableRefreshToken(account)).length;
     const result = upsertLocalAccounts(accounts);
     let cloud = null;
     if (cloudBackupEnabled()) {
@@ -3017,8 +2370,13 @@ async function confirmPendingImport() {
       failed,
       total: state.pendingImportItems.length,
       cloud,
+      message: atOnly
+        ? `新增 ${result.added} · 更新 ${result.updated} · 失败 ${failed}。${atOnly} 个账号缺少 RT，当前不能用于 Codex，请重新登录 Codex 获取 RT。`
+        : "",
     });
-    toast(`导入完成：新增 ${result.added}，更新 ${result.updated}。`);
+    toast(atOnly
+      ? `导入完成：${atOnly} 个 AT-only 当前不支持 Codex。`
+      : `导入完成：新增 ${result.added}，更新 ${result.updated}。`);
   } catch (error) {
     state.importCompleted = false;
     showImportResult({ failed: failed + 1, message: error.message || "导入失败。" });
@@ -3028,24 +2386,8 @@ async function confirmPendingImport() {
   }
 }
 
-function findImportedVisibleAccounts(importedAccounts) {
-  const wantedKeys = new Set();
-  for (const account of importedAccounts) {
-    for (const key of importIdentityKeys(account)) wantedKeys.add(key);
-  }
-  const found = [];
-  const seen = new Set();
-  for (const account of state.accounts) {
-    const matched = importIdentityKeys(account).some((key) => wantedKeys.has(key));
-    if (!matched || seen.has(account.id)) continue;
-    seen.add(account.id);
-    found.push(account);
-  }
-  return found;
-}
-
 async function refreshImportedAccounts(importedAccounts) {
-  const accounts = findImportedVisibleAccounts(importedAccounts);
+  const accounts = findImportedAccounts(state.accounts, importedAccounts);
   if (!accounts.length) return { total: 0, ok: 0, failed: 0 };
   openProgress("刷新导入账号", accounts.map((account) => ({ id: account.id, label: account.name || account.email || "账号" })));
   let ok = 0;
@@ -3065,30 +2407,13 @@ async function refreshImportedAccounts(importedAccounts) {
   return { total: accounts.length, ok, failed };
 }
 
-function hasUsageSnapshot(usage) {
-  return Boolean(usage && (usage.refreshed_at || usage.fetched_at || usage.five_hour || usage.one_week));
-}
-
 async function importAccountsFromText(text, defaults = {}) {
   const entries = parseImportEntries(text);
   return importParsedEntries(entries, defaults);
 }
 
 function previewImportText(text) {
-  const entries = parseImportEntries(text);
-  const ok = entries.filter((entry) => entry.ok);
-  const failed = entries.length - ok.length;
-  return {
-    added: 0,
-    updated: 0,
-    skipped: 0,
-    failed,
-    total: entries.length,
-    preview: true,
-    message: ok.length
-      ? `识别到 ${ok.length} 个账号${failed ? `，${failed} 个无法解析` : ""}。确认无误后保存。`
-      : (entries[0]?.error || "没有识别到可导入账号。"),
-  };
+  return previewImportEntries(parseImportEntries(text));
 }
 
 async function importAccountsFromFiles(fileList, defaults = {}) {
@@ -3104,6 +2429,7 @@ async function importAccountsFromFiles(fileList, defaults = {}) {
       totals.updated += result.updated;
       totals.failed += result.failed;
       totals.total += result.total;
+      totals.atOnly = (totals.atOnly || 0) + (result.atOnly || 0);
       if (result.cloud) {
         totals.cloud.added += result.cloud.added || 0;
         totals.cloud.updated += result.cloud.updated || 0;
@@ -3172,12 +2498,10 @@ async function importCurrentLocalAuth(options = {}) {
     return false;
   }
   state.autoImportingLocalAuth = true;
-  if (!silent) openProgress("同步本机 auth", [{ label: "读取当前 auth.json" }]);
+  if (!silent) openProgress("导入当前 auth", [{ label: "读取当前 auth.json" }]);
   try {
     if (!silent) updateProgressItem(0, "读取中");
-    const response = await fetch(`${state.helperBase}/api/current-auth`, { cache: "no-store" });
-    const result = await response.json();
-    if (!response.ok || !result.ok) throw new Error(result.error || "读取本机 auth 失败");
+    const result = await helperClient().currentAuth();
     const session = parseSession(JSON.stringify(result.authJson));
     const fingerprint = authFingerprint(session);
     if (fingerprint && fingerprint === state.localAuthFingerprint) {
@@ -3197,7 +2521,7 @@ async function importCurrentLocalAuth(options = {}) {
       updateProgressItem(0, "已完成");
       finishProgress(`新增 ${imported.added}，更新 ${imported.updated}。`);
     }
-    if (!silent) toast(`已同步本机授权：新增 ${imported.added}，更新 ${imported.updated}。`);
+    if (!silent) toast(`已导入当前授权：新增 ${imported.added}，更新 ${imported.updated}。`);
     return imported.added > 0 || imported.updated > 0;
   } catch (error) {
     if (!silent) {
@@ -3213,7 +2537,7 @@ async function importCurrentLocalAuth(options = {}) {
 
 function legacyCacheImportUrl() {
   if (!state.helperBase) return "";
-  return `${state.helperBase}/migrate-cache?target=${encodeURIComponent(window.location.origin)}`;
+  return helperClient().migrateCacheUrl(window.location.origin);
 }
 
 async function migrateLegacyCache() {
@@ -3268,12 +2592,7 @@ function syncStats() {
 
 function openSyncModal() {
   if (!state.user) return;
-  const stats = syncStats();
-  $("syncStats").innerHTML = `
-    <div><span>本地账号</span><strong>${stats.local}</strong></div>
-    <div><span>云端账号</span><strong>${stats.cloud}</strong></div>
-    <div><span>重复账号</span><strong>${stats.duplicate}</strong></div>
-  `;
+  $("syncStats").innerHTML = dialogUi.renderSyncStats(syncStats());
   openModal("syncModal");
 }
 
@@ -3316,19 +2635,22 @@ function overwriteLocalFromCloud() {
 
 function openModal(id) {
   const modal = $(id);
-  modal.classList.add("open");
-  modal.setAttribute("aria-hidden", "false");
+  const view = dialogUi.modalState(true);
+  modal.classList.toggle("open", view.open);
+  modal.setAttribute("aria-hidden", view.ariaHidden);
 }
 
 function closeModal(id) {
   const modal = $(id);
-  modal.classList.remove("open");
-  modal.setAttribute("aria-hidden", "true");
+  const view = dialogUi.modalState(false);
+  modal.classList.toggle("open", view.open);
+  modal.setAttribute("aria-hidden", view.ariaHidden);
 }
 
 function setDrawer(open) {
-  $("importDrawer").classList.toggle("open", open);
-  $("importDrawer").setAttribute("aria-hidden", open ? "false" : "true");
+  const view = dialogUi.drawerState(open);
+  $("importDrawer").classList.toggle("open", view.open);
+  $("importDrawer").setAttribute("aria-hidden", view.ariaHidden);
   if (open) {
     $("importResult").hidden = true;
     refreshOauthAuthorizeUrl().catch(() => toast("OAuth 授权链接生成失败。"));
@@ -3337,13 +2659,11 @@ function setDrawer(open) {
 
 function setAuthMode(mode) {
   state.authMode = mode;
-  const isRegister = mode === "register";
-  $("authTitle").textContent = "登录或注册";
-  $("authCopy").textContent = isRegister
-    ? "创建云账户后，本地账号池仍需你确认才会上传。"
-    : "登录后可把本地账号池同步到云端，并在其他设备继续使用。";
-  $("authSubmitBtn").textContent = isRegister ? "创建并继续" : "继续";
-  $("toggleAuthModeBtn").textContent = isRegister ? "已有账号？登录" : "没有账号？创建一个";
+  const view = dialogUi.authModeView(mode);
+  $("authTitle").textContent = view.title;
+  $("authCopy").textContent = view.copy;
+  $("authSubmitBtn").textContent = view.submitText;
+  $("toggleAuthModeBtn").textContent = view.toggleText;
 }
 
 async function handleAuthSubmit(event) {
@@ -3353,7 +2673,7 @@ async function handleAuthSubmit(event) {
   try {
     const path = state.authMode === "register" ? "/api/auth/register" : "/api/auth/login";
     const result = await api(path, { method: "POST", body: { email, password } });
-    localStorage.setItem(cachedEmailStorage, email);
+    writeMigratedLocalStorage(cachedEmailStorage, email, previousCachedEmailStorage);
     state.user = result.user;
     closeModal("authModal");
     await loadCloudData();
@@ -3384,17 +2704,17 @@ async function logout() {
 }
 
 function initDeviceKey() {
-  let key = localStorage.getItem(deviceKeyStorage);
+  let key = readMigratedLocalStorage(deviceKeyStorage, previousDeviceKeyStorage);
   if (!key) {
     key = crypto.randomUUID();
-    localStorage.setItem(deviceKeyStorage, key);
+    writeMigratedLocalStorage(deviceKeyStorage, key, previousDeviceKeyStorage);
   }
   state.deviceKey = key;
 }
 
 async function rotateDeviceKey() {
   const key = crypto.randomUUID();
-  localStorage.setItem(deviceKeyStorage, key);
+  writeMigratedLocalStorage(deviceKeyStorage, key, previousDeviceKeyStorage);
   state.deviceKey = key;
   await registerDevice();
   render();
@@ -3565,8 +2885,8 @@ async function bulkSetPriority(priority) {
 
 function activateSettingsTab(tab) {
   state.settingsTab = tab;
-  document.querySelectorAll("[data-settings-tab]").forEach((el) => el.classList.toggle("active", el.dataset.settingsTab === tab));
-  document.querySelectorAll(".settings-panel").forEach((panel) => panel.classList.toggle("active", panel.dataset.panel === tab));
+  document.querySelectorAll("[data-settings-tab]").forEach((el) => el.classList.toggle("active", dialogUi.isActive(tab, el.dataset.settingsTab)));
+  document.querySelectorAll(".settings-panel").forEach((panel) => panel.classList.toggle("active", dialogUi.isActive(tab, panel.dataset.panel)));
 }
 
 async function showAdminUserSummary(id) {
@@ -3578,11 +2898,7 @@ async function showAdminUserSummary(id) {
     const detail = summary.summary;
     if (!detail) return;
     $("adminMessage").hidden = false;
-    $("adminMessage").innerHTML = `
-      <strong>${escapeHtml(detail.user.email)}</strong>
-      <span>账号 ${detail.accountCount} · 会话 ${detail.sessionCount} · 设备 ${detail.deviceCount}</span>
-      <span>最近账号：${(accounts.accounts || []).slice(0, 5).map((account) => escapeHtml(account.email || account.name)).join("、") || "无"}</span>
-    `;
+    $("adminMessage").innerHTML = dialogUi.renderAdminUserSummary(detail, accounts.accounts || []);
   } catch (error) {
     toast(error.message || "用户详情加载失败。");
   }
@@ -3643,7 +2959,7 @@ function bindEvents() {
   $("pickJsonBtn").addEventListener("click", () => $("jsonFileInput").click());
   $("openOauthAuthBtn").addEventListener("click", () => handleAuthAcquireAction("open-oauth-login"));
   $("copyOauthUrlBtn").addEventListener("click", () => handleAuthAcquireAction("copy-oauth-url"));
-  $("parseOauthCallbackBtn").addEventListener("click", parseOauthCallbackToPreview);
+  $("parseOauthCallbackBtn").addEventListener("click", () => parseOauthCallbackToPreview());
   $("previewImportBtn").addEventListener("click", parseImportTextToPreview);
   $("jsonFileInput").addEventListener("change", async () => {
     await parseImportFilesToPreview($("jsonFileInput").files);
@@ -3701,14 +3017,23 @@ function bindEvents() {
       const key = autoInput.dataset.autoSwitchSetting;
       const value = autoInput.type === "checkbox" ? autoInput.checked : Number(autoInput.value);
       state.autoSwitchSettings[key] = value;
+      const patch = { [key]: value };
+      if (key === "showExperimentalAt" && !value) {
+        state.autoSwitchSettings.allowAt = false;
+        patch.allowAt = false;
+      }
       saveLocalStore();
-      saveAutoSwitchSettings({ [key]: value });
+      saveAutoSwitchSettings(patch);
+      render();
       return;
     }
     const input = event.target.closest("[data-smart-setting]");
     if (!input) return;
     const key = input.dataset.smartSetting;
     state.smartSwitchSettings[key] = input.type === "checkbox" ? input.checked : Number(input.value);
+    if (key === "showExperimentalAt" && !state.smartSwitchSettings[key]) {
+      state.smartSwitchSettings.allowAt = false;
+    }
     saveLocalStore();
     render();
   });
@@ -3856,6 +3181,13 @@ function bindEvents() {
         render();
         await applySelectedAccount();
       }
+      if (button.dataset.accountAction === "recover-auth") {
+        state.selectedId = id;
+        saveLocalStore();
+        render();
+        openModal("accountDetailModal");
+        toast("请导入这个账号自己的 RT auth，不要用当前本机 auth 覆盖。");
+      }
       if (button.dataset.accountAction === "refresh-usage") await refreshAccountUsage(id);
       if (button.dataset.accountAction === "delete") await deleteAccount(id);
       return;
@@ -3910,9 +3242,10 @@ function init() {
   initDeviceKey();
   loadLocalStore();
   window.addEventListener("message", handleLegacyCacheMessage);
+  window.addEventListener("message", handleOauthCallbackMessage);
   bindEvents();
   setAuthMode("login");
-  $("authEmail").value = localStorage.getItem(cachedEmailStorage) || "";
+    $("authEmail").value = readMigratedLocalStorage(cachedEmailStorage, previousCachedEmailStorage);
   render();
   checkHelper();
   window.setInterval(refreshHelperRuntimeStatus, 3000);

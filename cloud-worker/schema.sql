@@ -109,12 +109,15 @@ CREATE TABLE IF NOT EXISTS device_tokens (
   status TEXT NOT NULL DEFAULT 'active',
   created_at TEXT NOT NULL,
   last_seen_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL DEFAULT '',
+  rotated_from TEXT NOT NULL DEFAULT '',
   revoked_at TEXT NOT NULL DEFAULT '',
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_device_tokens_device ON device_tokens(user_id, device_key);
+CREATE INDEX IF NOT EXISTS idx_device_tokens_status_expiry ON device_tokens(status, expires_at);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY,

@@ -1,0 +1,290 @@
+import assert from "node:assert/strict";
+import {
+  assertAdmin,
+  ensureAnotherAdmin,
+  handleAdmin,
+  likeTerm,
+} from "../cloud-worker/worker-admin.js";
+import {
+  handleAudit,
+  writeAudit,
+} from "../cloud-worker/worker-audit.js";
+
+class FakeD1 {
+  constructor() {
+    this.users = [
+      { id: "admin-1", email: "admin@example.com", role: "admin", status: "active", created_at: "2026-01-01", updated_at: "2026-01-01", last_login_at: "" },
+      { id: "user-1", email: "user@example.com", role: "user", status: "active", created_at: "2026-01-02", updated_at: "2026-01-02", last_login_at: "" },
+    ];
+    this.accounts = [
+      { id: "acct-1", user_id: "user-1", name: "Account One", email: "acct@example.com", last_switch_at: "", updated_at: "" },
+    ];
+    this.sessions = [
+      { id: "sess-1", user_id: "user-1", expires_at: "2999-01-01T00:00:00.000Z", last_seen_at: "2026-01-02" },
+    ];
+    this.devices = [
+      { id: "dev-1", user_id: "user-1", device_key: "desktop", name: "Dock Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", created_at: "", last_seen_at: "" },
+    ];
+    this.auditLogs = [];
+  }
+
+  prepare(sql) {
+    return new FakeStatement(this, sql);
+  }
+}
+
+class FakeStatement {
+  constructor(db, sql) {
+    this.db = db;
+    this.sql = sql;
+    this.params = [];
+  }
+
+  bind(...params) {
+    this.params = params;
+    return this;
+  }
+
+  async first() {
+    const sql = this.sql;
+    if (sql.includes("SUM(CASE WHEN status")) {
+      return {
+        total: this.db.users.length,
+        active: this.db.users.filter((item) => item.status === "active").length,
+      };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM accounts WHERE user_id")) {
+      const [userId] = this.params;
+      return { total: this.db.accounts.filter((item) => item.user_id === userId).length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM accounts")) {
+      return { total: this.db.accounts.length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM sessions WHERE user_id")) {
+      const [userId] = this.params;
+      return { total: this.db.sessions.filter((item) => item.user_id === userId).length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM sessions WHERE expires_at")) {
+      return { total: this.db.sessions.length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM devices WHERE user_id")) {
+      const [userId] = this.params;
+      return { total: this.db.devices.filter((item) => item.user_id === userId).length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM audit_logs WHERE action")) {
+      return { total: this.db.auditLogs.length };
+    }
+    if (sql.includes("SELECT id, email, role, status, created_at")) {
+      const [userId] = this.params;
+      return this.db.users.find((item) => item.id === userId) || null;
+    }
+    if (sql.includes("SELECT id, email, role, status FROM users WHERE id")) {
+      const [userId] = this.params;
+      return this.db.users.find((item) => item.id === userId) || null;
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM users WHERE role = 'admin'")) {
+      const [targetUserId] = this.params;
+      return {
+        total: this.db.users.filter((item) => item.id !== targetUserId && item.role === "admin" && item.status === "active").length,
+      };
+    }
+    throw new Error(`Unhandled first SQL: ${sql}`);
+  }
+
+  async all() {
+    const sql = this.sql;
+    if (sql.includes("FROM users") && sql.includes("GROUP BY users.id")) {
+      return {
+        results: this.db.users.map((user) => ({
+          ...user,
+          account_count: this.db.accounts.filter((item) => item.user_id === user.id).length,
+          session_count: this.db.sessions.filter((item) => item.user_id === user.id).length,
+          last_seen_at: "",
+        })),
+      };
+    }
+    if (sql.includes("SELECT devices.*, users.email AS user_email")) {
+      return {
+        results: this.db.devices.map((device) => ({
+          ...device,
+          user_email: this.db.users.find((user) => user.id === device.user_id)?.email || "",
+        })),
+      };
+    }
+    if (sql.includes("FROM audit_logs") && sql.includes("LEFT JOIN users")) {
+      return {
+        results: this.db.auditLogs.map((log) => ({
+          ...log,
+          user_email: this.db.users.find((user) => user.id === log.user_id)?.email || "",
+          account_name: this.db.accounts.find((account) => account.id === log.account_id)?.name || "",
+        })),
+      };
+    }
+    if (sql.includes("SELECT audit_logs.*, accounts.name AS account_name")) {
+      const [userId] = this.params;
+      return {
+        results: this.db.auditLogs
+          .filter((log) => log.user_id === userId)
+          .map((log) => ({
+            ...log,
+            account_name: this.db.accounts.find((account) => account.id === log.account_id)?.name || "",
+          })),
+      };
+    }
+    if (sql.includes("SELECT action, result, created_at FROM audit_logs")) {
+      const [userId] = this.params;
+      return { results: this.db.auditLogs.filter((log) => log.user_id === userId).slice(0, 8) };
+    }
+    if (sql.includes("FROM accounts a")) {
+      const [userId] = this.params;
+      return {
+        results: this.db.accounts
+          .filter((account) => account.user_id === userId)
+          .map((account) => ({
+            ...account,
+            group_name: "默认",
+            priority: "normal",
+            plan_type: "plus",
+            has_refresh_token: 1,
+            usage_json: JSON.stringify({ plan_type: "plus" }),
+          })),
+      };
+    }
+    throw new Error(`Unhandled all SQL: ${sql}`);
+  }
+
+  async run() {
+    const sql = this.sql;
+    if (sql.includes("INSERT INTO audit_logs")) {
+      const [id, userId, accountId, action, result, deviceKey, metadataJson, createdAt] = this.params;
+      this.db.auditLogs.push({
+        id,
+        user_id: userId,
+        account_id: accountId,
+        action,
+        result,
+        device_key: deviceKey,
+        metadata_json: metadataJson,
+        created_at: createdAt,
+      });
+      return { success: true };
+    }
+    if (sql.includes("UPDATE accounts SET last_switch_at")) {
+      const [lastSwitchAt, updatedAt, accountId, userId] = this.params;
+      const account = this.db.accounts.find((item) => item.id === accountId && item.user_id === userId);
+      if (account) {
+        account.last_switch_at = lastSwitchAt;
+        account.updated_at = updatedAt;
+      }
+      return { success: true };
+    }
+    if (sql.includes("UPDATE users SET role = ?, status = ?")) {
+      const [role, status, updatedAt, userId] = this.params;
+      const user = this.db.users.find((item) => item.id === userId);
+      if (user) {
+        user.role = role;
+        user.status = status;
+        user.updated_at = updatedAt;
+      }
+      return { success: true };
+    }
+    if (sql.includes("UPDATE users SET password_hash")) {
+      const [passwordHash, passwordSalt, updatedAt, userId] = this.params;
+      const user = this.db.users.find((item) => item.id === userId);
+      if (user) {
+        user.password_hash = passwordHash;
+        user.password_salt = passwordSalt;
+        user.updated_at = updatedAt;
+      }
+      return { success: true };
+    }
+    if (sql.includes("DELETE FROM sessions WHERE user_id")) {
+      const [userId] = this.params;
+      this.db.sessions = this.db.sessions.filter((item) => item.user_id !== userId);
+      return { success: true };
+    }
+    throw new Error(`Unhandled run SQL: ${sql}`);
+  }
+}
+
+function request(path, method = "GET", body = null) {
+  const init = { method };
+  if (body) {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = JSON.stringify(body);
+  }
+  return new Request(`https://codex.example.test${path}`, init);
+}
+
+const env = { DB: new FakeD1() };
+const waitUntilTasks = [];
+const admin = {
+  id: "admin-1",
+  role: "admin",
+  requestContext: {
+    requestId: "req-admin",
+    method: "POST",
+    path: "/api/admin/users/user-1",
+    ctx: { waitUntil: (task) => waitUntilTasks.push(task) },
+  },
+};
+const user = { id: "user-1", role: "user" };
+
+assert.equal(assertAdmin(admin), true);
+assert.equal(assertAdmin(user), false);
+assert.equal(likeTerm("A%_B"), "%ab%");
+assert.equal(await ensureAnotherAdmin(env, "admin-1"), false);
+
+await writeAudit(env, admin, {
+  accountId: "acct-1",
+  action: "manual",
+  result: "ok",
+  deviceKey: "desktop",
+});
+assert.equal(env.DB.auditLogs.length, 1);
+assert.equal(JSON.parse(env.DB.auditLogs[0].metadata_json).requestId, "req-admin");
+await Promise.all(waitUntilTasks);
+
+const auditList = await handleAudit(request("/api/audit"), env, admin, "/api/audit");
+assert.equal(auditList.status, 200);
+const auditListBody = await auditList.json();
+assert.equal(auditListBody.audit[0].requestId, "req-admin");
+assert.equal(auditListBody.audit[0].accountName, "Account One");
+
+const auditPost = await handleAudit(request("/api/audit", "POST", {
+  accountId: "acct-1",
+  action: "switch",
+  result: "ok",
+}), env, user, "/api/audit");
+assert.equal(auditPost.status, 200);
+assert.notEqual(env.DB.accounts[0].last_switch_at, "");
+
+const denied = await handleAdmin(request("/api/admin/summary"), env, user, "/api/admin/summary");
+assert.equal(denied.status, 403);
+
+const summary = await handleAdmin(request("/api/admin/summary"), env, admin, "/api/admin/summary");
+assert.equal(summary.status, 200);
+assert.equal((await summary.json()).summary.users, 2);
+
+const guard = await handleAdmin(request("/api/admin/users/admin-1", "PATCH", {
+  role: "user",
+  status: "active",
+}), env, admin, "/api/admin/users/admin-1", { writeAudit });
+assert.equal(guard.status, 400);
+
+env.DB.users.push({ id: "admin-2", email: "admin2@example.com", role: "admin", status: "active", created_at: "", updated_at: "", last_login_at: "" });
+const updateUser = await handleAdmin(request("/api/admin/users/user-1", "PATCH", {
+  role: "user",
+  status: "disabled",
+}), env, admin, "/api/admin/users/user-1", { writeAudit });
+assert.equal(updateUser.status, 200);
+assert.equal(env.DB.users.find((item) => item.id === "user-1").status, "disabled");
+assert.equal(env.DB.sessions.find((item) => item.user_id === "user-1"), undefined);
+assert.equal(env.DB.auditLogs.at(-1).action, "admin-update-user");
+
+const reset = await handleAdmin(request("/api/admin/users/user-1/reset-password", "POST", {}), env, admin, "/api/admin/users/user-1/reset-password", { writeAudit });
+assert.equal(reset.status, 200);
+assert.match((await reset.json()).temporaryPassword, /^CodexTemp-/);
+assert.equal(env.DB.auditLogs.at(-1).action, "admin-reset-password");
+
+console.log("worker-admin-audit verification passed");
