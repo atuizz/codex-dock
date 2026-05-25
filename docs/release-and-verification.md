@@ -43,6 +43,15 @@ cd ..
 .\native-helper\build-helper.ps1
 ```
 
+After a production deploy, run:
+
+```powershell
+cd cloud-worker
+npm run smoke:production
+```
+
+The smoke script registers a disposable cloud user, verifies login/logout, usage-refresh settings persistence, device registration with Helper version, non-admin access denial, token-free account listing, and online Helper download hash parity with `dist/CodexDockHelper/CodexDockHelper.exe`.
+
 For a local Worker smoke test:
 
 ```powershell
@@ -59,7 +68,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 - CI installs Worker dependencies, runs every `scripts/verify-*` verifier, builds Static Assets, builds the Windows Helper, and uploads `dist/CodexDockHelper/` as an artifact.
 - `.github/workflows/cloudflare-deploy.yml` is manual only:
   - `preview` builds and runs `wrangler deploy --dry-run`.
-  - `production` is guarded to `master` or `main`, applies remote D1 migrations, then runs `wrangler deploy`.
+  - `production` is guarded to `master` or `main`, applies remote D1 migrations, runs `wrangler deploy`, then runs `npm run smoke:production`.
 
 ## Production Deploy Checklist
 
@@ -113,6 +122,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 - Helper lifecycle regression verified on `2026-05-26`: closing the main window hides to tray, process stays alive, `/api/health` remains available, no Microsoft .NET Framework dialog appears, and no new `[unhandled:]` log entry is emitted.
 - Production deployment verified on `2026-05-26`: D1 migration `0005_usage_refresh_channels.sql` applied, `wrangler deploy` published Worker version `efc6f35c-022d-4e02-acc0-7d81eb042370`, remote migration list returned no pending migrations, API register/login/logout and usage-refresh settings smoke tests passed.
 - Online Helper download verified on `2026-05-26`: `https://codex.woai.pro/downloads/CodexDockHelper.exe` SHA-256 matches local fixed build `13E4A56841623477328B817A8381E51C50FDC97AB04C79AEF17102FF9CBED41B`.
+- Automated production smoke verified on `2026-05-26`: `npm run smoke:production` passed in strict local-helper-hash mode, covering register/login/logout, usage-refresh settings, device registration, non-admin admin rejection, token-free account listing, and Helper download hash parity.
 
 ## Commercial Quality Gates
 

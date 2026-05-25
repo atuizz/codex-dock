@@ -7,7 +7,8 @@
     "deploy": "npm run build && wrangler deploy",
     "dev": "npm run build && wrangler dev",
     "d1:schema:local": "wrangler d1 execute codex-cloud-console --local --file ./schema.sql",
-    "d1:schema:remote": "wrangler d1 execute codex-cloud-console --remote --file ./schema.sql"
+    "d1:schema:remote": "wrangler d1 execute codex-cloud-console --remote --file ./schema.sql",
+    "smoke:production": "node ../scripts/verify-production-smoke.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.17.0"
