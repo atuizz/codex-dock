@@ -46,6 +46,7 @@ const releaseGates = [
     file: "scripts/verify-oauth-flow-guards.cjs",
     checks: [
       { label: "PKCE state history", pattern: /oauthPkceHistoryStorage/ },
+      { label: "refresh and reopen flow recovery", pattern: /restoreOauthFlow/ },
       { label: "state-bound verifier lookup", pattern: /exchange resolves PKCE by returned state/ },
       { label: "stale callback rejection", pattern: /stale|旧|mismatch/i },
       { label: "local callback origin guard", pattern: /postMessage|Origin|localhost/i },
@@ -244,6 +245,7 @@ const visualEvidence = [
   "artifacts/verification/codex-dock-import-primary-drawer-desktop.png",
   "artifacts/verification/codex-dock-import-primary-drawer-mobile.png",
   "artifacts/verification/codex-dock-account-detail-diagnostics-local.png",
+  "artifacts/verification/oauth-flow-resume-local.png",
   "artifacts/verification/codex-dock-admin-ops-summary-browser.png",
   "artifacts/verification/account-health-production-preview.png",
   "artifacts/verification/account-cleanup-modal-production.png",

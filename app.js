@@ -12,6 +12,7 @@ const oauthClientId = "app_EMoamEEZ73f0CkXaXp7hrann";
 const oauthRedirectUri = "http://localhost:1455/auth/callback";
 const oauthPkceStorage = "codex-dock-oauth-pkce-v1";
 const oauthPkceHistoryStorage = "codex-dock-oauth-pkce-history-v1";
+const oauthFlowStorage = "codex-dock-oauth-flow-v1";
 const oauthFlowDurationMs = 3 * 60 * 1000;
 const usageFreshWindowMs = 30 * 60 * 1000;
 const backgroundUsageRefreshIntervalMs = 5 * 60 * 1000;
@@ -524,6 +525,7 @@ function stopOauthFlowTimer() {
 function setOauthFlow(patch = {}) {
   state.oauthFlow = { ...state.oauthFlow, ...patch };
   renderOauthFlow();
+  persistOauthFlow();
   const phase = state.oauthFlow.phase;
   if (!state.oauthFlow.active || ["success", "error", "expired"].includes(phase)) stopOauthFlowTimer();
 }
@@ -559,8 +561,41 @@ function cancelOauthFlow(options = {}) {
     error: "",
     summary: "",
   };
+  localStorage.removeItem(oauthFlowStorage);
   renderOauthFlow();
   if (!options.silent) toast("已取消 OAuth 导入。");
+}
+
+function persistOauthFlow(flow = state.oauthFlow) {
+  const status = oauthCore.oauthFlowSnapshotStatus(flow, Date.now());
+  if (status.ok) {
+    localStorage.setItem(oauthFlowStorage, JSON.stringify(status.flow));
+  } else {
+    localStorage.removeItem(oauthFlowStorage);
+  }
+}
+
+function restoreOauthFlow() {
+  const status = oauthCore.oauthFlowSnapshotStatus(localStorage.getItem(oauthFlowStorage), Date.now());
+  if (!status.ok) {
+    localStorage.removeItem(oauthFlowStorage);
+    return false;
+  }
+  const pkce = oauthPkce(status.flow.state);
+  if (!pkce?.verifier) {
+    localStorage.removeItem(oauthFlowStorage);
+    return false;
+  }
+  state.oauthCodeVerifier = pkce.verifier;
+  state.oauthState = status.flow.state;
+  state.oauthAuthUrl = status.flow.authUrl || pkce.authUrl || "";
+  state.oauthFlow = { ...state.oauthFlow, ...status.flow, phase: "waiting" };
+  if ($("oauthAuthUrl")) $("oauthAuthUrl").value = state.oauthAuthUrl;
+  setDrawer(true, { mode: "oauth" });
+  startOauthFlowTimer();
+  startOauthCallbackPolling();
+  toast("已恢复未完成的 OAuth 导入，本页继续等待回调。");
+  return true;
 }
 
 function randomBase64Url(byteLength = 32) {
@@ -4146,6 +4181,7 @@ function init() {
   setAuthMode("login");
     $("authEmail").value = readMigratedLocalStorage(cachedEmailStorage, previousCachedEmailStorage);
   render();
+  restoreOauthFlow();
   loadHelperRelease();
   checkHelper();
   window.setInterval(refreshHelperRuntimeStatus, 3000);

@@ -4,6 +4,7 @@
   if (root) root.CodexOauthCore = Object.freeze(api);
 })(typeof window !== "undefined" ? window : globalThis, function () {
   const defaultRedirectUri = "http://localhost:1455/auth/callback";
+  const resumableOauthFlowPhases = new Set(["opening", "waiting"]);
 
   function normalizeOauthCallbackValue(raw, redirectUri = defaultRedirectUri) {
     const text = String(raw || "").trim();
@@ -105,6 +106,60 @@
       : "没有收到有效授权结果。请点击“打开授权页面”重新授权；手动回调只作为自动接收失败后的备用。";
   }
 
+  function parseOauthFlowSnapshot(raw) {
+    if (!raw) return null;
+    if (typeof raw === "string") {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return null;
+      }
+    }
+    return raw;
+  }
+
+  function oauthFlowSnapshotStatus(raw, now = Date.now()) {
+    const snapshot = parseOauthFlowSnapshot(raw);
+    if (!snapshot?.active) return { ok: false, code: "oauth_flow_missing" };
+    const phase = String(snapshot.phase || "");
+    if (!resumableOauthFlowPhases.has(phase)) {
+      return { ok: false, code: "oauth_flow_not_resumable" };
+    }
+    const state = String(snapshot.state || "").trim();
+    const authUrl = String(snapshot.authUrl || "").trim();
+    const startedAt = Number(snapshot.startedAt || 0);
+    const expiresAt = Number(snapshot.expiresAt || 0);
+    if (!state || !authUrl || !startedAt || !expiresAt) {
+      return { ok: false, code: "oauth_flow_incomplete" };
+    }
+    if (expiresAt <= Number(now || Date.now())) {
+      return { ok: false, code: "oauth_flow_expired" };
+    }
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(authUrl);
+    } catch {
+      return { ok: false, code: "oauth_authorize_url_invalid" };
+    }
+    if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== "auth.openai.com" || !parsedUrl.pathname.includes("/oauth/authorize")) {
+      return { ok: false, code: "oauth_authorize_url_invalid" };
+    }
+    return {
+      ok: true,
+      code: "oauth_flow_resumable",
+      flow: {
+        active: true,
+        phase: "waiting",
+        state,
+        authUrl,
+        startedAt,
+        expiresAt,
+        error: "",
+        summary: "",
+      },
+    };
+  }
+
   return Object.freeze({
     normalizeOauthCallbackValue,
     callbackParams,
@@ -112,5 +167,6 @@
     providerErrorStatus,
     exchangeFailureMessage,
     emptyCallbackMessage,
+    oauthFlowSnapshotStatus,
   });
 });

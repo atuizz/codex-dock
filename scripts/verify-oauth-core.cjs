@@ -52,4 +52,22 @@ assert.match(oauth.emptyCallbackMessage(false), /打开授权页面/);
 assert.doesNotMatch(oauth.emptyCallbackMessage(false), /没有 token 或 code/);
 assert.match(oauth.emptyCallbackMessage(true), /没有换到可用授权/);
 
+const now = Date.now();
+const resumable = oauth.oauthFlowSnapshotStatus({
+  active: true,
+  phase: "opening",
+  state: "fresh-state",
+  authUrl: "https://auth.openai.com/oauth/authorize?client_id=app&state=fresh-state",
+  startedAt: now - 1000,
+  expiresAt: now + 60_000,
+}, now);
+assert.equal(resumable.ok, true);
+assert.equal(resumable.code, "oauth_flow_resumable");
+assert.equal(resumable.flow.phase, "waiting");
+assert.equal(resumable.flow.state, "fresh-state");
+assert.equal(oauth.oauthFlowSnapshotStatus({ active: true, phase: "success" }, now).code, "oauth_flow_not_resumable");
+assert.equal(oauth.oauthFlowSnapshotStatus({ active: true, phase: "waiting", state: "s", authUrl: "https://example.com/oauth/authorize", startedAt: now, expiresAt: now + 1 }, now).code, "oauth_authorize_url_invalid");
+assert.equal(oauth.oauthFlowSnapshotStatus({ active: true, phase: "waiting", state: "s", authUrl: "https://auth.openai.com/oauth/authorize", startedAt: now - 10_000, expiresAt: now - 1 }, now).code, "oauth_flow_expired");
+assert.equal(oauth.oauthFlowSnapshotStatus("{bad-json", now).code, "oauth_flow_missing");
+
 console.log("oauth-core verification passed");
