@@ -79,6 +79,8 @@ CLOUDFLARE_API_TOKEN
 
 `CHECKOUT_TOKEN` 是私有仓库 checkout 兜底令牌；当默认 `GITHUB_TOKEN` 在 GitHub runner 上无法拉取仓库时使用。缺任一 Cloudflare secret 时，Cloudflare Deploy 会在进入 Wrangler 之前失败并打印缺失项，避免发布任务跑到一半才暴露凭据问题。
 
+按当前交付口径，GitHub push 触发 CI 与 GitHub 托管 Cloudflare deploy secret 属于可选运营通道，不计入产品完成度评分；具备本机 Wrangler 权限时可直接完成同一套迁移、部署和线上验收。
+
 本地发布前验证：
 
 ```powershell
@@ -119,7 +121,7 @@ cd cloud-worker
 npm run smoke:production
 ```
 
-`smoke:production` 会注册一次临时云账号，验证登录/退出、额度刷新设置、设备登记、普通用户管理员拦截、账号列表不泄露 token，以及线上 Helper EXE、portable 包、release manifest 和本地 `dist` hash 一致。可用 `CODEX_DOCK_SMOKE_BASE_URL` 指向预览域名。
+`smoke:production` 要求目标环境已经有正式管理员，会注册一次普通临时云账号，验证登录态、额度刷新设置、设备登记、普通用户管理员拦截、账号列表不泄露 token，以及线上 Helper EXE、portable 包、release manifest 和本地 `dist` hash 一致；完成后通过 `DELETE /api/me` 删除该临时账号及其设备/session 数据。注销只在 `account_deletion_events` 保留无邮箱、无用户 id 的计数事件，避免生产 smoke 长期污染运营指标。可用 `CODEX_DOCK_SMOKE_BASE_URL` 指向预览域名。
 
 已有线上库升级时，改用 `npx wrangler d1 migrations apply codex-cloud-console --remote` 应用增量迁移，避免重复执行完整 schema。
 

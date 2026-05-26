@@ -20,6 +20,7 @@
 - 额度快照
 - 设备状态
 - 审计记录
+- 匿名注销事件计数，不保留已注销用户邮箱、用户 id、设备 key 或 token
 - 管理员用户管理接口
 
 浏览器本地：
@@ -72,6 +73,7 @@
 - Helper 自动切换仍默认等待 Codex 空闲；当本地日志识别到认证失效、额度/限流或账号停用等硬失败时，只先记录待切换原因，等当前任务真正 completed/failed 后进入 cooling 阶段再换号。
 - Worker 所有响应带 `X-Request-Id`；运行日志用结构化 JSON 输出请求、异常、状态码和耗时，用于 Cloudflare Workers Logs 追踪。
 - D1 `audit_logs.metadata_json` 会保存同一个 request id，`worker.audit` 日志也输出 user id、device key、action 和 result，用于从线上日志回查具体业务动作。
+- 用户可在设置页输入登录邮箱和当前密码执行 `DELETE /api/me`；D1 级联删除其账号密文、额度、设备、session 与个人审计，仅在 `account_deletion_events` 留下无身份信息的删除计数，管理员摘要可查看 24 小时注销量。
 
 ## 已验证项
 

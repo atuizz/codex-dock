@@ -103,6 +103,7 @@
         ["在线 session", summary.onlineSessions],
         ["24h 导入", summary.imports24h],
         ["24h 切换", summary.switches24h],
+        ["24h 注销", summary.deletions24h],
       ].map(([label, value]) => metric(label, value)).join("");
       return `
         <div class="admin-summary-metrics">${basic}</div>

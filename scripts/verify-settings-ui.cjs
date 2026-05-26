@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
 const { createSettingsUi } = require("../settings-ui.js");
 
 const ui = createSettingsUi({
@@ -172,6 +173,17 @@ const foreignHelperHtml = ui.renderSmartSwitchSettings({
 });
 assert.match(foreignHelperHtml, /需要授权本机 Helper/);
 assert.doesNotMatch(foreignHelperHtml, /本机 Helper 已授权/);
+
+const indexHtml = readFileSync("index.html", "utf8");
+const appSource = readFileSync("app.js", "utf8");
+assert.match(indexHtml, /id="deleteCloudAccountForm"/);
+assert.match(indexHtml, /id="deleteCloudAccountPanel"/);
+assert.match(indexHtml, /永久删除云端账号/);
+assert.match(indexHtml, /账号池、额度记录、设备授权和审计记录/);
+assert.match(appSource, /async function deleteCloudAccount/);
+assert.match(appSource, /api\("\/api\/me",\s*\{[\s\S]*method:\s*"DELETE"/);
+assert.match(appSource, /configureHelperAutoSwitch\(\{\s*enabled:\s*false,\s*clearToken:\s*true\s*\}\)/);
+assert.match(appSource, /\$\("deleteCloudAccountPanel"\)\.hidden\s*=\s*!state\.user/);
 
 console.log("settings-ui verification passed");
 

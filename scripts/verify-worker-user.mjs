@@ -11,10 +11,20 @@ class FakeD1 {
   constructor(user) {
     this.users = [user];
     this.userSettings = [];
+    this.accounts = [{ id: "acct-delete", user_id: user.id }];
+    this.devices = [{ id: "dev-delete", user_id: user.id }];
+    this.deviceTokens = [{ id: "token-delete", user_id: user.id }];
+    this.sessions = [{ id: "session-delete", user_id: user.id }];
+    this.deletionEvents = [];
   }
 
   prepare(sql) {
     return new FakeStatement(this, sql);
+  }
+
+  async batch(statements) {
+    for (const statement of statements) await statement.run();
+    return statements.map(() => ({ success: true }));
   }
 }
 
@@ -40,6 +50,22 @@ class FakeStatement {
       const [userId] = this.params;
       const user = this.db.users.find((item) => item.id === userId);
       return user ? { password_hash: user.password_hash, password_salt: user.password_salt } : null;
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM users WHERE role = 'admin'")) {
+      const [userId] = this.params;
+      return { total: this.db.users.filter((item) => item.id !== userId && item.role === "admin" && item.status === "active").length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM accounts WHERE user_id")) {
+      return { total: this.db.accounts.filter((item) => item.user_id === this.params[0]).length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM devices WHERE user_id")) {
+      return { total: this.db.devices.filter((item) => item.user_id === this.params[0]).length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM device_tokens WHERE user_id")) {
+      return { total: this.db.deviceTokens.filter((item) => item.user_id === this.params[0]).length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM sessions WHERE user_id")) {
+      return { total: this.db.sessions.filter((item) => item.user_id === this.params[0]).length };
     }
     throw new Error(`Unhandled first SQL: ${sql}`);
   }
@@ -67,6 +93,21 @@ class FakeStatement {
       }
       return { success: true };
     }
+    if (sql.includes("DELETE FROM users WHERE id")) {
+      const [userId] = this.params;
+      this.db.users = this.db.users.filter((item) => item.id !== userId);
+      this.db.userSettings = this.db.userSettings.filter((item) => item.user_id !== userId);
+      this.db.accounts = this.db.accounts.filter((item) => item.user_id !== userId);
+      this.db.devices = this.db.devices.filter((item) => item.user_id !== userId);
+      this.db.deviceTokens = this.db.deviceTokens.filter((item) => item.user_id !== userId);
+      this.db.sessions = this.db.sessions.filter((item) => item.user_id !== userId);
+      return { success: true };
+    }
+    if (sql.includes("INSERT INTO account_deletion_events")) {
+      const [id, reason, formerRole, removedJson, requestId, createdAt] = this.params;
+      this.db.deletionEvents.push({ id, reason, former_role: formerRole, removed_json: removedJson, request_id: requestId, created_at: createdAt });
+      return { success: true };
+    }
     throw new Error(`Unhandled run SQL: ${sql}`);
   }
 }
@@ -84,12 +125,15 @@ const salt = randomToken(18);
 const env = {
   DB: new FakeD1({
     id: "user-1",
+    email: "owner@example.com",
+    role: "user",
+    status: "active",
     password_hash: await passwordHash("old-password", salt),
     password_salt: salt,
     updated_at: "",
   }),
 };
-const user = { id: "user-1" };
+const user = { id: "user-1", email: "owner@example.com", role: "user", requestContext: { requestId: "req-user" } };
 const audits = [];
 const writeAudit = async (_env, auditUser, body) => {
   audits.push({ userId: auditUser.id, ...body });
@@ -133,5 +177,56 @@ const changed = await handleUserRoutes(request("/api/auth/change-password", "POS
 assert.equal(changed.status, 200);
 assert.equal(await passwordHash("new-password", env.DB.users[0].password_salt), env.DB.users[0].password_hash);
 assert.equal(audits.at(-1).action, "change-password");
+
+const wrongEmail = await handleUserRoutes(request("/api/me", "DELETE", {
+  confirmEmail: "wrong@example.com",
+  currentPassword: "new-password",
+}), env, user, "/api/me", { writeAudit });
+assert.equal(wrongEmail.status, 400);
+assert.equal(env.DB.users.length, 1);
+
+const wrongDeletePassword = await handleUserRoutes(request("/api/me", "DELETE", {
+  confirmEmail: "owner@example.com",
+  currentPassword: "wrong-password",
+}), env, user, "/api/me", { writeAudit });
+assert.equal(wrongDeletePassword.status, 401);
+assert.equal(env.DB.users.length, 1);
+
+const deleted = await handleUserRoutes(request("/api/me", "DELETE", {
+  confirmEmail: "owner@example.com",
+  currentPassword: "new-password",
+}), env, user, "/api/me", { writeAudit });
+assert.equal(deleted.status, 200);
+assert.match(deleted.headers.get("Set-Cookie") || "", /Max-Age=0/);
+const deletedBody = await deleted.json();
+assert.deepEqual(deletedBody.removed, { accounts: 1, devices: 1, deviceTokens: 1, sessions: 1 });
+assert.equal(env.DB.users.length, 0);
+assert.equal(env.DB.accounts.length, 0);
+assert.equal(env.DB.devices.length, 0);
+assert.equal(env.DB.deviceTokens.length, 0);
+assert.equal(env.DB.sessions.length, 0);
+assert.equal(env.DB.deletionEvents.length, 1);
+assert.equal(env.DB.deletionEvents[0].request_id, "req-user");
+assert.doesNotMatch(JSON.stringify(env.DB.deletionEvents[0]), /owner@example|user-1/i);
+assert.equal(audits.at(-1).action, "delete-account");
+
+const adminSalt = randomToken(18);
+const soleAdminEnv = {
+  DB: new FakeD1({
+    id: "admin-1",
+    email: "admin@example.com",
+    role: "admin",
+    status: "active",
+    password_hash: await passwordHash("admin-password", adminSalt),
+    password_salt: adminSalt,
+  }),
+};
+const soleAdminDelete = await handleUserRoutes(request("/api/me", "DELETE", {
+  confirmEmail: "admin@example.com",
+  currentPassword: "admin-password",
+}), soleAdminEnv, { id: "admin-1", email: "admin@example.com", role: "admin" }, "/api/me", { writeAudit });
+assert.equal(soleAdminDelete.status, 409);
+assert.equal(soleAdminEnv.DB.users.length, 1);
+assert.equal(soleAdminEnv.DB.deletionEvents.length, 0);
 
 console.log("worker-user verification passed");

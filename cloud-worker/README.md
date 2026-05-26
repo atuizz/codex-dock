@@ -43,8 +43,8 @@ If Wrangler reports pending migrations but the remote schema already contains th
 - Worker settings module: `worker-settings.js` owns auto-switch policy defaults, clamping, and D1 persistence.
 - Worker helper module: `worker-helper.js` owns device registration, Helper bearer-token verification, sliding TTL/rotation, heartbeat, current-usage reporting, next-account selection, and Helper switch audit callbacks.
 - Worker audit module: `worker-audit.js` owns D1 audit writes, request-id metadata stitching, user audit listing, and switch success timestamp updates.
-- Worker admin module: `worker-admin.js` owns admin summary/users/devices/audit views, role/status management, session deletion, password resets, and last-admin protection.
-- Worker user module: `worker-user.js` owns signed-in user settings and password-change routes.
+- Worker admin module: `worker-admin.js` owns admin summary/users/devices/audit views, anonymous account-deletion metrics, role/status management, session deletion, password resets, and last-admin protection.
+- Worker user module: `worker-user.js` owns signed-in user settings, password changes, and self-service account deletion with last-admin protection.
 - API: `/api/*` served by `worker.js`.
 - Database: D1 binding `DB`.
 - Secret: `TOKEN_ENCRYPTION_KEY`, used to encrypt account auth/session payloads before storage.
@@ -57,6 +57,7 @@ If Wrangler reports pending migrations but the remote schema already contains th
 `GET /api/accounts` returns only metadata and usage snapshots. Token material is encrypted in `account_secrets` and is only decrypted for `POST /api/accounts/:id/switch-payload` after the cloud user is logged in.
 Helper device tokens are bearer credentials with a sliding 60-day TTL. Active helpers refresh their expiry on every cloud call, and `/api/helper/auto-switch/config` can return a replacement token after the rotation window so the local Helper can save it before the old token enters its grace period.
 Auto-switch payloads are only issued after the Helper reports a confirmed safe boundary, so quota exhaustion does not interrupt an active Codex turn that can still continue.
+`DELETE /api/me` requires the signed-in email and current password, removes user-owned accounts/devices/sessions by D1 foreign-key cascade, and preserves only an anonymous removal-count event in `account_deletion_events`; it does not retain email, user id, device key, or token material.
 
 ## Added Commercial API Surface
 
@@ -65,3 +66,4 @@ Auto-switch payloads are only issued after the Helper reports a confirmed safe b
 - `POST /api/settings/usage-refresh/recent`
 - `POST /api/accounts/:id/usage/refresh-cloud`
 - `GET /api/admin/devices`
+- `DELETE /api/me`

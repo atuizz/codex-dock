@@ -2137,6 +2137,7 @@ function renderSettings() {
   const codex = state.codexStatus || {};
   $("settingsAccountState").innerHTML = settingsUi.renderAccountState({ user: state.user });
   $("changePasswordForm").hidden = !state.user;
+  $("deleteCloudAccountPanel").hidden = !state.user;
   $("settingsHelperState").innerHTML = settingsUi.renderHelperState({
     helperReady: state.helperReady,
     helper: state.helperInfo || {},
@@ -3767,6 +3768,41 @@ async function changePassword(event) {
   }
 }
 
+async function deleteCloudAccount(event) {
+  event.preventDefault();
+  if (!state.user) return;
+  const confirmEmail = $("deleteAccountEmail").value.trim();
+  const currentPassword = $("deleteAccountPassword").value;
+  if (confirmEmail.toLowerCase() !== String(state.user.email || "").toLowerCase()) {
+    toast("请输入当前登录邮箱以确认删除。");
+    return;
+  }
+  if (!window.confirm("确定永久删除云端账号及全部同步数据吗？此操作不可恢复，本机离线账号仍会保留。")) return;
+  try {
+    await api("/api/me", {
+      method: "DELETE",
+      body: { confirmEmail, currentPassword },
+    });
+    if (state.helperReady && state.autoSwitchStatus.helperAuthorized) {
+      await configureHelperAutoSwitch({ enabled: false, clearToken: true }).catch(() => {});
+      state.autoSwitchStatus.helperAuthorized = false;
+    }
+    $("deleteCloudAccountForm").reset();
+    closeModal("settingsModal");
+    state.user = null;
+    state.cloudAccounts = [];
+    state.audit = [];
+    state.adminSummary = null;
+    state.adminUsers = [];
+    state.adminAudit = [];
+    if (state.currentView === "admin") switchView("accounts");
+    render();
+    toast("云端账号及同步数据已永久删除，本机离线账号仍可使用。");
+  } catch (error) {
+    toast(error.message || "删除云端账号失败。");
+  }
+}
+
 async function handleAdminAction(action, id, dataset) {
   try {
     if (action === "toggle-status") {
@@ -4027,6 +4063,7 @@ function bindEvents() {
     if (event.target.closest("#loginInlineBtn")) openModal("authModal");
   });
   $("changePasswordForm").addEventListener("submit", changePassword);
+  $("deleteCloudAccountForm").addEventListener("submit", deleteCloudAccount);
 
   $("mergeSyncBtn").addEventListener("click", mergeAndSync);
   $("localOnlyBtn").addEventListener("click", useLocalOnly);

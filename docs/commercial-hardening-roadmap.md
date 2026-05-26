@@ -65,6 +65,7 @@
 - 已为 Helper device token 增加 D1 过期字段、滑动保活、云端轮换下发和 Helper 本地保存 replacement token；账号切换 payload 会拦截“AT 已过期且无 RT”的账号。
 - 已为 Worker 最外层入口补 `X-Request-Id`、结构化请求日志、结构化异常日志和带状态码的业务错误，减少线上排障盲区。
 - 已把业务审计写入与 request id 串起来，`worker.audit` 日志和 `audit_logs.metadata_json.requestId` 可互相定位。
+- 已补用户数据删除闭环：设置页提供带邮箱/密码确认的账号注销，Worker 保护最后一个管理员并以 D1 事务级联清除用户数据；仅以 `account_deletion_events` 保存无身份信息的删除计数供管理员查看，生产 smoke 在验收后自动删除临时用户和设备。
 - 已修正 Helper 自动切换的硬失败路径：认证失效、额度/限流、账号停用这类 runtime trigger 会先登记为待切换原因；当前任务仍在执行时不切，任务 completed/failed 后进入 cooling 即触发换号，避免既卡死又误切。
 - 已统一自动切换空闲确认语义：云端、前端和 Helper 默认均为 10 秒，`idleSeconds` 会在 Helper 侧真实参与普通自动切换判断；硬失败触发仍在任务结束后的短 cooling 阶段优先处理。
 - 已修复设置弹窗在智能切换内容较长时撑破容器的问题，桌面与移动端均改为头部固定、内容内部滚动，避免面板溢出视口。

@@ -178,3 +178,8 @@
 - 控制台设备页和设置页均提供“修复托盘图标”动作，设备页在自动切换暂停时提供“恢复自动切换”动作；线上静态资源版本 `4c0bc4657977` 已验证包含该入口。
 - 同日热修复后，Helper 自动切换健康状态增加 `last_stage`、`last_failure_stage`、`last_failure_detail` 与 `failure_backoff_until`，连续失败会进入 180 秒失败退避，避免窗口日志和云端审计被同一失败原因刷屏。
 
+## 2026-05-27 发布验证
+
+- Helper `0.4.7` 已增加待切计划的本地持久化恢复：重启后只展示“恢复待切计划/需要重新核验”，只有新的额度与安全边界检查通过后才允许写入 auth。
+- 本地 `/api/health` 与 `/api/update/check` 已验证当前和最新版本均为 `0.4.7`，生命周期自检仍返回 `log_found: true`、`log_view_fault_tested: true` 与 `log_view_fault_recovered: true`；线上 EXE SHA-256 为 `391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515`。
+

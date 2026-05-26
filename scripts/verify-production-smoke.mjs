@@ -119,6 +119,7 @@ const registered = await request("/api/auth/register", {
 assert.equal(registered.response.status, 200, "register should succeed");
 assert.equal(registered.data.ok, true, "register response should be ok");
 assert.equal(registered.data.user.email, email, "registered user email should match");
+assert.notEqual(registered.data.user.role, "admin", "production smoke requires an existing administrator so its disposable user can be deleted");
 assertRequestId(registered, "register");
 
 const usageSettings = await request("/api/settings/usage-refresh");
@@ -200,10 +201,15 @@ try {
   if (process.env.CODEX_DOCK_REQUIRE_LOCAL_HELPER_HASH === "1") throw error;
 }
 
-const logout = await request("/api/auth/logout", { method: "POST", body: {} });
-assert.equal(logout.response.status, 200, "logout should succeed");
+const deleted = await request("/api/me", {
+  method: "DELETE",
+  body: { confirmEmail: email, currentPassword: password },
+});
+assert.equal(deleted.response.status, 200, "disposable smoke user deletion should succeed");
+assert.equal(deleted.data.ok, true, "smoke cleanup response should be ok");
+assert.ok(deleted.data.removed.devices >= 1, "smoke cleanup should remove the registered test device");
 const meAfter = await request("/api/me");
-assert.equal(meAfter.data.user, null, "me after logout should be anonymous");
+assert.equal(meAfter.data.user, null, "me after smoke cleanup should be anonymous");
 
 console.log(JSON.stringify({
   ok: true,

@@ -34,6 +34,7 @@ class FakeD1 {
       { id: "dev-stale", user_id: "user-1", device_key: "desktop-stale", name: "Stale Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.3", helper_build_date: "2026-05-26", created_at: "", last_seen_at: staleSeenAt },
     ];
     this.auditLogs = [];
+    this.deletionEvents = [{ id: "deletion-1", created_at: new Date().toISOString() }];
   }
 
   prepare(sql) {
@@ -95,6 +96,9 @@ class FakeStatement {
     }
     if (sql.includes("SELECT COUNT(*) AS total FROM usage_snapshots WHERE ok = 0")) {
       return { total: this.db.usageSnapshots.filter((item) => item.ok === 0).length };
+    }
+    if (sql.includes("SELECT COUNT(*) AS total FROM account_deletion_events")) {
+      return { total: this.db.deletionEvents.length };
     }
     if (sql.includes("SELECT id, email, role, status, created_at")) {
       const [userId] = this.params;
@@ -332,6 +336,7 @@ assert.equal(summaryBody.summary.accountHealth.rtReady, 1);
 assert.equal(summaryBody.summary.accountHealth.atOnly, 1);
 assert.equal(summaryBody.summary.accountHealth.usageFailed, 1);
 assert.equal(summaryBody.summary.failureTotals.usageRefreshFailures24h, 1);
+assert.equal(summaryBody.summary.deletions24h, 1);
 assert.ok(summaryBody.summary.failureTrend.some((bucket) => bucket.failures >= 1));
 assert.equal(summaryBody.summary.helperVersions[0].version, "0.4.3");
 assert.equal(summaryBody.summary.helperVersions[0].total, 2);

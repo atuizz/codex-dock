@@ -24,6 +24,7 @@ const summaryHtml = ui.renderSummary({
   onlineSessions: 4,
   imports24h: 5,
   switches24h: 6,
+  deletions24h: 1,
   accountHealth: { total: 9, rtReady: 7, atOnly: 2, usageFailed: 1, unrefreshed: 3 },
   deviceHealth: { total: 2, online: 1, offline: 1, stale: 1, outdated: 1 },
   helperVersions: [{ version: "0.4.3", total: 1, online: 1, stale: 0 }, { version: "0.3.1", total: 1, online: 0, stale: 1 }],
@@ -36,6 +37,7 @@ assert.match(summaryHtml, /设备数/);
 assert.match(summaryHtml, /<strong>2<\/strong>/);
 assert.match(summaryHtml, /待升级 Helper/);
 assert.match(summaryHtml, /需重连 Helper/);
+assert.match(summaryHtml, /24h 注销/);
 assert.match(summaryHtml, /账号健康/);
 assert.match(summaryHtml, /7 \/ 9 RT 可用/);
 assert.match(summaryHtml, /失败趋势/);

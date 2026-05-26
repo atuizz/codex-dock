@@ -40,7 +40,7 @@ function compareVersion(left, right) {
 export async function adminSummary(env) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const helperFreshCutoff = new Date(Date.now() - HELPER_OFFLINE_AFTER_SECONDS * 1000).toISOString();
-  const [users, accountHealth, sessions, imports, switches, usageFailures, auditTrend, helperVersions] = await Promise.all([
+  const [users, accountHealth, sessions, imports, switches, usageFailures, deletions, auditTrend, helperVersions] = await Promise.all([
     env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active FROM users").first(),
     env.DB.prepare(
       `SELECT COUNT(*) AS total,
@@ -62,6 +62,7 @@ export async function adminSummary(env) {
     env.DB.prepare("SELECT COUNT(*) AS total FROM audit_logs WHERE action = 'import' AND created_at > ?").bind(since).first(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM audit_logs WHERE action IN ('switch', 'switch-payload', 'auto-switch', 'auto-switch-helper') AND created_at > ?").bind(since).first(),
     env.DB.prepare("SELECT COUNT(*) AS total FROM usage_snapshots WHERE ok = 0 AND created_at > ?").bind(since).first(),
+    env.DB.prepare("SELECT COUNT(*) AS total FROM account_deletion_events WHERE created_at > ?").bind(since).first(),
     env.DB.prepare(
       `SELECT substr(created_at, 1, 13) AS bucket,
               COUNT(*) AS total,
@@ -118,6 +119,7 @@ export async function adminSummary(env) {
     onlineSessions: number(sessions?.total),
     imports24h: number(imports?.total),
     switches24h: number(switches?.total),
+    deletions24h: number(deletions?.total),
     minSupportedHelperVersion: MIN_SUPPORTED_HELPER_VERSION,
     accountHealth: {
       total: number(accountHealth?.total),

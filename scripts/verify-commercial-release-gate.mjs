@@ -54,6 +54,17 @@ const releaseGates = [
     ],
   },
   {
+    name: "user data deletion lifecycle",
+    file: "scripts/verify-worker-user.mjs",
+    checks: [
+      { label: "self-service delete route", pattern: /\/api\/me", "DELETE"/ },
+      { label: "email confirmation guard", pattern: /wrongEmail/ },
+      { label: "password confirmation guard", pattern: /wrongDeletePassword/ },
+      { label: "last administrator protection", pattern: /soleAdminDelete/ },
+      { label: "anonymous deletion event", pattern: /account_deletion_events|deletionEvents/ },
+    ],
+  },
+  {
     name: "OAuth user-facing error handling",
     file: "scripts/verify-oauth-core.cjs",
     checks: [
@@ -147,7 +158,7 @@ const releaseGates = [
       { label: "online base URL", pattern: /https:\/\/codex\.woai\.pro/ },
       { label: "static asset manifest parity", pattern: /asset-manifest\.json/ },
       { label: "register", pattern: /\/api\/auth\/register/ },
-      { label: "logout", pattern: /\/api\/auth\/logout/ },
+      { label: "self-cleaning smoke user", pattern: /disposable smoke user deletion should succeed/ },
       { label: "structured API errors", pattern: /diagnostic\?\.summary/ },
       { label: "usage settings", pattern: /\/api\/settings\/usage-refresh/ },
       { label: "normal user admin denial", pattern: /normal smoke user must not access admin summary/ },
@@ -186,6 +197,7 @@ const uiGates = [
       { label: "Helper version UI", pattern: /Helper 版本分布/ },
       { label: "Helper reconnect UI", pattern: /需重连 Helper|helperStale/ },
       { label: "outdated Helper marker", pattern: /待升级/ },
+      { label: "deletion metric", pattern: /24h 注销/ },
     ],
   },
   {
@@ -193,6 +205,7 @@ const uiGates = [
     checks: [
       { label: "usage refresh channel UI", pattern: /usageRefreshMode|额度刷新/ },
       { label: "Helper preferred mode", pattern: /helper|本机 Helper/i },
+      { label: "self-service deletion surface", pattern: /永久删除云端账号/ },
     ],
   },
   {

@@ -2808,6 +2808,36 @@ label span {
   font-weight: 600;
 }
 
+.account-danger-zone {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 14px;
+  border: 1px solid rgba(192, 48, 48, 0.24);
+  border-radius: 12px;
+  background: rgba(192, 48, 48, 0.045);
+}
+
+.account-danger-zone h4,
+.account-danger-zone p {
+  margin: 0;
+}
+
+.account-danger-zone h4 {
+  color: var(--danger-text, #ad3131);
+  font-size: 14px;
+}
+
+.account-danger-zone p {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.account-danger-zone .stack-form {
+  margin-top: 4px;
+}
+
 .setting-actions.inline {
   display: flex;
   gap: 8px;

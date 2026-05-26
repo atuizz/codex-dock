@@ -453,6 +453,21 @@
                 </label>
                 <button type="submit">修改密码</button>
               </form>
+              <section class="account-danger-zone" id="deleteCloudAccountPanel" aria-labelledby="deleteCloudAccountTitle">
+                <h4 id="deleteCloudAccountTitle">删除云端账号</h4>
+                <p>永久删除云端账号、账号池、额度记录、设备授权和审计记录。本机浏览器中的离线账号不受影响。</p>
+                <form id="deleteCloudAccountForm" class="stack-form">
+                  <label>
+                    <span>确认邮箱</span>
+                    <input id="deleteAccountEmail" type="email" autocomplete="email" placeholder="输入当前登录邮箱" />
+                  </label>
+                  <label>
+                    <span>当前密码</span>
+                    <input id="deleteAccountPassword" type="password" autocomplete="current-password" />
+                  </label>
+                  <button class="danger" type="submit">永久删除云端账号</button>
+                </form>
+              </section>
             </section>
 
             <section class="settings-panel" data-panel="data">
