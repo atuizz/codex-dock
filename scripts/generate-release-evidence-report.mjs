@@ -67,10 +67,30 @@ function runGit(gitArgs) {
   return result.stdout.trim();
 }
 
+function runGh(ghArgs) {
+  const result = spawnSync("gh", ghArgs, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    shell: false,
+  });
+  if (result.status !== 0) return "";
+  return result.stdout.trim();
+}
+
+function githubRepo() {
+  const repo = runGh(["repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]);
+  return repo || "atuizz/codex-dock";
+}
+
 function remoteHead(ref) {
   const output = runGit(["ls-remote", "origin", ref]);
   const sha = output.split(/\s+/)[0] || "";
-  return sha ? sha.slice(0, 12) : "";
+  if (sha) return sha.slice(0, 12);
+
+  const match = ref.match(/^refs\/heads\/(.+)$/);
+  if (!match) return "";
+  const apiSha = runGh(["api", `repos/${githubRepo()}/git/ref/heads/${match[1]}`, "--jq", ".object.sha"]);
+  return apiSha ? apiSha.slice(0, 12) : "";
 }
 
 function extractWorkerVersion(releaseDoc) {

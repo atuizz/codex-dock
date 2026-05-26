@@ -22,6 +22,8 @@ assert.equal(report.helper.consistency.exe_sha_matches_production, true);
 assert.equal(report.helper.consistency.package_sha_matches_production, true);
 assert.equal(report.cloudflare.production_url, "https://codex.woai.pro");
 assert.match(report.cloudflare.static_asset_version, /^[a-f0-9]{12}$/);
+assert.match(report.git.remote_main, /^[a-f0-9]{12}$/);
+assert.match(report.git.remote_branch, /^[a-f0-9]{12}$/);
 assert.equal(report.ci_cd.ci_workflow_configured, true);
 assert.equal(report.ci_cd.deploy_workflow_configured, true);
 assert.equal(report.ci_cd.workflow_dispatch_configured, true);
