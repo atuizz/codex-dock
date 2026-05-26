@@ -952,6 +952,8 @@ async function parseOauthCallbackToPreview(rawCallback = null) {
       const stateStatus = oauthCore.callbackStateStatus(params, state.oauthFlow.state || state.oauthState || "", oauthRedirectUri);
       if (!stateStatus.ok) throw new Error(stateStatus.message);
     }
+    const providerError = oauthCore.providerErrorStatus(params, oauthRedirectUri);
+    if (!providerError.ok) throw new Error(providerError.message);
     let usedOauthCode = false;
     if (!accessToken && code) {
       const pkce = returnedState ? oauthPkce(returnedState) : oauthPkce();

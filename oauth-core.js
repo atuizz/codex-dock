@@ -24,12 +24,12 @@
     }
     const anyUrl = compact.match(/https?:\/\/[^\s"'<>]+/i);
     if (anyUrl) return anyUrl[0].replace(/[),.;，。]+$/g, "");
-    const paramMatch = compact.match(/(?:^|[?#&])((?:code|access_token|accessToken|id_token|idToken|refresh_token|refreshToken)=[^"'<>]+)/);
+    const paramMatch = compact.match(/(?:^|[?#&])((?:code|error|access_token|accessToken|id_token|idToken|refresh_token|refreshToken)=[^"'<>]+)/);
     if (paramMatch) {
       const query = paramMatch[1].replace(/^[?#&]/, "");
       return `${redirectUri}?${query}`;
     }
-    const bareParam = compact.match(/\b((?:code|access_token|accessToken|id_token|idToken|refresh_token|refreshToken)=[^"'<>]+)/);
+    const bareParam = compact.match(/\b((?:code|error|access_token|accessToken|id_token|idToken|refresh_token|refreshToken)=[^"'<>]+)/);
     if (bareParam) return `${redirectUri}?${bareParam[1]}`;
     if (/^(?:localhost|127\.0\.0\.1):1455\/auth\/callback/i.test(compact)) return `http://${compact}`;
     if (/^https?:\/\//i.test(compact)) return compact;
@@ -70,6 +70,27 @@
     return { ok: true, state: returnedState };
   }
 
+  function providerErrorStatus(rawOrParams, redirectUri = defaultRedirectUri) {
+    const params = rawOrParams instanceof URLSearchParams ? rawOrParams : callbackParams(rawOrParams, redirectUri);
+    const error = params.get("error") || "";
+    if (!error) return { ok: true };
+    const rawDescription = params.get("error_description") || params.get("errorDescription") || "";
+    const description = rawDescription
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 180);
+    const friendly = /access_denied/i.test(error)
+      ? "你取消了授权，或授权页面没有完成登录"
+      : (description || `授权服务返回 ${error}`);
+    return {
+      ok: false,
+      code: "oauth_provider_error",
+      error,
+      description,
+      message: `授权未完成：${friendly}。请重新打开授权页面，并只使用刚打开页面返回的回调。`,
+    };
+  }
+
   function exchangeFailureMessage(message) {
     const detail = String(message || "换取 token 失败");
     if (/could not validate|invalid_grant|expired|code|verifier|already used|已过期|已失效/i.test(detail)) {
@@ -88,6 +109,7 @@
     normalizeOauthCallbackValue,
     callbackParams,
     callbackStateStatus,
+    providerErrorStatus,
     exchangeFailureMessage,
     emptyCallbackMessage,
   });

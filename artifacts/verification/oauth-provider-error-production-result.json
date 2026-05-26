@@ -1,0 +1,27 @@
+{
+  "title": "Codex Dock",
+  "oauthScript": "https://codex.woai.pro/oauth-core.js?v=9e8ec588179c",
+  "appScript": "https://codex.woai.pro/app.js?v=9e8ec588179c",
+  "hasCore": true,
+  "providerDenied": {
+    "ok": false,
+    "code": "oauth_provider_error",
+    "error": "access_denied",
+    "description": "User cancelled",
+    "message": "授权未完成：你取消了授权，或授权页面没有完成登录。请重新打开授权页面，并只使用刚打开页面返回的回调。"
+  },
+  "providerGeneric": {
+    "ok": false,
+    "code": "oauth_provider_error",
+    "error": "server_error",
+    "description": "Temporary outage",
+    "message": "授权未完成：Temporary outage。请重新打开授权页面，并只使用刚打开页面返回的回调。"
+  },
+  "stale": {
+    "ok": false,
+    "code": "oauth_state_mismatch",
+    "state": "old",
+    "message": "收到的授权回调不属于当前这次登录。请重新打开授权页面，并只使用刚打开页面返回的回调。"
+  },
+  "bodyHasTokens": false
+}
