@@ -14,8 +14,17 @@ assert.match(helperSource, /protected override void WndProc\(ref Message m\)/);
 assert.match(helperSource, /RecoverRichTextState\(ex\)/);
 assert.match(helperSource, /RedactDiagnosticText/);
 assert.match(helperSource, /AutoSwitchFailureBackoffSeconds/);
+assert.match(helperSource, /AutoSwitchFailurePauseThreshold\s*=\s*3/);
+assert.match(helperSource, /AutoSwitchFailurePauseSeconds\s*=\s*1800/);
 assert.match(helperSource, /AutoSwitchFailureBackoffActive/);
+assert.match(helperSource, /AutoSwitchFailurePauseActive/);
 assert.match(helperSource, /ArmAutoSwitchFailureBackoff/);
+assert.match(helperSource, /\/api\/auto-switch\/resume/);
+assert.match(helperSource, /failure_count/);
+assert.match(helperSource, /failure_pause_until/);
+assert.match(helperSource, /failure_pause_reason/);
+assert.match(helperSource, /SetAutoSwitchStage\("failure-paused", "自动暂停"\)/);
+assert.match(helperSource, /AutoSwitchFailureStageLabel/);
 assert.ok(helperSource.includes("\\\\bAuthorization\\\\s*:\\\\s*Bearer"));
 assert.match(helperSource, /cdh_\[REDACTED\]/);
 

@@ -59,7 +59,7 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.2";
+        private const string HelperVersion = "0.4.3";
         private const string HelperBuildDate = "2026-05-26";
         private const int HelperLogMaxBytes = 1024 * 1024;
         private const int HelperLogBackups = 5;
@@ -67,6 +67,8 @@ namespace CodexPlusLocalHelper
         private const int HelperUiLogMaxCharacters = 160000;
         private const int AutoSwitchRepeatedLogSeconds = 300;
         private const int AutoSwitchFailureBackoffSeconds = 180;
+        private const int AutoSwitchFailurePauseThreshold = 3;
+        private const int AutoSwitchFailurePauseSeconds = 1800;
         private const int TrayWatchdogIntervalMs = 30000;
         private static readonly object HelperLogFileLock = new object();
         private int _port = 18766;
@@ -127,6 +129,10 @@ namespace CodexPlusLocalHelper
         private string _lastAutoSwitchFailureDetail = "";
         private DateTime _autoSwitchFailurePauseUntilUtc = DateTime.MinValue;
         private string _autoSwitchFailurePauseKey = "";
+        private string _autoSwitchFailureStreakKey = "";
+        private int _autoSwitchFailureStreak = 0;
+        private DateTime _autoSwitchFailureSuspendedUntilUtc = DateTime.MinValue;
+        private string _autoSwitchFailureSuspendedReason = "";
         private string _lastAutoSwitchLogKey = "";
         private DateTime _lastAutoSwitchLogAt = DateTime.MinValue;
         private string _lastAutoSwitchAuditKey = "";
@@ -1392,6 +1398,21 @@ namespace CodexPlusLocalHelper
                 return true;
             }
 
+            if (request.HttpMethod == "POST" && path == "/api/auto-switch/resume")
+            {
+                if (!IsAllowedOrigin(request))
+                {
+                    SendJson(context.Response, 403, "{\"ok\":false,\"error\":\"来源未授权\"}");
+                    return true;
+                }
+
+                ClearAutoSwitchFailureBackoff();
+                SetAutoSwitchStage("normal", "手动恢复");
+                SetAutoSwitchResult("已手动恢复自动切换，下一轮会重新核验任务边界和候选账号", "manual-resume-auto-switch");
+                SendJson(context.Response, 200, "{\"ok\":true,\"auto_switch\":" + AutoSwitchStatusJson() + "}");
+                return true;
+            }
+
             if (request.HttpMethod == "POST" && path == "/api/pair")
             {
                 if (!IsAllowedOrigin(request))
@@ -2299,7 +2320,10 @@ namespace CodexPlusLocalHelper
                 + "\"last_stage_label\":\"" + JsonEscape(_lastAutoSwitchStageLabel) + "\","
                 + "\"last_failure_stage\":\"" + JsonEscape(_lastAutoSwitchFailureStage) + "\","
                 + "\"last_failure_detail\":\"" + JsonEscape(_lastAutoSwitchFailureDetail) + "\","
+                + "\"failure_count\":" + _autoSwitchFailureStreak + ","
                 + "\"failure_backoff_until\":\"" + JsonEscape(_autoSwitchFailurePauseUntilUtc == DateTime.MinValue ? "" : _autoSwitchFailurePauseUntilUtc.ToString("o")) + "\","
+                + "\"failure_pause_until\":\"" + JsonEscape(_autoSwitchFailureSuspendedUntilUtc == DateTime.MinValue ? "" : _autoSwitchFailureSuspendedUntilUtc.ToString("o")) + "\","
+                + "\"failure_pause_reason\":\"" + JsonEscape(_autoSwitchFailureSuspendedReason) + "\","
                 + "\"token_expires_at\":\"" + JsonEscape(config.DeviceTokenExpiresAt) + "\","
                 + "\"cloud_last_sync\":\"" + JsonEscape(config.CloudLastSyncAt) + "\","
                 + "\"only_when_idle\":" + (config.OnlyWhenIdle ? "true" : "false") + ","
@@ -3645,6 +3669,13 @@ namespace CodexPlusLocalHelper
             _lastAutoSwitchReason = trigger;
             var triggerLabel = string.IsNullOrEmpty(triggerSource) ? trigger : triggerSource + "：" + trigger;
             var failureBackoffKey = triggerType + ":" + triggerSource + ":" + trigger;
+            int failurePauseSeconds;
+            if (AutoSwitchFailurePauseActive(out failurePauseSeconds))
+            {
+                SetAutoSwitchStage("failure-paused", "自动暂停");
+                SetAutoSwitchResult("连续失败已自动暂停：" + (_autoSwitchFailureSuspendedReason ?? "") + "，约 " + failurePauseSeconds + " 秒后重试；触发源 " + triggerLabel, "failure-paused:" + _autoSwitchFailureStreakKey);
+                return;
+            }
             int failureBackoffSeconds;
             if (AutoSwitchFailureBackoffActive(failureBackoffKey, out failureBackoffSeconds))
             {
@@ -4175,26 +4206,84 @@ namespace CodexPlusLocalHelper
             }
             if (_autoSwitchFailurePauseUntilUtc == DateTime.MinValue || _autoSwitchFailurePauseUntilUtc <= now)
             {
-                ClearAutoSwitchFailureBackoff();
+                ClearAutoSwitchFailureBackoffWindow();
                 return false;
             }
             waitSeconds = Math.Max(1, (int)Math.Ceiling((_autoSwitchFailurePauseUntilUtc - now).TotalSeconds));
             return true;
         }
 
+        private bool AutoSwitchFailurePauseActive(out int waitSeconds)
+        {
+            waitSeconds = 0;
+            var now = DateTime.UtcNow;
+            if (_autoSwitchFailureSuspendedUntilUtc == DateTime.MinValue)
+            {
+                return false;
+            }
+            if (_autoSwitchFailureSuspendedUntilUtc <= now)
+            {
+                ClearAutoSwitchFailureBackoff();
+                return false;
+            }
+            waitSeconds = Math.Max(1, (int)Math.Ceiling((_autoSwitchFailureSuspendedUntilUtc - now).TotalSeconds));
+            return true;
+        }
+
         private void ArmAutoSwitchFailureBackoff(string key, string stage, string detail)
         {
-            _autoSwitchFailurePauseKey = key ?? "";
+            var normalizedKey = key ?? "";
+            if (string.Equals(_autoSwitchFailureStreakKey, normalizedKey, StringComparison.Ordinal))
+            {
+                _autoSwitchFailureStreak += 1;
+            }
+            else
+            {
+                _autoSwitchFailureStreakKey = normalizedKey;
+                _autoSwitchFailureStreak = 1;
+            }
+            _autoSwitchFailurePauseKey = normalizedKey;
             _autoSwitchFailurePauseUntilUtc = DateTime.UtcNow.AddSeconds(AutoSwitchFailureBackoffSeconds);
             SetAutoSwitchFailure(stage, detail);
+            if (_autoSwitchFailureStreak >= AutoSwitchFailurePauseThreshold)
+            {
+                _autoSwitchFailureSuspendedUntilUtc = DateTime.UtcNow.AddSeconds(AutoSwitchFailurePauseSeconds);
+                _autoSwitchFailureSuspendedReason = "连续 " + _autoSwitchFailureStreak.ToString(CultureInfo.InvariantCulture)
+                    + " 次 " + AutoSwitchFailureStageLabel(stage)
+                    + (string.IsNullOrEmpty(detail) ? "" : "：" + ShortText(detail, 120));
+                SetAutoSwitchStage("failure-paused", "自动暂停");
+            }
         }
 
         private void ClearAutoSwitchFailureBackoff()
         {
-            _autoSwitchFailurePauseKey = "";
-            _autoSwitchFailurePauseUntilUtc = DateTime.MinValue;
+            ClearAutoSwitchFailureBackoffWindow();
+            _autoSwitchFailureStreakKey = "";
+            _autoSwitchFailureStreak = 0;
+            ClearAutoSwitchFailurePause();
             _lastAutoSwitchFailureStage = "";
             _lastAutoSwitchFailureDetail = "";
+        }
+
+        private void ClearAutoSwitchFailureBackoffWindow()
+        {
+            _autoSwitchFailurePauseKey = "";
+            _autoSwitchFailurePauseUntilUtc = DateTime.MinValue;
+        }
+
+        private void ClearAutoSwitchFailurePause()
+        {
+            _autoSwitchFailureSuspendedUntilUtc = DateTime.MinValue;
+            _autoSwitchFailureSuspendedReason = "";
+        }
+
+        private static string AutoSwitchFailureStageLabel(string stage)
+        {
+            if (string.Equals(stage, "cloud-rejected", StringComparison.OrdinalIgnoreCase)) return "云端未放行";
+            if (string.Equals(stage, "no-candidate", StringComparison.OrdinalIgnoreCase)) return "无候选账号";
+            if (string.Equals(stage, "not-switched", StringComparison.OrdinalIgnoreCase)) return "未切换";
+            if (string.Equals(stage, "switch-failed", StringComparison.OrdinalIgnoreCase)) return "执行失败";
+            return string.IsNullOrEmpty(stage) ? "自动切换失败" : stage;
         }
 
         private void ShowTrayTip(string title, string text)

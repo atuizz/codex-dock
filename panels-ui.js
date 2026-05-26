@@ -79,11 +79,15 @@
       const stageLabel = meaningfulText(autoSwitch.last_stage_label || autoSwitch.lastStageLabel);
       const failureStage = meaningfulText(autoSwitch.last_failure_stage || autoSwitch.lastFailureStage);
       const failureDetail = meaningfulText(autoSwitch.last_failure_detail || autoSwitch.lastFailureDetail);
+      const failureCount = Number(autoSwitch.failure_count || autoSwitch.failureCount || 0);
       const backoffUntil = autoSwitch.failure_backoff_until || autoSwitch.failureBackoffUntil || "";
+      const pauseUntil = autoSwitch.failure_pause_until || autoSwitch.failurePauseUntil || "";
+      const pauseReason = meaningfulText(autoSwitch.failure_pause_reason || autoSwitch.failurePauseReason);
       const lastResult = meaningfulText(autoSwitch.last_result || autoSwitch.lastResult);
       const lastReason = meaningfulText(autoSwitch.last_reason || autoSwitch.lastReason);
       const backoffText = backoffUntil ? `退避至 ${formatTime(backoffUntil)}` : "";
-      const resultText = meaningfulText([lastReason, lastResult, failureDetail ? `失败详情：${failureDetail}` : "", backoffText].filter(Boolean).join("；"));
+      const pauseText = pauseUntil ? `自动暂停至 ${formatTime(pauseUntil)}` : "";
+      const resultText = meaningfulText([lastReason, lastResult, failureDetail ? `失败详情：${failureDetail}` : "", pauseReason ? `暂停原因：${pauseReason}` : "", backoffText, pauseText].filter(Boolean).join("；"));
       const resultProbe = resultText.toLowerCase();
       const sourceLabel = helperReady ? codexStatusSourceLabel(codex) : "未连接";
       const taskEvent = meaningfulText(codex.last_task_event) || meaningfulText(codex.detail) || meaningfulText(codex.label);
@@ -150,6 +154,18 @@
           summary: "设备已授权，但后台自动切换守护处于关闭状态。",
           result: resultText || "等待启用",
           next: "在智能切换设置中开启后台自动切换。",
+        };
+      }
+      if (stageKey === "failure-paused" || pauseUntil) {
+        return {
+          ...base,
+          className: "bad",
+          key: "failure_paused",
+          title: "自动切换已暂停",
+          summary: `连续失败${failureCount ? ` ${failureCount} 次` : ""}后，Helper 暂停本机自动切换，避免重复消耗账号和刷屏。`,
+          result: resultText || "等待处理失败原因",
+          stage: stageLabel || "自动暂停",
+          next: "处理候选账号、RT、设备授权或本机写入问题后，点击“恢复自动切换”。",
         };
       }
       if (stageKey === "failure-backoff" || backoffUntil) {
@@ -338,6 +354,8 @@
       const version = helper.version || "";
       const outdated = helperReady && (!version || compareVersion(version, minimumHelperVersion) < 0);
       const tray = helper.tray || {};
+      const failurePauseUntil = autoSwitch.failure_pause_until || autoSwitch.failurePauseUntil || "";
+      const failurePauseReason = meaningfulText(autoSwitch.failure_pause_reason || autoSwitch.failurePauseReason);
       if (!helperReady) {
         return {
           className: "bad",
@@ -370,6 +388,14 @@
             ? "本机 Helper 在线，但还没有绑定当前云控制台的设备令牌。"
             : "本机 Helper 在线；登录云账号后才能授权自动切换。",
           action: userPresent ? "点击“授权 Helper”，让云端只向这台设备下发切换任务。" : "先登录云账号，再授权本机 Helper。",
+        };
+      }
+      if (failurePauseUntil) {
+        return {
+          className: "bad",
+          title: "自动切换已暂停",
+          reason: failurePauseReason || `连续失败后暂停至 ${formatTime(failurePauseUntil)}。`,
+          action: "处理失败原因后点击“恢复自动切换”，或等待暂停到期自动重试。",
         };
       }
       const pendingSwitchReason = meaningfulText(codex.pending_switch_reason);
@@ -456,6 +482,7 @@
       const lastEvent = codex.last_task_event ? `${codex.last_task_event}${lastEventTime}` : "暂无近期任务事件";
       const pendingReason = meaningfulText(codex.pending_switch_reason) || "无";
       const switchSafety = codex.safe_to_switch ? "可安全切换" : "暂不切换";
+      const failurePauseUntil = autoSwitch.failure_pause_until || autoSwitch.failurePauseUntil || "";
       const lastSwitch = autoSwitch.last_switch
         ? `${autoSwitch.last_switch_label || "已切换"} · ${formatTime(autoSwitch.last_switch)}`
         : "无记录";
@@ -503,6 +530,7 @@
           <button type="button" data-helper-action="refresh">刷新状态</button>
           <button type="button" data-helper-action="authorize" ${helperReady && userPresent ? "" : "disabled"}>${helperAuthorized ? "重新授权 Helper" : "授权 Helper"}</button>
           <button type="button" data-helper-action="repair-tray" ${helperReady ? "" : "disabled"}>修复托盘</button>
+          ${failurePauseUntil ? `<button type="button" data-helper-action="resume-auto-switch" ${helperReady ? "" : "disabled"}>恢复自动切换</button>` : ""}
           <button type="button" data-helper-action="open-status" ${helperReady ? "" : "disabled"}>本机状态页</button>
           <button type="button" data-helper-action="export-diagnostics" ${helperReady ? "" : "disabled"}>导出诊断</button>
         </div>

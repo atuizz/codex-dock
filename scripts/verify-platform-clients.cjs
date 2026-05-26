@@ -42,6 +42,10 @@ async function main() {
   await helper.diagnosticsExport();
   assert.equal(calls.at(-1).url, "http://127.0.0.1:18766/api/diagnostics/export");
   assert.equal(calls.at(-1).init.cache, "no-store");
+
+  await helper.resumeAutoSwitch();
+  assert.equal(calls.at(-1).url, "http://127.0.0.1:18766/api/auto-switch/resume");
+  assert.equal(calls.at(-1).init.method, "POST");
   console.log("platform-clients verification passed");
 }
 

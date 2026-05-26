@@ -3444,6 +3444,25 @@ async function exportHelperDiagnostics() {
   }
 }
 
+async function resumeHelperAutoSwitch() {
+  if (!state.helperReady || !state.helperBase) {
+    toast("Helper 未连接，无法恢复自动切换。");
+    return;
+  }
+  try {
+    const result = await helperClient().resumeAutoSwitch();
+    if (result.auto_switch) {
+      state.helperInfo = { ...(state.helperInfo || {}), auto_switch: result.auto_switch };
+    }
+    renderDevice();
+    renderSettings();
+    toast("已恢复 Helper 自动切换，下一轮会重新核验边界。");
+    window.setTimeout(checkHelper, 1200);
+  } catch (error) {
+    toast(error.message || "恢复自动切换失败。");
+  }
+}
+
 async function copyHelperChecksum() {
   const sha = state.helperRelease?.sha256 || "";
   if (!sha) {
@@ -3887,6 +3906,7 @@ function bindEvents() {
       if (action === "refresh") checkHelper();
       if (action === "authorize") authorizeAutoSwitchHelper();
       if (action === "repair-tray") repairHelperTray();
+      if (action === "resume-auto-switch") resumeHelperAutoSwitch();
       if (action === "open-status") openLocalStatus();
       if (action === "export-diagnostics") exportHelperDiagnostics();
       if (action === "copy-helper-sha") copyHelperChecksum();

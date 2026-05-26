@@ -95,6 +95,9 @@
       configureAutoSwitch(config) {
         return request("/api/auto-switch/configure", { method: "POST", body: config });
       },
+      resumeAutoSwitch() {
+        return request("/api/auto-switch/resume", { method: "POST" });
+      },
       applyAuth(payload) {
         return request("/api/apply-auth", { method: "POST", body: payload });
       },

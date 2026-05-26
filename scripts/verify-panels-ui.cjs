@@ -82,6 +82,29 @@ assert.match(backoffStage.result, /没有可用 RT 账号/);
 assert.match(ui.renderAutoSwitchStage(backoffStage), /失败退避中/);
 assert.match(ui.renderAutoSwitchStage(backoffStage), /当前阶段/);
 
+const pausedStage = ui.autoSwitchStage({
+  helperReady: true,
+  helper: {
+    version: "0.4.2",
+    auto_switch: {
+      enabled: true,
+      last_stage: "failure-paused",
+      last_stage_label: "自动暂停",
+      last_failure_stage: "switch-failed",
+      last_failure_detail: "写入 auth 失败",
+      failure_count: 3,
+      failure_pause_until: "2026-05-26T00:40:00.000Z",
+      failure_pause_reason: "连续 3 次执行失败：写入 auth 失败",
+    },
+  },
+  helperAuthorized: true,
+  codex: { safe_to_switch: true },
+});
+assert.equal(pausedStage.key, "failure_paused");
+assert.match(pausedStage.summary, /连续失败 3 次/);
+assert.match(pausedStage.result, /写入 auth 失败/);
+assert.match(ui.renderAutoSwitchStage(pausedStage), /自动切换已暂停/);
+
 const emptyAudit = ui.renderAudit([]);
 assert.match(emptyAudit, /还没有云端运行记录/);
 
@@ -96,10 +119,10 @@ const deviceHtml = ui.renderDevice({
   helper: { port: 18766, version: "0.4.2", build_date: "2026-05-26" },
   helperRelease: {
     file: "downloads/CodexDockHelper.exe",
-    version: "0.4.2",
+    version: "0.4.3",
     build_date: "2026-05-26",
-    bytes: 164352,
-    sha256: "099D63B12FBCD7990FA6A8F5EB0DFDCB9F6B06EA558E0CDFF36098C217961AAD",
+    bytes: 168448,
+    sha256: "FAFC24A50A514EC13B76292D15CEF2980123E17564A0BB709E7189CE4BB30E4B",
   },
   helperBase: "http://127.0.0.1:18766",
   helperAuthorized: true,
@@ -128,7 +151,7 @@ assert.match(deviceHtml, /data-helper-action="export-diagnostics"/);
 assert.match(deviceHtml, /Helper 分发/);
 assert.match(deviceHtml, /下载最新版/);
 assert.match(deviceHtml, /data-helper-action="copy-helper-sha"/);
-assert.match(deviceHtml, /099D63B12FBC/);
+assert.match(deviceHtml, /FAFC24A50A51/);
 assert.match(deviceHtml, /自动切换阶段/);
 assert.match(deviceHtml, /持续监控/);
 assert.match(deviceHtml, /在线/);
@@ -198,6 +221,27 @@ const failedDeviceHtml = ui.renderDevice({
 });
 assert.match(failedDeviceHtml, /自动切换失败/);
 assert.match(failedDeviceHtml, /auth 写入权限/);
+
+const pausedDeviceHtml = ui.renderDevice({
+  helperReady: true,
+  helper: {
+    port: 18766,
+    version: "0.4.2",
+    auto_switch: {
+      enabled: true,
+      last_stage: "failure-paused",
+      failure_count: 3,
+      failure_pause_until: "2026-05-26T00:40:00.000Z",
+      failure_pause_reason: "连续 3 次无候选账号",
+    },
+  },
+  helperAuthorized: true,
+  userPresent: true,
+  codex: { source: "logs_2.sqlite", safe_to_switch: true },
+});
+assert.match(pausedDeviceHtml, /自动切换已暂停/);
+assert.match(pausedDeviceHtml, /恢复自动切换/);
+assert.match(pausedDeviceHtml, /data-helper-action="resume-auto-switch"/);
 
 const emptySecurity = ui.securitySummary(null);
 assert.equal(emptySecurity.preview, "选择账号后显示摘要。");

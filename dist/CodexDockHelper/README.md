@@ -16,7 +16,7 @@ https://codex.woai.pro
 - 云端 API：`cloud-worker/worker.js` 聚合 `worker-auth.js`、`worker-accounts.js`、`worker-usage.js`、`worker-settings.js`、`worker-helper.js`、`worker-audit.js`、`worker-admin.js` 和 `worker-user.js`，处理注册、登录、账号导入、额度快照、刷新通道、切换 payload、设备、审计记录和管理员接口。
 - 云端数据库：Cloudflare D1，数据库名 `codex-cloud-console`。
 - token 存储：`account_secrets.encrypted_auth_json`，使用 Worker secret `TOKEN_ENCRYPTION_KEY` 加密落库。
-- Dock Helper：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.2`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
+- Dock Helper：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.3`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
 
 ## 使用模型
 
@@ -46,7 +46,7 @@ http://127.0.0.1:18766/
 
 Dock Helper 不托管账号管理页，`/console/` 会返回 404。关闭窗口不会退出，只会驻留系统托盘；托盘菜单可以显示窗口、打开 Codex Dock、重启服务或退出。
 
-Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Helper 0.4.2 起会无论窗口是否可见都低频重新注册托盘图标，并提供本地托盘修复接口，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。控制台会显示 Helper 版本并提示低于最低支持版本的设备升级，Helper 页会展示最新版、构建日期、下载入口和 SHA-256 校验值。
+Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Helper 0.4.2 起会无论窗口是否可见都低频重新注册托盘图标，并提供本地托盘修复接口，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。Helper 0.4.3 起会在同类自动切换失败连续出现 3 次后暂停 30 分钟，并允许控制台一键恢复。控制台会显示 Helper 版本并提示低于最低支持版本的设备升级，Helper 页会展示最新版、构建日期、下载入口和 SHA-256 校验值。
 
 ## 额度刷新与智能切换
 
@@ -65,8 +65,17 @@ Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲
 
 GitHub Actions 已提供：
 
-- `.github/workflows/ci.yml`：运行 `npm run preflight`，验证 Worker/UI/Helper 逻辑、构建 Cloudflare 静态资源、构建 Windows Helper 并上传产物。
-- `.github/workflows/cloudflare-deploy.yml`：手动触发，`preview` 做 dry-run，`production` 应用远端 D1 迁移、部署 Worker，并执行线上 smoke。
+- `.github/workflows/ci.yml`：在固定的 Windows 2025 runner 运行 `npm run preflight`，验证 Worker/UI/Helper 逻辑、构建 Cloudflare 静态资源、构建 Windows Helper 并上传产物。
+- `.github/workflows/cloudflare-deploy.yml`：手动触发，先在固定的 Windows 2025 runner 跑完整 `preflight`，再校验 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`，然后由 `preview` 做 dry-run，或由 `production` 应用远端 D1 迁移、部署 Worker，并执行线上 smoke。
+
+GitHub CD 需要两个仓库 secret：
+
+```text
+CLOUDFLARE_ACCOUNT_ID
+CLOUDFLARE_API_TOKEN
+```
+
+缺任一 secret 时，Cloudflare Deploy 会在进入 Wrangler 之前失败并打印缺失项，避免发布任务跑到一半才暴露凭据问题。
 
 本地发布前验证：
 
