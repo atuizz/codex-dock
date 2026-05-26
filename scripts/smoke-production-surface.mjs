@@ -6,6 +6,8 @@ const baseUrl = (process.env.CODEX_DOCK_SMOKE_BASE_URL || "https://codex.woai.pr
 const args = process.argv.slice(2);
 const outIndex = args.indexOf("--out");
 const outputPath = outIndex >= 0 ? args[outIndex + 1] : "";
+const helperOutIndex = args.indexOf("--helper-out");
+const helperOutputPath = helperOutIndex >= 0 ? args[helperOutIndex + 1] : "";
 
 async function request(path) {
   const url = `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
@@ -122,10 +124,25 @@ const report = {
   fetched_assets: fetchedAssets,
 };
 
+const helperReleaseReport = {
+  ok: true,
+  verified_at: report.checked_at,
+  asset_version: report.asset_version,
+  helper: manifest.data.helper,
+  release_version: manifest.data.helper?.version || "",
+  release_package: manifest.data.helper?.package || null,
+};
+
 if (outputPath) {
   const absolute = resolve(outputPath);
   await mkdir(dirname(absolute), { recursive: true });
   await writeFile(absolute, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+}
+
+if (helperOutputPath) {
+  const absolute = resolve(helperOutputPath);
+  await mkdir(dirname(absolute), { recursive: true });
+  await writeFile(absolute, `${JSON.stringify(helperReleaseReport, null, 2)}\n`, "utf8");
 }
 
 console.log(JSON.stringify(report, null, 2));

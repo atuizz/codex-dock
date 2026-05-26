@@ -232,7 +232,7 @@ await expectText("package.json", [
   { label: "post-deploy release evidence report command", pattern: /"release:report:production":\s*"node \.\/scripts\/generate-release-evidence-report\.mjs --require-production-parity"/ },
   { label: "GitHub CI dispatch command", pattern: /"release:github-ci":\s*"node \.\/scripts\/run-github-ci\.mjs --out artifacts\/verification\/github-ci-dispatch-result\.json"/ },
   { label: "GitHub readiness command", pattern: /"release:github-readiness":\s*"node \.\/scripts\/check-github-release-readiness\.mjs --out artifacts\/verification\/github-release-readiness-result\.json"/ },
-  { label: "production surface smoke command", pattern: /"smoke:production:surface":\s*"node \.\/scripts\/smoke-production-surface\.mjs --out artifacts\/verification\/production-surface-result\.json"/ },
+  { label: "production surface smoke command", pattern: /"smoke:production:surface":\s*"node \.\/scripts\/smoke-production-surface\.mjs --out artifacts\/verification\/production-surface-result\.json --helper-out artifacts\/verification\/helper-update-release-production-result\.json"/ },
   { label: "local verifier runner", pattern: /"verify":\s*"node \.\/scripts\/run-local-verifiers\.mjs"/ },
 ]);
 
@@ -257,6 +257,7 @@ await expectText("scripts/smoke-production-surface.mjs", [
   { label: "manual switch modal", pattern: /manualSwitchRiskModal/ },
   { label: "responsive surface checks", pattern: /max-width: 1180px[\s\S]*max-width: 860px[\s\S]*max-width: 460px/ },
   { label: "secret redaction checks", pattern: /assertPublicSurfaceHasNoSecretMaterial/ },
+  { label: "production Helper evidence output", pattern: /helperOutputPath[\s\S]*helperReleaseReport/ },
 ]);
 
 await expectText(".github/workflows/ci.yml", [

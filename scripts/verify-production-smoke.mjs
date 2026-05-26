@@ -148,7 +148,7 @@ const deviceRegistered = await request("/api/devices/register", {
     helperOnline: true,
     helperBase: "http://127.0.0.1:18766",
     helperVersion: "0.4.7",
-    helperBuildDate: "2026-05-26",
+    helperBuildDate: "2026-05-27",
   },
 });
 assert.equal(deviceRegistered.response.status, 200, "device register should succeed");
