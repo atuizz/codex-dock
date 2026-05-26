@@ -6,6 +6,7 @@
     "helper:build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./native-helper/build-helper.ps1",
     "helper:verify-build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./native-helper/build-helper.ps1 -OutDir artifacts/build/CodexDockHelper",
     "preflight": "npm run helper:verify-build && npm run verify",
+    "release:report": "node ./scripts/generate-release-evidence-report.mjs",
     "smoke:production": "npm --prefix cloud-worker run smoke:production",
     "test": "npm run verify",
     "verify": "node ./scripts/run-local-verifiers.mjs"

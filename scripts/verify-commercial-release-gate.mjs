@@ -220,6 +220,7 @@ for (const gate of uiGates) {
 
 await expectText("package.json", [
   { label: "Helper build in preflight", pattern: /"preflight":\s*"npm run helper:verify-build && npm run verify"/ },
+  { label: "release evidence report command", pattern: /"release:report":\s*"node \.\/scripts\/generate-release-evidence-report\.mjs"/ },
   { label: "local verifier runner", pattern: /"verify":\s*"node \.\/scripts\/run-local-verifiers\.mjs"/ },
 ]);
 
@@ -227,6 +228,12 @@ await expectText("scripts/run-local-verifiers.mjs", [
   { label: "all local verify scripts are discovered", pattern: /\/\^verify-\.\*\\\.\(\?:cjs\|mjs\)\$\// },
   { label: "production smoke is explicitly separate", pattern: /name !== "verify-production-smoke\.mjs"/ },
   { label: "static assets build before verification", pattern: /Building Cloudflare static assets/ },
+]);
+
+await expectText("scripts/generate-release-evidence-report.mjs", [
+  { label: "Helper lifecycle evidence", pattern: /helper-lifecycle-self-test-local-result\.json/ },
+  { label: "production Helper evidence", pattern: /helper-update-release-production-result\.json/ },
+  { label: "CI/CD evidence", pattern: /ci_workflow_configured|deploy_workflow_configured/ },
 ]);
 
 await expectText(".github/workflows/ci.yml", [
