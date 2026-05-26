@@ -7,12 +7,14 @@ const ci = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "u
 const deploy = fs.readFileSync(path.join(root, ".github", "workflows", "cloudflare-deploy.yml"), "utf8");
 
 assert.match(ci, /runs-on:\s*windows-latest/);
+assert.match(ci, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/);
 assert.match(ci, /npm ci/);
 assert.match(ci, /npm run preflight/);
 assert.match(ci, /actions\/upload-artifact@v4/);
 assert.match(ci, /artifacts\/build\/CodexDockHelper\//);
 
 assert.match(deploy, /verify:\s*\n\s*name:\s*Verify release candidate/);
+assert.match(deploy, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/);
 assert.match(deploy, /runs-on:\s*windows-latest/);
 assert.match(deploy, /npm run preflight/);
 assert.match(deploy, /deploy:\s*\n\s*name:\s*Cloudflare/);
