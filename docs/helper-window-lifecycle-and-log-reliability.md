@@ -18,7 +18,7 @@
 
 ## 当前代码关联路径
 
-当前可确认的相关实现位于 `native-helper/CodexPlusLocalHelper.cs`：
+当前可确认的相关实现位于 `native-helper/*.cs`，其中窗口、托盘、日志生命周期仍主要在 `native-helper/CodexPlusLocalHelper.cs`：
 
 - `MainForm_FormClosing(...)` 在用户点击主窗口关闭按钮时取消关闭并调用 `HideToTray()`。
 - 窗口隐藏后，本地服务、状态监控和自动切换服务继续运行，仍可能产生日志。

@@ -3,7 +3,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const repoRoot = path.resolve(__dirname, "..");
-const helperSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexPlusLocalHelper.cs"), "utf8");
+const helperSource = fs
+  .readdirSync(path.join(repoRoot, "native-helper"))
+  .filter((name) => name.endsWith(".cs"))
+  .sort()
+  .map((name) => fs.readFileSync(path.join(repoRoot, "native-helper", name), "utf8"))
+  .join("\n");
 const helperBuildScript = fs.readFileSync(path.join(repoRoot, "native-helper", "build-helper.ps1"), "utf8");
 
 function wait(ms) {
@@ -62,11 +67,15 @@ assert.match(helperSource, /failure_pause_until/);
 assert.match(helperSource, /failure_pause_reason/);
 assert.match(helperSource, /SetAutoSwitchStage\("failure-paused", "自动暂停"\)/);
 assert.match(helperSource, /AutoSwitchFailureStageLabel/);
+assert.match(helperSource, /internal sealed class AutoSwitchConfig/);
+assert.match(helperSource, /public AutoSwitchConfig Clamp\(\)/);
 assert.ok(helperSource.includes("\\\\bAuthorization\\\\s*:\\\\s*Bearer"));
 assert.match(helperSource, /cdh_\[REDACTED\]/);
 assert.match(helperBuildScript, /CodexDockHelper-release\.json/);
 assert.match(helperBuildScript, /portable\.zip/);
 assert.match(helperBuildScript, /Compress-Archive/);
+assert.match(helperBuildScript, /Get-ChildItem -LiteralPath \$PSScriptRoot -Filter "\*\.cs"/);
+assert.match(helperBuildScript, /CodexAppServerProxy\.cs/);
 
 async function verifyLiveHelper() {
   const controller = new AbortController();

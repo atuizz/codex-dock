@@ -57,6 +57,10 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 $exe = Join-Path $outDir "CodexDockHelper.exe"
 $source = Join-Path $PSScriptRoot "CodexPlusLocalHelper.cs"
+$helperSources = Get-ChildItem -LiteralPath $PSScriptRoot -Filter "*.cs" |
+  Where-Object { $_.Name -ne "CodexAppServerProxy.cs" } |
+  Sort-Object Name |
+  ForEach-Object { $_.FullName }
 $iconPath = Join-Path $outDir "CodexDockHelper.ico"
 
 Add-Type -AssemblyName System.Drawing
@@ -108,9 +112,11 @@ $args = @(
   "/reference:System.Drawing.dll",
   "/reference:System.Management.dll",
   "/reference:System.Windows.Forms.dll",
-  "/out:$exe",
-  $source
+  "/out:$exe"
 )
+foreach ($helperSource in $helperSources) {
+  $args += $helperSource
+}
 & $csc @args
 if ($LASTEXITCODE -ne 0) {
   throw "C# 编译失败，退出码 $LASTEXITCODE"
