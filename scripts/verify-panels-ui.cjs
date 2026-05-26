@@ -55,6 +55,62 @@ assert.equal(ui.autoSwitchStage({
   helperAuthorized: true,
   codex: { safe_to_switch: true, pending_switch_reason: "7D 剩余 2%" },
 }).key, "boundary_confirming");
+const candidateStage = ui.autoSwitchStage({
+  helperReady: true,
+  helper: {
+    version: "0.4.8",
+    auto_switch: {
+      enabled: true,
+      last_stage: "candidate-selecting",
+      last_stage_label: "请求候选账号",
+      last_result: "安全边界已确认，正在请求云端候选账号：5H 剩余 1%",
+    },
+  },
+  helperAuthorized: true,
+  codex: { safe_to_switch: true, last_task_event: "任务完成", source: "logs_2.sqlite" },
+});
+assert.equal(candidateStage.key, "candidate_selecting");
+assert.match(ui.renderAutoSwitchStage(candidateStage), /正在请求候选账号/);
+const payloadStage = ui.autoSwitchStage({
+  helperReady: true,
+  helper: {
+    version: "0.4.8",
+    auto_switch: {
+      enabled: true,
+      last_stage: "payload-issued",
+      last_stage_label: "已取得切换载荷",
+      last_result: "已取得候选账号，准备写入 auth：ready-plus@example.com",
+    },
+  },
+  helperAuthorized: true,
+  codex: { safe_to_switch: true },
+});
+assert.equal(payloadStage.key, "payload_issued");
+assert.match(payloadStage.summary, /云端已下发候选账号/);
+const writingStage = ui.autoSwitchStage({
+  helperReady: true,
+  helper: { version: "0.4.8", auto_switch: { enabled: true, last_stage: "writing-auth", last_stage_label: "写入 auth" } },
+  helperAuthorized: true,
+  codex: { safe_to_switch: true },
+});
+assert.equal(writingStage.key, "writing_auth");
+assert.match(ui.renderAutoSwitchStage(writingStage), /正在写入 auth/);
+const restartingStage = ui.autoSwitchStage({
+  helperReady: true,
+  helper: { version: "0.4.8", auto_switch: { enabled: true, last_stage: "restarting-codex", last_stage_label: "重启 Codex" } },
+  helperAuthorized: true,
+  codex: { safe_to_switch: true },
+});
+assert.equal(restartingStage.key, "restarting_codex");
+assert.match(ui.renderAutoSwitchStage(restartingStage), /正在重启 Codex/);
+const restoringStage = ui.autoSwitchStage({
+  helperReady: true,
+  helper: { version: "0.4.8", auto_switch: { enabled: true, last_stage: "restoring-window", last_stage_label: "恢复窗口" } },
+  helperAuthorized: true,
+  codex: { safe_to_switch: true },
+});
+assert.equal(restoringStage.key, "restoring_window");
+assert.match(ui.renderAutoSwitchStage(restoringStage), /正在恢复窗口/);
 const restoredPendingStage = ui.autoSwitchStage({
   helperReady: true,
   helper: {

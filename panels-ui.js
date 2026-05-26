@@ -97,6 +97,7 @@
       const pauseReason = meaningfulText(autoSwitch.failure_pause_reason || autoSwitch.failurePauseReason);
       const lastResult = meaningfulText(autoSwitch.last_result || autoSwitch.lastResult);
       const lastReason = meaningfulText(autoSwitch.last_reason || autoSwitch.lastReason);
+      const normalizedStageKey = stageKey.toLowerCase().replace(/_/g, "-");
       const backoffText = backoffUntil ? `退避至 ${formatTime(backoffUntil)}` : "";
       const pauseText = pauseUntil ? `自动暂停至 ${formatTime(pauseUntil)}` : "";
       const resultText = meaningfulText([lastReason, lastResult, failureDetail ? `失败详情：${failureDetail}` : "", pauseReason ? `暂停原因：${pauseReason}` : "", backoffText, pauseText].filter(Boolean).join("；"));
@@ -168,7 +169,7 @@
           next: "在智能切换设置中开启后台自动切换。",
         };
       }
-      if (stageKey === "failure-paused" || pauseUntil) {
+      if (normalizedStageKey === "failure-paused" || pauseUntil) {
         return {
           ...base,
           className: "bad",
@@ -180,7 +181,7 @@
           next: "处理候选账号、RT、设备授权或本机写入问题后，点击“恢复自动切换”。",
         };
       }
-      if (stageKey === "failure-backoff" || backoffUntil) {
+      if (normalizedStageKey === "failure-backoff" || backoffUntil) {
         return {
           ...base,
           className: "warn",
@@ -204,29 +205,84 @@
           next: "核验完成前不会写入 auth 或重启 Codex；保持 Helper 在线即可。",
         };
       }
-      if (pendingReason && codex.safe_to_switch === false) {
+      if ((pendingReason && codex.safe_to_switch === false) || ["draining-active-turn", "waiting-boundary"].includes(normalizedStageKey)) {
         return {
           ...base,
           className: "warn",
           key: "draining_active_turn",
           title: "保护当前任务",
-          summary: "额度或账号状态已触发切换，但当前 Codex 轮次仍可能继续执行，暂不抢切。",
+          summary: "额度已耗尽或账号状态已触发切换，但当前 Codex 轮次仍可能继续执行，暂不抢切。",
           result: resultText || "等待安全边界",
           next: "等待当前轮完成；安全门打开后再请求候选账号。",
         };
       }
-      if (pendingReason && codex.safe_to_switch === true) {
+      if ((pendingReason && codex.safe_to_switch === true) || ["boundary-confirming", "boundary-confirmed"].includes(normalizedStageKey)) {
         return {
           ...base,
           className: "ok",
           key: "boundary_confirming",
           title: "安全边界已确认",
-          summary: "触发条件仍存在，当前任务边界已经安全，可以进入候选选择和写入阶段。",
+          summary: "触发条件仍存在，当前任务边界已经安全，正在确认安全切换时机。",
           result: resultText || "准备执行切换",
           next: "Helper 将请求云端候选账号，随后写入 auth 并重启 Codex。",
         };
       }
-      if (hasAnyText(resultProbe, [/正在安全切换|安全切换|boundary-confirmed/i])) {
+      if (normalizedStageKey === "candidate-selecting") {
+        return {
+          ...base,
+          className: "ok",
+          key: "candidate_selecting",
+          title: "正在请求候选账号",
+          summary: "安全边界已确认，Helper 正在向云端请求可切换账号。",
+          result: resultText || "等待云端候选选择",
+          next: "云端只会下发候选载荷；真正切换仍由本机 Helper 写入 auth。",
+        };
+      }
+      if (normalizedStageKey === "payload-issued") {
+        return {
+          ...base,
+          className: "ok",
+          key: "payload_issued",
+          title: "已取得切换载荷",
+          summary: "云端已下发候选账号，Helper 准备在本机写入新的 auth。",
+          result: resultText || "准备写入 auth",
+          next: "进入 auth 写入阶段；写入完成后再重启并恢复 Codex。",
+        };
+      }
+      if (normalizedStageKey === "writing-auth") {
+        return {
+          ...base,
+          className: "warn",
+          key: "writing_auth",
+          title: "正在写入 auth",
+          summary: "Helper 正在备份并写入新的 auth.json，这是实际改变本机登录态的阶段。",
+          result: resultText || "正在写入 auth.json",
+          next: "写入成功后会刷新本地授权状态，并按配置重启 Codex。",
+        };
+      }
+      if (normalizedStageKey === "restarting-codex") {
+        return {
+          ...base,
+          className: "warn",
+          key: "restarting_codex",
+          title: "正在重启 Codex",
+          summary: "auth 已写入，Helper 正在关闭旧进程或启动新的 Codex 窗口。",
+          result: resultText || "等待 Codex 重启",
+          next: "等待 Codex 启动完成；如果有原窗口目标，下一步会尝试恢复。",
+        };
+      }
+      if (normalizedStageKey === "restoring-window") {
+        return {
+          ...base,
+          className: "warn",
+          key: "restoring_window",
+          title: "正在恢复窗口",
+          summary: "Codex 已重新启动，Helper 正在恢复切换前的会话或目标任务窗口。",
+          result: resultText || "等待窗口恢复",
+          next: "恢复完成后会记录已切换；若窗口无法识别，Codex 仍会保持新授权状态。",
+        };
+      }
+      if (normalizedStageKey === "switching" || hasAnyText(resultProbe, [/正在安全切换|安全切换|boundary-confirmed|正在准备切换/i])) {
         return {
           ...base,
           className: "warn",

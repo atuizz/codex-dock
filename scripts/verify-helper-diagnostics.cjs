@@ -13,9 +13,15 @@ const helperMainSource = fs.readFileSync(path.join(repoRoot, "native-helper", "C
 const runtimeStatusSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexRuntimeStatus.cs"), "utf8");
 const desktopUiSource = fs.readFileSync(path.join(repoRoot, "native-helper", "HelperDesktopUi.cs"), "utf8");
 const helperBuildScript = fs.readFileSync(path.join(repoRoot, "native-helper", "build-helper.ps1"), "utf8");
+const expectedHelperVersion = "0.4.8";
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function helperPatchAtLeast(version, minimumPatch) {
+  const match = String(version || "").match(/^0\.4\.(\d+)$/);
+  return Boolean(match) && Number(match[1]) >= minimumPatch;
 }
 
 async function appendFileWithRetry(filePath, text) {
@@ -35,7 +41,7 @@ async function appendFileWithRetry(filePath, text) {
 
 assert.match(helperSource, /\/api\/diagnostics\/export/);
 assert.match(helperSource, /\/api\/tray\/repair/);
-assert.match(helperSource, /HelperVersion\s*=\s*"0\.4\.7"/);
+assert.match(helperSource, new RegExp(`HelperVersion\\s*=\\s*"${expectedHelperVersion.replace(/\./g, "\\.")}"`));
 assert.match(helperSource, /\/api\/update\/check/);
 assert.match(helperSource, /\/api\/update\/open-download/);
 assert.match(helperSource, /\/api\/lifecycle\/self-test/);
@@ -76,6 +82,13 @@ assert.match(helperSource, /RestorePersistedAutoSwitchPendingState/);
 assert.match(helperSource, /PersistAutoSwitchPending/);
 assert.match(helperSource, /ClearPersistedAutoSwitchPending/);
 assert.match(helperSource, /pending_revalidation/);
+assert.match(helperSource, /SetAutoSwitchStage\("draining-active-turn", "保护当前任务"\)/);
+assert.match(helperSource, /SetAutoSwitchStage\("candidate-selecting", "请求候选账号"\)/);
+assert.match(helperSource, /SetAutoSwitchStage\("payload-issued", "已取得切换载荷"\)/);
+assert.match(helperSource, /SetAutoSwitchStage\("writing-auth", "写入 auth"\)/);
+assert.match(helperSource, /SetAutoSwitchStage\("restarting-codex", "重启 Codex"\)/);
+assert.match(helperSource, /SetAutoSwitchStage\("restoring-window", "恢复窗口"\)/);
+assert.match(helperSource, /RunSwitchJob\(nextAuth, true, true, true\)/);
 assert.match(helperSource, /internal sealed class AutoSwitchConfig/);
 assert.match(helperSource, /public AutoSwitchConfig Clamp\(\)/);
 assert.match(helperSource, /internal sealed class AuthWriteResult/);
@@ -159,7 +172,7 @@ async function verifyLiveHelper() {
   assert.equal(body.ok, true);
   assert.equal(body.redaction?.applied, true);
   assert.equal(typeof body.tray?.visible, "boolean");
-  if (healthBody.version === "0.4.7") {
+  if (helperPatchAtLeast(healthBody.version, 7)) {
     assert.equal(typeof body.lifecycle?.main_window_visible, "boolean");
     assert.equal(typeof body.lifecycle?.recent_log_count, "number");
   }
@@ -169,7 +182,7 @@ async function verifyLiveHelper() {
     assert.equal(text.includes(secret), false, `diagnostics export leaked ${secret}`);
   }
 
-  if (healthBody.version === "0.4.7") {
+  if (helperPatchAtLeast(healthBody.version, 7)) {
     const lifecycleResponse = await fetch("http://127.0.0.1:18766/api/lifecycle/self-test", {
       method: "POST",
       headers: { Origin: "https://codex.woai.pro" },
@@ -191,7 +204,7 @@ async function verifyLiveHelper() {
     assert.equal(updateResponse.status, 200);
     const update = await updateResponse.json();
     assert.equal(update.ok, true);
-    assert.equal(update.current_version, "0.4.7");
+    assert.equal(update.current_version, healthBody.version);
     assert.match(update.latest_version || "", /^\d+\.\d+\.\d+$/);
     assert.equal(typeof update.update_available, "boolean");
     assert.match(update.download_url || "", /^https:\/\/codex\.woai\.pro\/downloads\/CodexDockHelper\.exe$/);

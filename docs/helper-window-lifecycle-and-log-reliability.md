@@ -182,4 +182,5 @@
 
 - Helper `0.4.7` 已增加待切计划的本地持久化恢复：重启后只展示“恢复待切计划/需要重新核验”，只有新的额度与安全边界检查通过后才允许写入 auth。
 - 本地 `/api/health` 与 `/api/update/check` 已验证当前和最新版本均为 `0.4.7`，生命周期自检仍返回 `log_found: true`、`log_view_fault_tested: true` 与 `log_view_fault_recovered: true`；线上 EXE SHA-256 为 `391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515`。
+- Helper `0.4.8` 已增加自动切换细阶段：候选选择、payload 下发、写入 auth、重启 Codex 和恢复窗口会分别上报到设备页阶段卡；本地 `/api/health`、生命周期自检、商业发布门和 release evidence report 已通过，候选 EXE SHA-256 为 `5EA9F01579051FAE260383AEA4EAB865FA0CA249C32DCA6088411D4D283BF421`。
 

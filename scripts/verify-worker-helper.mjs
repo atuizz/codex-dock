@@ -427,18 +427,24 @@ assert.equal(nextBody.reason, "没有可用候选账号");
 assert.equal(nextBody.candidateCount, 0);
 assert.equal(nextBody.eligibleCount, 0);
 assert.equal(nextBody.blockedSummary, "");
+assert.equal(nextBody.stage, "no_candidate");
+assert.equal(nextBody.nextStage, "import_or_repair_candidate");
 assert.equal(audits.at(-1).result, "no-candidate");
 assert.equal(audits.at(-1).metadata.trigger, "额度耗尽，任务结束后切换");
 assert.equal(audits.at(-1).metadata.candidateCount, 0);
 assert.equal(audits.at(-1).metadata.eligibleCount, 0);
 assert.equal(audits.at(-1).metadata.boundaryConfirmed, true);
+assert.equal(audits.at(-1).metadata.stage, "candidate-selecting");
 
 const held = await handleHelperAutoSwitch(request("/api/helper/auto-switch/next", {
   force: true,
   triggerType: "quota",
   triggerReason: "额度耗尽，当前轮仍在执行",
 }, authHeaders(configBody.replacementDeviceToken)), env, "/api/helper/auto-switch/next", { requestId: "req-held" }, { writeAudit });
-assert.equal((await held.json()).reason, "等待 Helper 确认安全轮次边界");
+const heldBody = await held.json();
+assert.equal(heldBody.reason, "等待 Helper 确认安全轮次边界");
+assert.equal(heldBody.stage, "draining_active_turn");
+assert.equal(heldBody.nextStage, "boundary_confirming");
 
 const switchAccountId = "acct-ready-row";
 const cloudAccountId = "chatgpt-ready";
@@ -520,6 +526,8 @@ const payloadBody = await payloadResponse.json();
 assert.equal(payloadBody.shouldSwitch, true);
 assert.equal(payloadBody.candidateCount, 1);
 assert.equal(payloadBody.eligibleCount, 1);
+assert.equal(payloadBody.stage, "payload_issued");
+assert.equal(payloadBody.nextStage, "writing_auth");
 assert.equal(payloadBody.account.id, switchAccountId);
 assert.equal(payloadBody.account.accountId, cloudAccountId);
 assert.equal(payloadBody.authJson.tokens.refresh_token, "rt-ready-plus");
@@ -531,6 +539,8 @@ assert.equal(audits.at(-1).accountId, switchAccountId);
 assert.equal(audits.at(-1).metadata.boundaryConfirmed, true);
 assert.equal(audits.at(-1).metadata.candidateCount, 1);
 assert.equal(audits.at(-1).metadata.eligibleCount, 1);
+assert.equal(audits.at(-1).metadata.stage, "payload-issued");
+assert.equal(audits.at(-1).metadata.nextStage, "writing-auth");
 
 const switchedAudit = await handleHelperAutoSwitch(request("/api/helper/auto-switch/audit", {
   accountId: switchAccountId,

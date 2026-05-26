@@ -408,7 +408,13 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
     const effectiveTriggerType = trigger.yes ? "usage" : helperTriggerType;
     if (!effectiveTriggerReason) return json({ ok: true, shouldSwitch: false, reason: "未命中切换条件" });
     if (body.boundaryConfirmed !== true) {
-      return json({ ok: true, shouldSwitch: false, reason: "等待 Helper 确认安全轮次边界" });
+      return json({
+        ok: true,
+        shouldSwitch: false,
+        reason: "等待 Helper 确认安全轮次边界",
+        stage: "draining_active_turn",
+        nextStage: "boundary_confirming",
+      });
     }
 
     const accounts = await listAccounts(env, user);
@@ -439,6 +445,7 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
             runtimeState: body.runtimeState || "",
             boundaryEvidence: body.boundaryEvidence || "",
             currentUsageSummary: body.currentUsageSummary || "",
+            stage: "candidate-selecting",
             candidateCount,
             eligibleCount,
             summary,
@@ -456,6 +463,8 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
         candidateCount,
         eligibleCount,
         blockedSummary: summary,
+        stage: "no_candidate",
+        nextStage: "import_or_repair_candidate",
         diagnostics,
       });
     }
@@ -475,6 +484,8 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
           runtimeState: body.runtimeState || "",
           boundaryEvidence: body.boundaryEvidence || "",
           currentUsageSummary: body.currentUsageSummary || "",
+          stage: "payload-issued",
+          nextStage: "writing-auth",
           score: scored[0].score,
           reason: candidateReasons(selected, settings),
           candidateCount,
@@ -489,6 +500,8 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
       candidateCount,
       eligibleCount,
       blockedSummary,
+      stage: "payload_issued",
+      nextStage: "writing_auth",
       account: {
         id: selected.id,
         name: selected.name,

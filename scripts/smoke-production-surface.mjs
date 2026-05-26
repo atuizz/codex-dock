@@ -49,9 +49,9 @@ assertPublicSurfaceHasNoSecretMaterial("index", index.text);
 
 const manifest = await requestJson("/asset-manifest.json");
 assert.match(manifest.data.version || "", /^[a-f0-9]{12}$/i, "asset manifest should contain content version");
-assert.equal(manifest.data.helper?.version, "0.4.7", "production manifest should expose current Helper version");
+assert.equal(manifest.data.helper?.version, "0.4.8", "production manifest should expose current Helper version");
 assert.match(manifest.data.helper?.sha256 || "", /^[A-F0-9]{64}$/i, "production manifest should expose Helper SHA-256");
-assert.ok(manifest.data.helper?.package?.file?.includes("0.4.7"), "production manifest should expose current portable package");
+assert.ok(manifest.data.helper?.package?.file?.includes("0.4.8"), "production manifest should expose current portable package");
 assertPublicSurfaceHasNoSecretMaterial("asset manifest", manifest.text);
 
 const refs = versionedRefs(index.text);

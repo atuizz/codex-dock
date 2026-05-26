@@ -13,7 +13,7 @@ const report = JSON.parse(result.stdout);
 assert.equal(report.mode, "candidate");
 assert.equal(report.ok, true);
 assert.equal(report.candidate_ok, true);
-assert.equal(report.helper.version, "0.4.7");
+assert.equal(report.helper.version, "0.4.8");
 assert.equal(report.helper.lifecycle.health_ok, true);
 assert.equal(report.helper.lifecycle.self_test_ok, true);
 assert.equal(report.helper.lifecycle.self_test_log_found, true);

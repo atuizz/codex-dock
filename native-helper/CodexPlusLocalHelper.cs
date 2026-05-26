@@ -59,7 +59,7 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.7";
+        private const string HelperVersion = "0.4.8";
         private const string HelperBuildDate = "2026-05-27";
         private const string HelperDownloadDefaultFile = "downloads/CodexDockHelper.exe";
         private const int HelperLogMaxBytes = 1024 * 1024;
@@ -1898,7 +1898,7 @@ namespace CodexPlusLocalHelper
             }
         }
 
-        private bool RunSwitchJob(string authJson, bool restart, bool launch)
+        private bool RunSwitchJob(string authJson, bool restart, bool launch, bool autoSwitchContext = false)
         {
             var jobId = DateTime.Now.ToString("HHmmss", CultureInfo.InvariantCulture);
             var subject = AuthSubject(authJson);
@@ -1906,6 +1906,11 @@ namespace CodexPlusLocalHelper
             try
             {
                 Log("切换任务 " + jobId + " 开始：目标 " + subject + "，restart=" + (restart ? "true" : "false") + "，launch=" + (launch ? "true" : "false"));
+                if (autoSwitchContext)
+                {
+                    SetAutoSwitchStage("switching", "准备切换");
+                    SetAutoSwitchResult("安全边界已确认，正在准备切换账号：" + subject, "switching:prepare:" + jobId);
+                }
                 UpdateOperationProgress(12, "正在定位当前 Codex 窗口与目标任务。");
                 var restoreTarget = launch ? CaptureCodexRestoreTarget() : null;
                 if (restoreTarget != null)
@@ -1921,6 +1926,11 @@ namespace CodexPlusLocalHelper
                 var stoppedCount = 0;
                 if (restart)
                 {
+                    if (autoSwitchContext)
+                    {
+                        SetAutoSwitchStage("restarting-codex", "关闭旧 Codex");
+                        SetAutoSwitchResult("正在关闭旧 Codex 进程，避免 auth 写入冲突：" + subject, "restarting-codex:stop:" + jobId);
+                    }
                     UpdateOperationProgress(36, "正在关闭旧 Codex 进程，避免 auth 写入冲突。");
                     stoppedCount = StopCodexInstances();
                     Log("切换任务 " + jobId + " 已关闭 Codex 实例数：" + stoppedCount);
@@ -1932,6 +1942,11 @@ namespace CodexPlusLocalHelper
                 }
 
                 Thread.Sleep(700);
+                if (autoSwitchContext)
+                {
+                    SetAutoSwitchStage("writing-auth", "写入 auth");
+                    SetAutoSwitchResult("正在备份并写入新的 auth.json：" + subject, "writing-auth:" + jobId);
+                }
                 UpdateOperationProgress(60, "正在备份并写入新的 auth.json。");
                 var rewrite = WriteAuthJson(authJson);
                 Log("切换任务 " + jobId + " 已写入 auth.json：" + rewrite.Target);
@@ -1946,12 +1961,22 @@ namespace CodexPlusLocalHelper
                 if (launch)
                 {
                     Thread.Sleep(500);
+                    if (autoSwitchContext)
+                    {
+                        SetAutoSwitchStage("restarting-codex", "重启 Codex");
+                        SetAutoSwitchResult("auth.json 已写入，正在重启 Codex：" + subject, "restarting-codex:launch:" + jobId);
+                    }
                     UpdateOperationProgress(80, "正在启动 Codex。");
                     launchResult = LaunchCodex();
                     Log("切换任务 " + jobId + " " + launchResult);
                     if (restoreTarget != null)
                     {
                         Thread.Sleep(2200);
+                        if (autoSwitchContext)
+                        {
+                            SetAutoSwitchStage("restoring-window", "恢复窗口");
+                            SetAutoSwitchResult("Codex 已启动，正在恢复切换前窗口：" + subject, "restoring-window:" + jobId);
+                        }
                         UpdateOperationProgress(88, "正在恢复切换前的 Codex 窗口。");
                         restoreResult = RestoreCodexWindow(restoreTarget);
                         Log("切换任务 " + jobId + " " + restoreResult);
@@ -3835,19 +3860,21 @@ namespace CodexPlusLocalHelper
             string idleReason;
             if (!IsSafeToAutoSwitch(config, triggerType, out idleReason))
             {
-                SetAutoSwitchStage("waiting-boundary", "保护当前任务");
-                SetAutoSwitchResult("额度已触发，正在保护当前任务：" + idleReason + "；触发源 " + triggerLabel, "waiting-boundary:" + triggerType + ":" + trigger);
+                SetAutoSwitchStage("draining-active-turn", "保护当前任务");
+                SetAutoSwitchResult("额度已耗尽，正在保护当前运行任务：" + idleReason + "；触发源 " + triggerLabel, "draining-active-turn:" + triggerType + ":" + trigger);
                 TryPostHelperAudit(config, "deferred-active-turn", triggerLabel, idleReason);
                 return;
             }
 
             var boundaryStatus = CurrentCodexStatus();
-            SetAutoSwitchStage("boundary-confirmed", "安全边界");
-            SetAutoSwitchResult("任务已结束，正在安全切换：" + triggerLabel, "boundary-confirmed:" + triggerType + ":" + trigger);
+            SetAutoSwitchStage("boundary-confirming", "确认安全边界");
+            SetAutoSwitchResult("任务已结束，正在确认安全切换时机：" + triggerLabel, "boundary-confirming:" + triggerType + ":" + trigger);
             TryPostHelperAudit(config, "boundary-confirmed", triggerLabel, boundaryStatus.Detail);
             var forceCloudTrigger = IsHardAutoSwitchTrigger(triggerType);
             try { MaybeSyncCurrentAuth(config, true, "pre-switch-check"); }
             catch (Exception ex) { Log("切换前 auth 比对跳过：" + ShortText(ex.Message, 120)); }
+            SetAutoSwitchStage("candidate-selecting", "请求候选账号");
+            SetAutoSwitchResult("安全边界已确认，正在请求云端候选账号：" + triggerLabel, "candidate-selecting:" + triggerType + ":" + trigger);
             var response = PostHelperJson(config, "/api/helper/auto-switch/next", "{"
                 + "\"deviceKey\":\"" + JsonEscape(config.DeviceKey) + "\","
                 + "\"currentAccountId\":\"" + JsonEscape(currentAccountId) + "\","
@@ -3892,7 +3919,9 @@ namespace CodexPlusLocalHelper
             var targetName = MatchJsonString(accountJson, "email");
             if (string.IsNullOrEmpty(targetName)) targetName = MatchJsonString(ExtractJsonObject(response, "account"), "name");
             Log("自动切换触发：" + triggerLabel + "，当前用量 " + usageSummary + "，目标：" + ShortText(targetName, 48));
-            var switched = RunSwitchJob(nextAuth, true, true);
+            SetAutoSwitchStage("payload-issued", "已取得切换载荷");
+            SetAutoSwitchResult("已取得候选账号，准备写入 auth：" + ShortText(targetName, 48), "payload-issued:" + ShortText(targetName, 48));
+            var switched = RunSwitchJob(nextAuth, true, true, true);
             if (!switched)
             {
                 ArmAutoSwitchFailureBackoff(failureBackoffKey, "switch-failed", targetName);

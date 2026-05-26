@@ -16,7 +16,7 @@ https://codex.woai.pro
 - 云端 API：`cloud-worker/worker.js` 聚合 `worker-auth.js`、`worker-accounts.js`、`worker-usage.js`、`worker-settings.js`、`worker-helper.js`、`worker-audit.js`、`worker-admin.js` 和 `worker-user.js`，处理注册、登录、账号导入、额度快照、刷新通道、切换 payload、设备、审计记录和管理员接口。
 - 云端数据库：Cloudflare D1，数据库名 `codex-cloud-console`。
 - token 存储：`account_secrets.encrypted_auth_json`，使用 Worker secret `TOKEN_ENCRYPTION_KEY` 加密落库。
-- Dock Helper：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.7`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
+- Dock Helper：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.8`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
 - Helper 源码：`native-helper/build-helper.ps1` 编译 `native-helper/*.cs`，其中 `CodexPlusLocalHelper.cs` 保留主窗口/API 编排，`HelperDesktopUi.cs` 承载托盘菜单、软按钮、日志框和任务进度弹窗等桌面控件，`AutoSwitchConfig.cs` 承载自动切换配置模型，`HelperModels.cs` 承载通用数据模型，`CodexRuntimeStatus.cs` 承载 Codex 运行态与安全切换状态模型。
 
 ## 使用模型
@@ -47,7 +47,7 @@ http://127.0.0.1:18766/
 
 Dock Helper 不托管账号管理页，`/console/` 会返回 404。关闭窗口不会退出，只会驻留系统托盘；托盘菜单可以显示窗口、打开 Codex Dock、重启服务或退出。
 
-Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Helper 0.4.2 起会无论窗口是否可见都低频重新注册托盘图标，并提供本地托盘修复接口，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。Helper 0.4.3 起会在同类自动切换失败连续出现 3 次后暂停 30 分钟，并允许控制台一键恢复。Helper 0.4.4 起内置更新检查、状态页更新入口和安全下载动作；Helper 0.4.5 起提供本地生命周期自检接口，用于验证日志持久化、日志视图恢复调度和托盘修复链路；Helper 0.4.6 起生命周期自检会主动模拟 RichTextBox 渲染故障并确认日志视图可从事实源恢复；Helper 0.4.7 起会持久保存待切计划，并在重启后先重新核验额度和安全边界，核验前不写入 auth。控制台会显示 Helper 版本并提示低于最新发布或最低支持版本的设备升级，Helper 页会展示最新版、构建日期、EXE 下载、portable 包下载和 SHA-256 校验值。
+Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Helper 0.4.2 起会无论窗口是否可见都低频重新注册托盘图标，并提供本地托盘修复接口，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。Helper 0.4.3 起会在同类自动切换失败连续出现 3 次后暂停 30 分钟，并允许控制台一键恢复。Helper 0.4.4 起内置更新检查、状态页更新入口和安全下载动作；Helper 0.4.5 起提供本地生命周期自检接口，用于验证日志持久化、日志视图恢复调度和托盘修复链路；Helper 0.4.6 起生命周期自检会主动模拟 RichTextBox 渲染故障并确认日志视图可从事实源恢复；Helper 0.4.7 起会持久保存待切计划，并在重启后先重新核验额度和安全边界，核验前不写入 auth；Helper 0.4.8 起会把自动切换执行拆成候选选择、payload 下发、写入 auth、重启 Codex 和恢复窗口等阶段。控制台会显示 Helper 版本并提示低于最新发布或最低支持版本的设备升级，Helper 页会展示最新版、构建日期、EXE 下载、portable 包下载和 SHA-256 校验值。
 
 ## 额度刷新与智能切换
 
@@ -78,6 +78,8 @@ CLOUDFLARE_API_TOKEN
 ```
 
 `CHECKOUT_TOKEN` 是私有仓库 checkout 兜底令牌；当默认 `GITHUB_TOKEN` 在 GitHub runner 上无法拉取仓库时使用。缺任一 Cloudflare secret 时，Cloudflare Deploy 会在进入 Wrangler 之前失败并打印缺失项，避免发布任务跑到一半才暴露凭据问题。
+
+按当前交付口径，GitHub push 触发 CI 与 GitHub 托管 Cloudflare deploy secret 属于可选运营通道，不计入产品完成度评分；具备本机 Wrangler 权限时可直接完成同一套迁移、部署和线上验收。
 
 本地发布前验证：
 
@@ -119,7 +121,7 @@ cd cloud-worker
 npm run smoke:production
 ```
 
-`smoke:production` 会注册一次临时云账号，验证登录/退出、额度刷新设置、设备登记、普通用户管理员拦截、账号列表不泄露 token，以及线上 Helper EXE、portable 包、release manifest 和本地 `dist` hash 一致。可用 `CODEX_DOCK_SMOKE_BASE_URL` 指向预览域名。
+`smoke:production` 要求目标环境已经有正式管理员，会注册一次普通临时云账号，验证登录态、额度刷新设置、设备登记、普通用户管理员拦截、账号列表不泄露 token，以及线上 Helper EXE、portable 包、release manifest 和本地 `dist` hash 一致；完成后通过 `DELETE /api/me` 删除该临时账号及其设备/session 数据。注销只在 `account_deletion_events` 保留无邮箱、无用户 id 的计数事件，避免生产 smoke 长期污染运营指标。可用 `CODEX_DOCK_SMOKE_BASE_URL` 指向预览域名。
 
 已有线上库升级时，改用 `npx wrangler d1 migrations apply codex-cloud-console --remote` 应用增量迁移，避免重复执行完整 schema。
 
