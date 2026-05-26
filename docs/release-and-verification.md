@@ -106,12 +106,12 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 
 ## Current Verification Evidence
 
-- Latest production release verified on `2026-05-26`: `wrangler deploy` published Worker version `bfba757d-1098-4163-8b36-2a03391c9a58` with static asset version `7bce41247e7b`; production smoke passed in strict local-helper-hash mode; online Helper EXE, portable zip and release manifest were verified, and local `dist\CodexDockHelper\CodexDockHelper.exe` reports SHA-256 `1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B`.
-- Commercial release gate added on `2026-05-26`: `scripts/verify-commercial-release-gate.mjs` checks 15 named commercial gates and 21 tracked evidence artifacts, and is auto-discovered by `scripts/run-local-verifiers.mjs` during `npm run verify` and `npm run preflight`.
+- Latest production release verified on `2026-05-26`: `wrangler deploy` published Worker version `89f09ceb-2500-4247-8c6a-3d12e93b4996` with static asset version `036fbb9bbec2`; production smoke passed in strict local-helper-hash mode; online Helper EXE, portable zip and release manifest were verified, and local `dist\CodexDockHelper\CodexDockHelper.exe` reports SHA-256 `1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B`.
+- Commercial release gate added on `2026-05-26`: `scripts/verify-commercial-release-gate.mjs` checks 15 named commercial gates and 22 tracked evidence artifacts, and is auto-discovered by `scripts/run-local-verifiers.mjs` during `npm run verify` and `npm run preflight`.
 - GitHub CI/CD hardening verified on `2026-05-26`: main CI was re-run successfully after the workflow changes, ran the pinned Windows release preflight, and uploaded the Helper artifact. Repository secret `CLOUDFLARE_ACCOUNT_ID` is set; `CLOUDFLARE_API_TOKEN` still needs to be added before GitHub-hosted Cloudflare deploys can run.
 - Helper `0.4.4` local release verified on `2026-05-26`: `dist\CodexDockHelper\CodexDockHelper.exe` SHA-256 is `1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B`, `/api/health` reports `failure_count`, `failure_pause_until`, and `failure_pause_reason`, `/api/update/check` reports latest version `0.4.4`, and the device panel renders both the `failure_paused` stage plus `恢复自动切换` action and the Helper update check action.
 - Auto-switch failure-loop hotfix verified on `2026-05-26`: Helper health now exposes `last_stage`, `last_stage_label`, `last_failure_stage`, `last_failure_detail`, and `failure_backoff_until`; repeated no-candidate/not-switched/switch-failed outcomes enter a 180 second backoff; stale usage snapshots older than 30 minutes are displayed as needing refresh instead of hard-blocking candidate selection as 0% quota; the browser console remained free of warnings/errors after loading `https://codex.woai.pro`.
-- Usage-refresh scheduler hardening verified on `2026-05-26`: the console settings page shows low-frequency background refresh state, `manual` mode pauses automatic stale-usage refresh entirely, and background refresh writes `usage_snapshots.refresh_kind = background` instead of mixing with user-triggered batch refresh or per-account audit rows. Browser evidence: `artifacts/verification/usage-refresh-scheduler-settings-local.png`.
+- Usage-refresh scheduler hardening verified on `2026-05-26`: the console settings page shows low-frequency background refresh state, `manual` mode pauses automatic stale-usage refresh entirely, and background refresh writes `usage_snapshots.refresh_kind = background` instead of mixing with user-triggered batch refresh or per-account audit rows. Browser evidence: `artifacts/verification/usage-refresh-scheduler-settings-local.png` and `artifacts/verification/usage-refresh-scheduler-settings-production.png`.
 - Product reference board: `artifacts/design/codex-dock-commercial-interface-reference-board-v1.png`.
 - Static Assets build produces `asset-manifest.json`; `scripts/verify-static-asset-versioning.mjs` verifies that every local JS/CSS reference in the built `index.html` uses the generated content version and that the Helper download version, build date, size, and hash match the manifest.
 - Desktop browser screenshots:
@@ -127,6 +127,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
   - `artifacts/verification/helper-release-card-production.png`
   - `artifacts/verification/helper-portable-release-production.png`
   - `artifacts/verification/usage-refresh-scheduler-settings-local.png`
+  - `artifacts/verification/usage-refresh-scheduler-settings-production.png`
   - `artifacts/verification/auto-switch-stage-local.png`
   - `artifacts/verification/auto-switch-stage-production.png`
   - `artifacts/verification/helper-stale-reconnect-production.png`

@@ -259,6 +259,7 @@ const visualEvidence = [
   "artifacts/verification/helper-release-card-production.png",
   "artifacts/verification/helper-portable-release-production.png",
   "artifacts/verification/usage-refresh-scheduler-settings-local.png",
+  "artifacts/verification/usage-refresh-scheduler-settings-production.png",
   "artifacts/verification/auto-switch-stage-production.png",
   "artifacts/verification/helper-stale-reconnect-production.png",
   "artifacts/verification/oauth-provider-error-production-result.json",
