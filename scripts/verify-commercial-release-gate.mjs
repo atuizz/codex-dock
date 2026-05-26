@@ -246,6 +246,7 @@ const visualEvidence = [
   "artifacts/verification/codex-dock-import-primary-drawer-mobile.png",
   "artifacts/verification/codex-dock-account-detail-diagnostics-local.png",
   "artifacts/verification/oauth-flow-resume-local.png",
+  "artifacts/verification/oauth-flow-resume-production.png",
   "artifacts/verification/codex-dock-admin-ops-summary-browser.png",
   "artifacts/verification/account-health-production-preview.png",
   "artifacts/verification/account-cleanup-modal-production.png",
