@@ -14,7 +14,7 @@ on:
 jobs:
   verify:
     name: Verify Worker, UI, and Helper
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 20
 
     steps:

@@ -6,7 +6,7 @@ const root = path.resolve(__dirname, "..");
 const ci = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8");
 const deploy = fs.readFileSync(path.join(root, ".github", "workflows", "cloudflare-deploy.yml"), "utf8");
 
-assert.match(ci, /runs-on:\s*windows-latest/);
+assert.match(ci, /runs-on:\s*windows-2025/);
 assert.match(ci, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/);
 assert.match(ci, /npm ci/);
 assert.match(ci, /npm run preflight/);
@@ -15,10 +15,13 @@ assert.match(ci, /artifacts\/build\/CodexDockHelper\//);
 
 assert.match(deploy, /verify:\s*\n\s*name:\s*Verify release candidate/);
 assert.match(deploy, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/);
-assert.match(deploy, /runs-on:\s*windows-latest/);
+assert.match(deploy, /runs-on:\s*windows-2025/);
 assert.match(deploy, /npm run preflight/);
 assert.match(deploy, /deploy:\s*\n\s*name:\s*Cloudflare/);
 assert.match(deploy, /needs:\s*verify/);
+assert.match(deploy, /name:\s*Verify Cloudflare credentials/);
+assert.match(deploy, /Missing GitHub secret: CLOUDFLARE_API_TOKEN/);
+assert.match(deploy, /Missing GitHub secret: CLOUDFLARE_ACCOUNT_ID/);
 assert.match(deploy, /wrangler deploy --dry-run/);
 assert.match(deploy, /wrangler d1 migrations apply codex-cloud-console --remote/);
 assert.match(deploy, /wrangler deploy/);
