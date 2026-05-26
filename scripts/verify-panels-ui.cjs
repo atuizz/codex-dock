@@ -119,10 +119,10 @@ const deviceHtml = ui.renderDevice({
   helper: { port: 18766, version: "0.4.2", build_date: "2026-05-26" },
   helperRelease: {
     file: "downloads/CodexDockHelper.exe",
-    version: "0.4.3",
+    version: "0.4.4",
     build_date: "2026-05-26",
-    bytes: 168448,
-    sha256: "FAFC24A50A514EC13B76292D15CEF2980123E17564A0BB709E7189CE4BB30E4B",
+    bytes: 174592,
+    sha256: "1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B",
   },
   helperBase: "http://127.0.0.1:18766",
   helperAuthorized: true,
@@ -150,8 +150,11 @@ assert.match(deviceHtml, /data-helper-action="authorize"/);
 assert.match(deviceHtml, /data-helper-action="export-diagnostics"/);
 assert.match(deviceHtml, /Helper 分发/);
 assert.match(deviceHtml, /下载最新版/);
+assert.match(deviceHtml, /本机检查更新/);
+assert.match(deviceHtml, /已有 v0\.4\.4 发布/);
 assert.match(deviceHtml, /data-helper-action="copy-helper-sha"/);
-assert.match(deviceHtml, /FAFC24A50A51/);
+assert.match(deviceHtml, /data-helper-action="check-update"/);
+assert.match(deviceHtml, /1EC50E1E2006/);
 assert.match(deviceHtml, /自动切换阶段/);
 assert.match(deviceHtml, /持续监控/);
 assert.match(deviceHtml, /在线/);

@@ -59,8 +59,9 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.3";
+        private const string HelperVersion = "0.4.4";
         private const string HelperBuildDate = "2026-05-26";
+        private const string HelperDownloadDefaultFile = "downloads/CodexDockHelper.exe";
         private const int HelperLogMaxBytes = 1024 * 1024;
         private const int HelperLogBackups = 5;
         private const int HelperUiLogLineLimit = 400;
@@ -82,6 +83,7 @@ namespace CodexPlusLocalHelper
         private readonly SoftButton _startButton;
         private readonly SoftButton _stopButton;
         private readonly SoftButton _openButton;
+        private readonly SoftButton _updateButton;
         private readonly SoftButton _folderButton;
         private readonly SoftButton _refreshAuthButton;
         private readonly SoftButton _importAuthButton;
@@ -472,10 +474,11 @@ namespace CodexPlusLocalHelper
             {
                 Dock = DockStyle.Fill,
                 BackColor = Color.Transparent,
-                ColumnCount = 3,
+                ColumnCount = 4,
                 RowCount = 1,
             };
             actionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            actionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 142));
             actionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 156));
             actionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 156));
             actionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -495,15 +498,20 @@ namespace CodexPlusLocalHelper
             _autoSwitchDetailLabel.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
             autoPanel.Controls.Add(_autoSwitchDetailLabel);
 
+            _updateButton = MakeButton("检查更新", false);
+            _updateButton.Dock = DockStyle.Fill;
+            _updateButton.Margin = new Padding(8, 6, 8, 6);
+            actionLayout.Controls.Add(_updateButton, 1, 0);
+
             _importAuthButton = MakeButton("导入 auth.json", false);
             _importAuthButton.Dock = DockStyle.Fill;
             _importAuthButton.Margin = new Padding(8, 6, 8, 6);
-            actionLayout.Controls.Add(_importAuthButton, 1, 0);
+            actionLayout.Controls.Add(_importAuthButton, 2, 0);
 
             _openButton = MakeButton("打开控制台", true);
             _openButton.Dock = DockStyle.Fill;
             _openButton.Margin = new Padding(8, 4, 8, 4);
-            actionLayout.Controls.Add(_openButton, 2, 0);
+            actionLayout.Controls.Add(_openButton, 3, 0);
 
             var logCard = MakeCard();
             logCard.Margin = new Padding(0);
@@ -572,6 +580,7 @@ namespace CodexPlusLocalHelper
             };
             _stopButton.Click += delegate { StopServer(); };
             _openButton.Click += delegate { OpenManagementPage(); };
+            _updateButton.Click += delegate { BeginHelperUpdateCheckFromUi(); };
             _folderButton.Click += delegate { OpenCodexFolder(); };
             _refreshAuthButton.Click += delegate { RefreshAuthStatus(); };
             _importAuthButton.Click += delegate { ImportAndApplyAuthJson(); };
@@ -1066,6 +1075,14 @@ namespace CodexPlusLocalHelper
             return Math.Max(1, span.Minutes).ToString(CultureInfo.InvariantCulture) + "分钟";
         }
 
+        private static string FormatBytes(long bytes)
+        {
+            if (bytes <= 0) return "未知";
+            if (bytes >= 1024L * 1024L) return (bytes / 1024D / 1024D).ToString("0.0", CultureInfo.InvariantCulture) + " MB";
+            if (bytes >= 1024L) return (bytes / 1024D).ToString("0.0", CultureInfo.InvariantCulture) + " KB";
+            return bytes.ToString(CultureInfo.InvariantCulture) + " B";
+        }
+
         private static string ShortNonEmpty(string value, int max)
         {
             if (string.IsNullOrWhiteSpace(value)) return "";
@@ -1078,6 +1095,67 @@ namespace CodexPlusLocalHelper
             _applicationClosing = true;
             _allowExit = true;
             Close();
+        }
+
+        private void BeginHelperUpdateCheckFromUi()
+        {
+            if (_updateButton != null)
+            {
+                _updateButton.Enabled = false;
+                _updateButton.Text = "检查中";
+            }
+            Log("正在检查 Helper 更新...");
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                HelperUpdateInfo info;
+                try
+                {
+                    info = CheckHelperUpdate();
+                }
+                catch (Exception ex)
+                {
+                    info = HelperUpdateInfo.Failed(ex.Message);
+                }
+                try
+                {
+                    BeginInvoke(new Action(delegate { FinishHelperUpdateCheck(info); }));
+                }
+                catch { }
+            });
+        }
+
+        private void FinishHelperUpdateCheck(HelperUpdateInfo info)
+        {
+            if (_updateButton != null)
+            {
+                _updateButton.Enabled = true;
+                _updateButton.Text = "检查更新";
+            }
+            if (info == null || !info.Ok)
+            {
+                var error = info == null ? "无法读取更新信息" : info.Error;
+                Log("检查 Helper 更新失败：" + error);
+                MessageBox.Show(this, "暂时无法检查更新。\r\n\r\n" + error, "检查更新失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (info.UpdateAvailable)
+            {
+                var message = "发现 Helper 新版本 v" + info.LatestVersion + "。\r\n\r\n"
+                    + "当前版本：v" + HelperVersion + "\r\n"
+                    + "发布包大小：" + FormatBytes(info.Bytes) + "\r\n"
+                    + "SHA-256：" + ShortNonEmpty(info.Sha256, 24) + "\r\n\r\n"
+                    + "是否打开官方下载页面？请关闭当前 Helper 后再运行新版。";
+                Log("发现 Helper 新版本：v" + info.LatestVersion + "，等待用户打开下载页。");
+                if (MessageBox.Show(this, message, "Helper 更新可用", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                {
+                    OpenHelperDownloadPage(info.DownloadUrl);
+                }
+                return;
+            }
+
+            Log("Helper 已是最新版本：v" + HelperVersion);
+            MessageBox.Show(this, "当前 Helper 已是最新版本 v" + HelperVersion + "。", "已是最新版本", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void StartServer()
@@ -1292,6 +1370,30 @@ namespace CodexPlusLocalHelper
             if (request.HttpMethod == "GET" && path == "/api/health")
             {
                 SendJson(context.Response, 200, "{\"ok\":true,\"mode\":\"native-helper\",\"version\":\"" + JsonEscape(HelperVersion) + "\",\"build_date\":\"" + JsonEscape(HelperBuildDate) + "\",\"port\":" + _port + ",\"cloud_console_url\":\"" + JsonEscape(CloudConsoleUrl) + "\",\"tray\":" + TrayStatusJson() + ",\"auto_switch\":" + AutoSwitchStatusJson() + ",\"codex_proxy\":" + CodexProxyStatusJson() + ",\"codex_status\":" + CodexStatusJson() + "}");
+                return true;
+            }
+
+            if (request.HttpMethod == "GET" && path == "/api/update/check")
+            {
+                if (!IsAllowedOrigin(request))
+                {
+                    SendJson(context.Response, 403, "{\"ok\":false,\"error\":\"来源未授权\"}");
+                    return true;
+                }
+                SendJson(context.Response, 200, HelperUpdateCheckJson());
+                return true;
+            }
+
+            if (request.HttpMethod == "POST" && path == "/api/update/open-download")
+            {
+                if (!IsAllowedOrigin(request))
+                {
+                    SendJson(context.Response, 403, "{\"ok\":false,\"error\":\"来源未授权\"}");
+                    return true;
+                }
+                var url = LatestHelperDownloadUrl("");
+                OpenHelperDownloadPage(url);
+                SendJson(context.Response, 200, "{\"ok\":true,\"download_url\":\"" + JsonEscape(url) + "\"}");
                 return true;
             }
 
@@ -2530,6 +2632,13 @@ namespace CodexPlusLocalHelper
             var match = Regex.Match(json ?? "", "\"" + Regex.Escape(field) + "\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)");
             double value;
             return match.Success && double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value) ? value : (double?)null;
+        }
+
+        private static long MatchJsonLong(string json, string field, long fallback)
+        {
+            var match = Regex.Match(json ?? "", "\"" + Regex.Escape(field) + "\"\\s*:\\s*(-?\\d+)");
+            long value;
+            return match.Success && long.TryParse(match.Groups[1].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out value) ? value : fallback;
         }
 
         private static string ExtractJsonObject(string body, string field)
@@ -4098,6 +4207,119 @@ namespace CodexPlusLocalHelper
             return MatchJsonString(JwtPayloadJson(MatchJsonString(authJson, "id_token")), "email");
         }
 
+        private HelperUpdateInfo CheckHelperUpdate()
+        {
+            var manifestUrl = CloudConsoleUrl.TrimEnd('/') + "/asset-manifest.json?helper_ts=" + DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture);
+            var manifest = DownloadText(manifestUrl, 8000);
+            var helper = ExtractJsonObject(manifest, "helper");
+            if (string.IsNullOrWhiteSpace(helper) || helper == "null")
+            {
+                throw new InvalidOperationException("发布清单缺少 Helper 信息。");
+            }
+            var latestVersion = MatchJsonString(helper, "version");
+            if (string.IsNullOrWhiteSpace(latestVersion))
+            {
+                throw new InvalidOperationException("发布清单缺少 Helper 版本。");
+            }
+            var file = MatchJsonString(helper, "file");
+            var result = new HelperUpdateInfo
+            {
+                Ok = true,
+                CurrentVersion = HelperVersion,
+                LatestVersion = latestVersion,
+                LatestBuildDate = MatchJsonString(helper, "build_date"),
+                AssetVersion = MatchJsonString(manifest, "version"),
+                File = string.IsNullOrWhiteSpace(file) ? HelperDownloadDefaultFile : file,
+                Sha256 = MatchJsonString(helper, "sha256"),
+                Bytes = MatchJsonLong(helper, "bytes", 0),
+                CheckedAt = DateTime.UtcNow.ToString("o"),
+            };
+            result.DownloadUrl = LatestHelperDownloadUrl(result.File);
+            result.UpdateAvailable = CompareVersion(HelperVersion, latestVersion) < 0;
+            return result;
+        }
+
+        private string HelperUpdateCheckJson()
+        {
+            try
+            {
+                return CheckHelperUpdate().ToJson();
+            }
+            catch (Exception ex)
+            {
+                return HelperUpdateInfo.Failed(ex.Message).ToJson();
+            }
+        }
+
+        private static string DownloadText(string url, int timeoutMs)
+        {
+            var request = (HttpWebRequest)WebRequest.Create(url);
+            request.Method = "GET";
+            request.Timeout = timeoutMs;
+            request.ReadWriteTimeout = timeoutMs;
+            request.Accept = "application/json,text/plain,*/*";
+            request.UserAgent = "codex-dock-helper/" + HelperVersion;
+            try
+            {
+                using (var response = (HttpWebResponse)request.GetResponse())
+                using (var stream = response.GetResponseStream())
+                using (var reader = new StreamReader(stream, Encoding.UTF8))
+                {
+                    return reader.ReadToEnd();
+                }
+            }
+            catch (WebException ex)
+            {
+                if (ex.Response != null)
+                {
+                    using (var response = (HttpWebResponse)ex.Response)
+                    using (var stream = response.GetResponseStream())
+                    using (var reader = new StreamReader(stream, Encoding.UTF8))
+                    {
+                        var body = reader.ReadToEnd();
+                        if (body.Length > 180) body = body.Substring(0, 180);
+                        throw new InvalidOperationException(((int)response.StatusCode).ToString(CultureInfo.InvariantCulture) + ": " + body);
+                    }
+                }
+                throw;
+            }
+        }
+
+        private string LatestHelperDownloadUrl(string file)
+        {
+            Uri absolute;
+            if (Uri.TryCreate(file ?? "", UriKind.Absolute, out absolute)
+                && (absolute.Scheme == Uri.UriSchemeHttps || absolute.Scheme == Uri.UriSchemeHttp))
+            {
+                return absolute.ToString();
+            }
+            var path = string.IsNullOrWhiteSpace(file) ? HelperDownloadDefaultFile : file.TrimStart('/', '\\');
+            return CloudConsoleUrl.TrimEnd('/') + "/" + path.Replace("\\", "/");
+        }
+
+        private void OpenHelperDownloadPage(string url)
+        {
+            var target = string.IsNullOrWhiteSpace(url) ? LatestHelperDownloadUrl("") : url;
+            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+            Log("已打开 Helper 最新版下载页：" + target);
+        }
+
+        private static int CompareVersion(string current, string latest)
+        {
+            var left = (current ?? "").Split('.');
+            var right = (latest ?? "").Split('.');
+            var length = Math.Max(left.Length, right.Length);
+            for (var i = 0; i < length; i++)
+            {
+                int a;
+                int b;
+                if (i >= left.Length || !int.TryParse(Regex.Match(left[i], "\\d+").Value, out a)) a = 0;
+                if (i >= right.Length || !int.TryParse(Regex.Match(right[i], "\\d+").Value, out b)) b = 0;
+                if (a != b) return a.CompareTo(b);
+            }
+            return 0;
+        }
+
         private string GetHelperJson(AutoSwitchConfig config, string path)
         {
             return SendHelperJson(config, "GET", path, null);
@@ -4524,7 +4746,8 @@ namespace CodexPlusLocalHelper
                 + "<div class=\"card\"><strong>本地 API</strong><p><code>" + HtmlEscape(BaseUrl) + "</code></p><p class=\"muted\">" + HtmlEscape(auth) + "</p></div>"
                 + "<div class=\"card\"><strong>Codex 状态</strong><p>" + HtmlEscape(codex.Label) + "</p><p class=\"muted\">" + HtmlEscape(codex.Detail) + "</p></div>"
                 + "<div class=\"card\"><strong>自动切换</strong><p>" + HtmlEscape(auto.Enabled && !string.IsNullOrEmpty(auto.DeviceToken) ? "已开启" : "未开启") + "</p><p class=\"muted\">" + HtmlEscape(_lastAutoSwitchResult) + "</p></div>"
-                + "<div class=\"row\"><a href=\"" + HtmlEscape(CloudConsoleUrl) + "\">打开 Codex Dock</a><a href=\"/api/health\">查看状态</a></div>"
+                + "<div class=\"card\"><strong>版本更新</strong><p>当前 Helper v" + HtmlEscape(HelperVersion) + " · " + HtmlEscape(HelperBuildDate) + "</p><p class=\"muted\">可先检查发布清单，再下载安装最新版。Helper 不会静默覆盖当前运行文件。</p></div>"
+                + "<div class=\"row\"><a href=\"" + HtmlEscape(CloudConsoleUrl) + "\">打开 Codex Dock</a><a href=\"/api/health\">查看状态</a><a href=\"/api/update/check\">检查更新</a><a href=\"" + HtmlEscape(LatestHelperDownloadUrl("")) + "\">下载最新版</a></div>"
                 + "</main></body></html>";
         }
 
@@ -5720,6 +5943,50 @@ namespace CodexPlusLocalHelper
         {
             public string Target;
             public string Backup;
+        }
+
+        private sealed class HelperUpdateInfo
+        {
+            public bool Ok;
+            public bool UpdateAvailable;
+            public string CurrentVersion = "";
+            public string LatestVersion = "";
+            public string LatestBuildDate = "";
+            public string AssetVersion = "";
+            public string File = "";
+            public string DownloadUrl = "";
+            public string Sha256 = "";
+            public long Bytes;
+            public string CheckedAt = "";
+            public string Error = "";
+
+            public static HelperUpdateInfo Failed(string error)
+            {
+                return new HelperUpdateInfo
+                {
+                    Ok = false,
+                    CurrentVersion = HelperVersion,
+                    CheckedAt = DateTime.UtcNow.ToString("o"),
+                    Error = string.IsNullOrWhiteSpace(error) ? "检查更新失败" : error,
+                };
+            }
+
+            public string ToJson()
+            {
+                return "{\"ok\":" + (Ok ? "true" : "false")
+                    + ",\"current_version\":\"" + JsonEscape(CurrentVersion) + "\""
+                    + ",\"latest_version\":\"" + JsonEscape(LatestVersion) + "\""
+                    + ",\"latest_build_date\":\"" + JsonEscape(LatestBuildDate) + "\""
+                    + ",\"asset_version\":\"" + JsonEscape(AssetVersion) + "\""
+                    + ",\"update_available\":" + (UpdateAvailable ? "true" : "false")
+                    + ",\"file\":\"" + JsonEscape(File) + "\""
+                    + ",\"download_url\":\"" + JsonEscape(DownloadUrl) + "\""
+                    + ",\"sha256\":\"" + JsonEscape(Sha256) + "\""
+                    + ",\"bytes\":" + Bytes.ToString(CultureInfo.InvariantCulture)
+                    + ",\"checked_at\":\"" + JsonEscape(CheckedAt) + "\""
+                    + (string.IsNullOrWhiteSpace(Error) ? "" : ",\"error\":\"" + JsonEscape(Error) + "\"")
+                    + "}";
+            }
         }
 
         private sealed class AutoSwitchConfig

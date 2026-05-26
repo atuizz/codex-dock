@@ -73,6 +73,12 @@
       diagnosticsExport() {
         return request("/api/diagnostics/export", { cache: "no-store" });
       },
+      updateCheck() {
+        return request("/api/update/check", { cache: "no-store" });
+      },
+      openUpdateDownload() {
+        return request("/api/update/open-download", { method: "POST" });
+      },
       currentAuth() {
         return request("/api/current-auth", { cache: "no-store" });
       },

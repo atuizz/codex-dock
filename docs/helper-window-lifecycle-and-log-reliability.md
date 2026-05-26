@@ -170,8 +170,9 @@
 
 - Helper `0.4.2` 无论窗口是否可见都会启用低频托盘心跳，静默重新注册 `NotifyIcon`，并提供 `POST /api/tray/repair` 作为本地修复入口，避免 Windows 托盘状态丢失后出现“Helper 进程仍在、本地 API 正常、托盘图标不见”的半失联状态。
 - Helper `0.4.3` 增加连续自动切换失败暂停：同类失败连续 3 次后，本机自动切换暂停 30 分钟，`/api/health` 暴露 `failure_count`、`failure_pause_until` 和 `failure_pause_reason`，控制台可调用 `POST /api/auto-switch/resume` 恢复。
-- 本地验证：`GET http://127.0.0.1:18766/api/health` 返回 `version: 0.4.3`、`tray` 状态和失败暂停字段，日志记录 `托盘图标已确认; reason=主窗口首次显示`，`scripts/verify-helper-diagnostics.cjs` 通过。
-- 线上验证：`https://codex.woai.pro/downloads/CodexDockHelper.exe` 与本地 `dist/CodexDockHelper/CodexDockHelper.exe` SHA-256 均为 `FAFC24A50A514EC13B76292D15CEF2980123E17564A0BB709E7189CE4BB30E4B`。
+- Helper `0.4.4` 增加内置更新检查：主窗口提供“检查更新”，本地状态页提供 `/api/update/check` 和下载入口，控制台设备页可调用本机 Helper 检查更新；Helper 只打开官方下载页面，不静默覆盖当前运行文件。
+- 本地验证：`GET http://127.0.0.1:18766/api/health` 返回 `version: 0.4.4`、`tray` 状态和失败暂停字段；`GET http://127.0.0.1:18766/api/update/check` 返回 `latest_version: 0.4.4`、`update_available: false`、发布包 SHA-256 和大小；`scripts/verify-helper-diagnostics.cjs` 通过。
+- 线上验证：`https://codex.woai.pro/downloads/CodexDockHelper.exe` 与本地 `dist/CodexDockHelper/CodexDockHelper.exe` SHA-256 均为 `1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B`。
 - 控制台设备页和设置页均提供“修复托盘图标”动作，设备页在自动切换暂停时提供“恢复自动切换”动作；线上静态资源版本 `4c0bc4657977` 已验证包含该入口。
 - 同日热修复后，Helper 自动切换健康状态增加 `last_stage`、`last_failure_stage`、`last_failure_detail` 与 `failure_backoff_until`，连续失败会进入 180 秒失败退避，避免窗口日志和云端审计被同一失败原因刷屏。
 

@@ -315,13 +315,16 @@
       const latestVersion = helperRelease.version || minimumHelperVersion;
       const latestBuild = helperRelease.build_date || helperRelease.buildDate || "";
       const currentVersion = helperReady ? (helper.version || "旧版未上报") : "未连接";
-      const currentOutdated = helperReady && (!helper.version || compareVersion(helper.version, minimumHelperVersion) < 0);
+      const currentUnsupported = helperReady && (!helper.version || compareVersion(helper.version, minimumHelperVersion) < 0);
+      const updateAvailable = helperReady && helper.version && latestVersion && compareVersion(helper.version, latestVersion) < 0;
       const releaseKnown = Boolean(helperRelease.file || helperRelease.sha256 || helperRelease.version);
-      const cardClass = helperReady && !currentOutdated ? "ok" : "warn";
+      const cardClass = helperReady && !currentUnsupported && !updateAvailable ? "ok" : "warn";
       const statusText = !helperReady
         ? "未检测到本机 Helper，可先下载最新版。"
-        : currentOutdated
+        : currentUnsupported
           ? `当前 ${currentVersion} 低于最低支持版本 v${minimumHelperVersion}，建议升级后重启 Helper。`
+          : updateAvailable
+            ? `当前 ${currentVersion} 可用，但已有 v${latestVersion} 发布，建议在空闲时升级。`
           : `当前 ${currentVersion} 可用；如需重新安装，可下载同版本发布包。`;
       return `
         <div class="helper-release-card ${escapeHtml(cardClass)}">
@@ -336,6 +339,7 @@
           </div>
           <div class="helper-release-actions">
             <a class="button-link primary-link" href="${escapeHtml(helperDownloadUrl(helperRelease))}" download>下载最新版</a>
+            <button type="button" data-helper-action="check-update" ${helperReady ? "" : "disabled"}>本机检查更新</button>
             <button type="button" data-helper-action="copy-helper-sha" ${helperRelease.sha256 ? "" : "disabled"}>复制校验值</button>
           </div>
         </div>

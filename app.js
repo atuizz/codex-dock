@@ -3446,6 +3446,42 @@ async function exportHelperDiagnostics() {
   }
 }
 
+async function checkHelperUpdate() {
+  if (!state.helperReady || !state.helperBase) {
+    toast("Helper 未连接，请先启动本地助手。");
+    return;
+  }
+  try {
+    const result = await helperClient().updateCheck();
+    state.helperInfo = { ...(state.helperInfo || {}), update: result };
+    renderDevice();
+    renderSettings();
+    if (!result.ok) {
+      toast(result.error || "暂时无法检查 Helper 更新。");
+      return;
+    }
+    if (result.update_available) {
+      const latest = result.latest_version || "新版";
+      const open = window.confirm(`发现 Helper ${latest}，是否让本机 Helper 打开官方下载页面？`);
+      if (open) {
+        try {
+          await helperClient().openUpdateDownload();
+          toast("已请求 Helper 打开最新版下载页面。");
+        } catch {
+          window.open(result.download_url || state.helperRelease?.downloadUrl || "/downloads/CodexDockHelper.exe", "_blank", "noopener,noreferrer");
+          toast("Helper 未能代开下载页，已在浏览器打开。");
+        }
+      } else {
+        toast(`发现 Helper ${latest}，可稍后下载升级。`);
+      }
+      return;
+    }
+    toast(`Helper 已是最新版本 v${result.current_version || state.helperInfo.version || ""}。`);
+  } catch (error) {
+    toast(error.message || "检查 Helper 更新失败。");
+  }
+}
+
 async function resumeHelperAutoSwitch() {
   if (!state.helperReady || !state.helperBase) {
     toast("Helper 未连接，无法恢复自动切换。");
@@ -3911,6 +3947,7 @@ function bindEvents() {
       if (action === "resume-auto-switch") resumeHelperAutoSwitch();
       if (action === "open-status") openLocalStatus();
       if (action === "export-diagnostics") exportHelperDiagnostics();
+      if (action === "check-update") checkHelperUpdate();
       if (action === "copy-helper-sha") copyHelperChecksum();
       return;
     }

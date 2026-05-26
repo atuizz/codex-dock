@@ -7,6 +7,13 @@ const helperSource = fs.readFileSync(path.join(repoRoot, "native-helper", "Codex
 
 assert.match(helperSource, /\/api\/diagnostics\/export/);
 assert.match(helperSource, /\/api\/tray\/repair/);
+assert.match(helperSource, /HelperVersion\s*=\s*"0\.4\.4"/);
+assert.match(helperSource, /\/api\/update\/check/);
+assert.match(helperSource, /\/api\/update\/open-download/);
+assert.match(helperSource, /CheckHelperUpdate/);
+assert.match(helperSource, /LatestHelperDownloadUrl/);
+assert.match(helperSource, /BeginHelperUpdateCheckFromUi/);
+assert.match(helperSource, /检查更新/);
 assert.match(helperSource, /TrayStatusJson/);
 assert.match(helperSource, /RepairTrayIconFromAnyThread/);
 assert.match(helperSource, /EnsureTrayIconHeartbeat[\s\S]*EnsureTrayIcon\("托盘心跳", false\)/);
@@ -44,6 +51,7 @@ async function verifyLiveHelper() {
     console.log("helper-diagnostics source verification passed; live Helper unhealthy, skipped live export check");
     return;
   }
+  const healthBody = await health.clone().json().catch(() => ({}));
 
   const fakeJwt = "eyJaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.eyJbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.cccccccccccccccccc";
   const fakeSecrets = [
@@ -76,6 +84,20 @@ async function verifyLiveHelper() {
   const text = JSON.stringify(body);
   for (const secret of fakeSecrets) {
     assert.equal(text.includes(secret), false, `diagnostics export leaked ${secret}`);
+  }
+
+  if (healthBody.version === "0.4.4") {
+    const updateResponse = await fetch("http://127.0.0.1:18766/api/update/check", {
+      headers: { Origin: "https://codex.woai.pro" },
+    });
+    assert.equal(updateResponse.status, 200);
+    const update = await updateResponse.json();
+    assert.equal(update.ok, true);
+    assert.equal(update.current_version, "0.4.4");
+    assert.equal(update.latest_version, "0.4.4");
+    assert.equal(update.update_available, false);
+    assert.match(update.download_url || "", /^https:\/\/codex\.woai\.pro\/downloads\/CodexDockHelper\.exe$/);
+    assert.match(update.sha256 || "", /^[A-F0-9]{64}$/);
   }
   console.log("helper-diagnostics live verification passed");
 }

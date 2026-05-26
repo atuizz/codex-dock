@@ -43,6 +43,14 @@ async function main() {
   assert.equal(calls.at(-1).url, "http://127.0.0.1:18766/api/diagnostics/export");
   assert.equal(calls.at(-1).init.cache, "no-store");
 
+  await helper.updateCheck();
+  assert.equal(calls.at(-1).url, "http://127.0.0.1:18766/api/update/check");
+  assert.equal(calls.at(-1).init.cache, "no-store");
+
+  await helper.openUpdateDownload();
+  assert.equal(calls.at(-1).url, "http://127.0.0.1:18766/api/update/open-download");
+  assert.equal(calls.at(-1).init.method, "POST");
+
   await helper.resumeAutoSwitch();
   assert.equal(calls.at(-1).url, "http://127.0.0.1:18766/api/auto-switch/resume");
   assert.equal(calls.at(-1).init.method, "POST");

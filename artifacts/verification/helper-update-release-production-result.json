@@ -1,0 +1,14 @@
+{
+  "title": "Codex Dock",
+  "staticVersion": "57707afa2760",
+  "helper": {
+    "file": "downloads/CodexDockHelper.exe",
+    "version": "0.4.4",
+    "build_date": "2026-05-26",
+    "bytes": 174592,
+    "sha256": "1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B"
+  },
+  "hasUpdateCopy": true,
+  "hasLocalCheckAction": true,
+  "hasTokenText": false
+}
