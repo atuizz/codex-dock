@@ -212,6 +212,14 @@ const uiGates = [
       { label: "manual force audit marker", pattern: /manualForce|manual-forced/ },
     ],
   },
+  {
+    file: "scripts/verify-responsive-layout.cjs",
+    checks: [
+      { label: "desktop/tablet/mobile breakpoints", pattern: /max-width: 1180px[\s\S]*max-width: 860px[\s\S]*max-width: 460px/ },
+      { label: "overflow guard", pattern: /page should not create horizontal overflow[\s\S]*main content should clip accidental overflow/ },
+      { label: "phone drawer bottom sheet", pattern: /phone import drawer should become a bottom sheet/ },
+    ],
+  },
 ];
 
 for (const gate of uiGates) {
