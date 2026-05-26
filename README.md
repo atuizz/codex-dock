@@ -83,12 +83,15 @@ CLOUDFLARE_API_TOKEN
 ```powershell
 npm --prefix cloud-worker ci
 npm run preflight
+npm run release:github-ci
 npm run release:github-readiness
 ```
 
 `preflight` 会把 Helper 验证构建输出到 `artifacts/build/CodexDockHelper`，避免本机正在运行的 `dist\CodexDockHelper\CodexDockHelper.exe` 锁住发布包时导致验证失败。正式更新发布包仍使用 `npm run helper:build` 或 `.\native-helper\build-helper.ps1`。Helper 构建会生成 `CodexDockHelper-release.json` 和 `CodexDockHelper-<version>-portable.zip`；静态资源构建会把 EXE、portable 包和 release manifest 发布到 `/downloads/`，并在 `asset-manifest.json` 写入 Helper 版本、构建日期、大小和 SHA-256。商业发布门 `scripts/verify-commercial-release-gate.mjs` 也会随 `verify/preflight` 自动运行，防止登录、RT 导入、额度刷新、自动切换、Helper、管理员、生产 smoke、CI/CD 和截图证据从发布链里脱落。
 
 `release:github-readiness` 会调用 `gh` 检查当前提交的 CI 是否真的通过、push 触发是否实际生成运行记录、GitHub Cloudflare Deploy 所需 secret 名称是否存在，以及外部 check suite 是否卡住；它只输出 secret 名称是否存在，不读取或打印 secret 值，并把结果写到被忽略的本地证据文件 `artifacts/verification/github-release-readiness-result.json`。缺少 `CLOUDFLARE_API_TOKEN` 或没有观察到当前提交的 push-triggered CI 时，该命令会以非零状态退出，作为正式发布前的外部状态门。
+
+`release:github-ci` 是 push-triggered CI 修复前的可控兜底：它对当前分支触发 GitHub Actions CI，等待当前 commit 的 workflow_dispatch run 完成，并把运行 URL 与结论写入被忽略的本地证据文件 `artifacts/verification/github-ci-dispatch-result.json`。这不是自动 push CI 的替代品；`release:github-readiness` 仍会把缺少 push-triggered CI 作为正式发布缺口报告出来。
 
 只跑 Worker/UI/静态资源验证时：
 

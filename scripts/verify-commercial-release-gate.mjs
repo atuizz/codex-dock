@@ -229,6 +229,7 @@ for (const gate of uiGates) {
 await expectText("package.json", [
   { label: "Helper build in preflight", pattern: /"preflight":\s*"npm run helper:verify-build && npm run verify"/ },
   { label: "release evidence report command", pattern: /"release:report":\s*"node \.\/scripts\/generate-release-evidence-report\.mjs"/ },
+  { label: "GitHub CI dispatch command", pattern: /"release:github-ci":\s*"node \.\/scripts\/run-github-ci\.mjs --out artifacts\/verification\/github-ci-dispatch-result\.json"/ },
   { label: "GitHub readiness command", pattern: /"release:github-readiness":\s*"node \.\/scripts\/check-github-release-readiness\.mjs --out artifacts\/verification\/github-release-readiness-result\.json"/ },
   { label: "production surface smoke command", pattern: /"smoke:production:surface":\s*"node \.\/scripts\/smoke-production-surface\.mjs --out artifacts\/verification\/production-surface-result\.json"/ },
   { label: "local verifier runner", pattern: /"verify":\s*"node \.\/scripts\/run-local-verifiers\.mjs"/ },
@@ -244,6 +245,7 @@ await expectText("scripts/generate-release-evidence-report.mjs", [
   { label: "Helper lifecycle evidence", pattern: /helper-lifecycle-self-test-local-result\.json/ },
   { label: "production Helper evidence", pattern: /helper-update-release-production-result\.json/ },
   { label: "production surface evidence", pattern: /production-surface-result\.json/ },
+  { label: "GitHub CI dispatch evidence", pattern: /github-ci-dispatch-result\.json/ },
   { label: "GitHub readiness evidence", pattern: /github-release-readiness-result\.json/ },
   { label: "CI/CD evidence", pattern: /ci_workflow_configured|deploy_workflow_configured/ },
 ]);
@@ -274,6 +276,7 @@ await expectText("docs/release-and-verification.md", [
   { label: "current verification evidence", pattern: /## Current Verification Evidence/ },
   { label: "latest Helper release", pattern: /Helper `0\.4\.6`/ },
   { label: "production smoke evidence", pattern: /npm run smoke:production/ },
+  { label: "GitHub CI dispatch evidence", pattern: /release:github-ci/ },
   { label: "GitHub readiness evidence", pattern: /release:github-readiness/ },
 ]);
 
