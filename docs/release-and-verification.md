@@ -67,7 +67,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 
 ## GitHub Automation
 
-- `.github/workflows/ci.yml` runs on push, pull request, and manual dispatch.
+- `.github/workflows/ci.yml` runs on `main`, `master`, and `codex/**` push events, pull requests, and manual dispatch.
 - CI installs Worker dependencies on a pinned Windows 2025 runner, runs the root `npm run preflight` command, and uploads `artifacts/build/CodexDockHelper/` as an artifact. `preflight` builds the Windows Helper, builds Static Assets with a content-derived asset version, and runs every local `scripts/verify-*` verifier except production smoke.
 - `.github/workflows/cloudflare-deploy.yml` is manual only and always runs the Windows release preflight before any Cloudflare action:
   - all targets fail early with a clear message if `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_ACCOUNT_ID` is missing from GitHub repository secrets.

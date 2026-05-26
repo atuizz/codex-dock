@@ -7,6 +7,8 @@ const ci = fs.readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "u
 const deploy = fs.readFileSync(path.join(root, ".github", "workflows", "cloudflare-deploy.yml"), "utf8");
 
 assert.match(ci, /runs-on:\s*windows-2025/);
+assert.match(ci, /push:\s*\n\s*branches:\s*\n\s*-\s*main[\s\S]*-\s*master[\s\S]*-\s*"codex\/\*\*"/);
+assert.match(ci, /workflow_dispatch:/);
 assert.match(ci, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/);
 assert.match(ci, /npm ci/);
 assert.match(ci, /npm run preflight/);

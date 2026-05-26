@@ -65,7 +65,7 @@ Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲
 
 GitHub Actions 已提供：
 
-- `.github/workflows/ci.yml`：在固定的 Windows 2025 runner 运行 `npm run preflight`，验证 Worker/UI/Helper 逻辑、构建 Cloudflare 静态资源、构建 Windows Helper 并上传产物。
+- `.github/workflows/ci.yml`：在固定的 Windows 2025 runner 运行 `npm run preflight`，验证 Worker/UI/Helper 逻辑、构建 Cloudflare 静态资源、构建 Windows Helper 并上传产物；`main`、`master` 和 `codex/**` 分支 push 都应触发 CI。
 - `.github/workflows/cloudflare-deploy.yml`：手动触发，先在固定的 Windows 2025 runner 跑完整 `preflight`，再校验 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`，然后由 `preview` 做 dry-run，或由 `production` 应用远端 D1 迁移、部署 Worker，并执行线上 smoke。
 
 GitHub CD 需要两个仓库 secret：
