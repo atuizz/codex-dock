@@ -12,6 +12,7 @@ This document is the operational checklist for shipping the Cloudflare console a
 ## Required Secrets And Variables
 
 - GitHub repository secrets:
+  - `CHECKOUT_TOKEN`: optional checkout fallback for private repositories when the default `GITHUB_TOKEN` cannot fetch the repository on GitHub-hosted runners. Keep this token read-only or otherwise minimum scoped.
   - `CLOUDFLARE_API_TOKEN`: token with Worker deploy and D1 migration permissions.
   - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account id used by Wrangler.
 - Cloudflare Worker secret:
@@ -70,6 +71,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 - `.github/workflows/ci.yml` runs on `main`, `master`, and `codex/**` push events, pull requests, and manual dispatch.
 - CI installs Worker dependencies on a pinned Windows 2025 runner, runs the root `npm run preflight` command, and uploads `artifacts/build/CodexDockHelper/` as an artifact. `preflight` builds the Windows Helper, builds Static Assets with a content-derived asset version, and runs every local `scripts/verify-*` verifier except production smoke.
 - `.github/workflows/cloudflare-deploy.yml` is manual only and always runs the Windows release preflight before any Cloudflare action:
+  - checkout uses `secrets.CHECKOUT_TOKEN || github.token`, so private-repository checkout can fall back to a repository secret without committing credentials.
   - all targets fail early with a clear message if `CLOUDFLARE_API_TOKEN` or `CLOUDFLARE_ACCOUNT_ID` is missing from GitHub repository secrets.
   - `preview` builds and runs `wrangler deploy --dry-run`.
   - `production` is guarded to `master` or `main`, applies remote D1 migrations, runs `wrangler deploy`, then runs `npm run smoke:production`.

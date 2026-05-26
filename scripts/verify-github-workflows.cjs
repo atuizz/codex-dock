@@ -9,6 +9,7 @@ const deploy = fs.readFileSync(path.join(root, ".github", "workflows", "cloudfla
 assert.match(ci, /runs-on:\s*windows-2025/);
 assert.match(ci, /push:\s*\n\s*branches:\s*\n\s*-\s*main[\s\S]*-\s*master[\s\S]*-\s*"codex\/\*\*"/);
 assert.match(ci, /workflow_dispatch:/);
+assert.match(ci, /token:\s*\$\{\{\s*secrets\.CHECKOUT_TOKEN\s*\|\|\s*github\.token\s*\}\}/);
 assert.match(ci, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/);
 assert.match(ci, /npm ci/);
 assert.match(ci, /npm run preflight/);
@@ -18,6 +19,7 @@ assert.match(ci, /artifacts\/build\/CodexDockHelper\//);
 assert.match(deploy, /verify:\s*\n\s*name:\s*Verify release candidate/);
 assert.match(deploy, /FORCE_JAVASCRIPT_ACTIONS_TO_NODE24:\s*"true"/);
 assert.match(deploy, /runs-on:\s*windows-2025/);
+assert.match(deploy, /token:\s*\$\{\{\s*secrets\.CHECKOUT_TOKEN\s*\|\|\s*github\.token\s*\}\}/);
 assert.match(deploy, /npm run preflight/);
 assert.match(deploy, /deploy:\s*\n\s*name:\s*Cloudflare/);
 assert.match(deploy, /needs:\s*verify/);
