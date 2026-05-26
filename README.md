@@ -17,7 +17,7 @@ https://codex.woai.pro
 - 云端数据库：Cloudflare D1，数据库名 `codex-cloud-console`。
 - token 存储：`account_secrets.encrypted_auth_json`，使用 Worker secret `TOKEN_ENCRYPTION_KEY` 加密落库。
 - Dock Helper：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.6`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
-- Helper 源码：`native-helper/build-helper.ps1` 编译 `native-helper/*.cs`，其中 `CodexPlusLocalHelper.cs` 保留主窗口/API 编排，`AutoSwitchConfig.cs` 承载自动切换配置模型，`HelperModels.cs` 承载通用数据模型，`CodexRuntimeStatus.cs` 承载 Codex 运行态与安全切换状态模型。
+- Helper 源码：`native-helper/build-helper.ps1` 编译 `native-helper/*.cs`，其中 `CodexPlusLocalHelper.cs` 保留主窗口/API 编排，`HelperDesktopUi.cs` 承载托盘菜单、软按钮、日志框和任务进度弹窗等桌面控件，`AutoSwitchConfig.cs` 承载自动切换配置模型，`HelperModels.cs` 承载通用数据模型，`CodexRuntimeStatus.cs` 承载 Codex 运行态与安全切换状态模型。
 
 ## 使用模型
 

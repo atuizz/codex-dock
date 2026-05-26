@@ -11,6 +11,7 @@ const helperSource = fs
   .join("\n");
 const helperMainSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexPlusLocalHelper.cs"), "utf8");
 const runtimeStatusSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexRuntimeStatus.cs"), "utf8");
+const desktopUiSource = fs.readFileSync(path.join(repoRoot, "native-helper", "HelperDesktopUi.cs"), "utf8");
 const helperBuildScript = fs.readFileSync(path.join(repoRoot, "native-helper", "build-helper.ps1"), "utf8");
 
 function wait(ms) {
@@ -80,6 +81,26 @@ assert.match(runtimeStatusSource, /public static CodexRuntimeStatus FromProtocol
 assert.match(runtimeStatusSource, /public string ToJson\(\)/);
 assert.match(runtimeStatusSource, /private static string JsonEscape/);
 assert.doesNotMatch(helperMainSource, /private sealed class CodexRuntimeStatus/);
+assert.match(desktopUiSource, /internal static class HelperDesktopUi/);
+assert.match(desktopUiSource, /internal sealed class RoundedTrayMenu/);
+assert.match(desktopUiSource, /internal sealed class SafeLogRichTextBox/);
+assert.match(desktopUiSource, /internal sealed class OperationProgressForm/);
+assert.match(desktopUiSource, /internal sealed class SoftButton/);
+assert.match(desktopUiSource, /internal enum SoftButtonGlyph/);
+assert.match(desktopUiSource, /SimulateRecoverForSelfTest/);
+for (const movedClass of [
+  "LogDisplayStyle",
+  "RoundedTrayMenu",
+  "SurfacePanel",
+  "InfoBox",
+  "SoftButton",
+  "CloseGlyphButton",
+  "RoundedProgressBar",
+  "SafeLogRichTextBox",
+  "OperationProgressForm",
+]) {
+  assert.doesNotMatch(helperMainSource, new RegExp(`private sealed class ${movedClass}`));
+}
 assert.ok(helperSource.includes("\\\\bAuthorization\\\\s*:\\\\s*Bearer"));
 assert.match(helperSource, /cdh_\[REDACTED\]/);
 assert.match(helperBuildScript, /CodexDockHelper-release\.json/);
