@@ -1,19 +1,19 @@
 {
   "ok": true,
   "baseUrl": "https://codex.woai.pro",
-  "checked_at": "2026-05-26T17:17:22.620Z",
-  "asset_version": "4c1244761f7c",
+  "checked_at": "2026-05-26T17:59:01.938Z",
+  "asset_version": "967b8412fa8a",
   "helper_version": "0.4.7",
   "helper_sha256": "391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515",
   "referenced_assets": 17,
   "fetched_assets": [
     {
       "file": "app.js",
-      "bytes": 160791
+      "bytes": 162103
     },
     {
       "file": "styles.css",
-      "bytes": 69488
+      "bytes": 69997
     },
     {
       "file": "shell-ui.js",
@@ -33,7 +33,7 @@
     },
     {
       "file": "admin-ui.js",
-      "bytes": 10920
+      "bytes": 10962
     },
     {
       "file": "oauth-core.js",

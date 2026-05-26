@@ -43,6 +43,8 @@ assert.match(index.text, /id="manualSwitchRiskModal"[\s\S]*aria-modal="true"/);
 assert.match(index.text, /data-import-mode="oauth"[\s\S]*登录导入 RT 账号/);
 assert.match(index.text, /id="devicePanel"/);
 assert.match(index.text, /id="adminSummary"/);
+assert.match(index.text, /id="deleteCloudAccountPanel"[\s\S]*永久删除云端账号/);
+assert.match(index.text, /账号池、额度记录、设备授权和审计记录/);
 assertPublicSurfaceHasNoSecretMaterial("index", index.text);
 
 const manifest = await requestJson("/asset-manifest.json");
@@ -64,6 +66,8 @@ const requiredAssets = {
     /maybeRunPendingManualSwitchAfterBoundary/,
     /refreshStaleUsageInBackground/,
     /usageRefreshMode === "manual"/,
+    /deleteCloudAccountPanel/,
+    /api\("\/api\/me",\s*\{[\s\S]*method:\s*"DELETE"/,
   ],
   "styles.css": [
     /@media \(max-width: 1180px\)/,
@@ -94,6 +98,7 @@ const requiredAssets = {
     /Helper 版本分布/,
     /失败趋势/,
     /需重连 Helper/,
+    /24h 注销/,
   ],
   "oauth-core.js": [
     /oauth_provider_error/,
