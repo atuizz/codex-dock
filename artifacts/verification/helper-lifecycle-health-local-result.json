@@ -1,7 +1,7 @@
 {
   "ok": true,
   "mode": "native-helper",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "build_date": "2026-05-26",
   "port": 18766,
   "tray": {
@@ -18,7 +18,7 @@
     "log_view_needs_reload": false,
     "recent_log_count": 400,
     "helper_log_exists": true,
-    "helper_log_bytes": 290482,
+    "helper_log_bytes": 302865,
     "operation_progress_visible": false
   },
   "auto_switch": {
@@ -39,6 +39,6 @@
     "source": "logs_2.sqlite",
     "safe_to_switch": false,
     "pending_switch_reason": "",
-    "checked_at": "2026-05-26T11:15:21.7431453Z"
+    "checked_at": "2026-05-26T12:03:09.135271Z"
   }
 }

@@ -119,14 +119,14 @@ const deviceHtml = ui.renderDevice({
   helper: { port: 18766, version: "0.4.2", build_date: "2026-05-26" },
   helperRelease: {
     file: "downloads/CodexDockHelper.exe",
-    version: "0.4.5",
+    version: "0.4.6",
     build_date: "2026-05-26",
-    bytes: 174592,
-    sha256: "1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B",
+    bytes: 178688,
+    sha256: "6E936870B63ECC8A8A4C1357D56FDC850B2D9FDA81CD88967EC9D4038CDB90B2",
     package: {
-      file: "downloads/CodexDockHelper-0.4.5-portable.zip",
-      bytes: 181024,
-      sha256: "9BC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B",
+      file: "downloads/CodexDockHelper-0.4.6-portable.zip",
+      bytes: 192112,
+      sha256: "830D363FC4A8CBE471F154BF4BAE5B058DDC06715E18F9CE1546353648D04D89",
     },
   },
   helperBase: "http://127.0.0.1:18766",
@@ -157,11 +157,11 @@ assert.match(deviceHtml, /Helper 分发/);
 assert.match(deviceHtml, /下载最新版/);
 assert.match(deviceHtml, /下载 portable 包/);
 assert.match(deviceHtml, /本机检查更新/);
-assert.match(deviceHtml, /已有 v0\.4\.5 发布/);
+assert.match(deviceHtml, /已有 v0\.4\.6 发布/);
 assert.match(deviceHtml, /data-helper-action="copy-helper-sha"/);
 assert.match(deviceHtml, /data-helper-action="check-update"/);
-assert.match(deviceHtml, /1EC50E1E2006/);
-assert.match(deviceHtml, /9BC50E1E2006/);
+assert.match(deviceHtml, /6E936870B63E/);
+assert.match(deviceHtml, /830D363FC4A8/);
 assert.match(deviceHtml, /自动切换阶段/);
 assert.match(deviceHtml, /持续监控/);
 assert.match(deviceHtml, /在线/);

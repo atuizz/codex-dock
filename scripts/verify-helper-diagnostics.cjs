@@ -27,12 +27,16 @@ async function appendFileWithRetry(filePath, text) {
 
 assert.match(helperSource, /\/api\/diagnostics\/export/);
 assert.match(helperSource, /\/api\/tray\/repair/);
-assert.match(helperSource, /HelperVersion\s*=\s*"0\.4\.5"/);
+assert.match(helperSource, /HelperVersion\s*=\s*"0\.4\.6"/);
 assert.match(helperSource, /\/api\/update\/check/);
 assert.match(helperSource, /\/api\/update\/open-download/);
 assert.match(helperSource, /\/api\/lifecycle\/self-test/);
 assert.match(helperSource, /LifecycleStatusJson/);
 assert.match(helperSource, /LifecycleSelfTestJson/);
+assert.match(helperSource, /SimulateLogViewFaultForSelfTest/);
+assert.match(helperSource, /log_view_fault_recovered/);
+assert.match(helperSource, /SimulateRecoverForSelfTest/);
+assert.match(helperSource, /RunOnUiAndWait/);
 assert.match(helperSource, /main_window_visible/);
 assert.match(helperSource, /log_view_needs_reload/);
 assert.match(helperSource, /recent_log_count/);
@@ -108,7 +112,7 @@ async function verifyLiveHelper() {
   assert.equal(body.ok, true);
   assert.equal(body.redaction?.applied, true);
   assert.equal(typeof body.tray?.visible, "boolean");
-  if (healthBody.version === "0.4.5") {
+  if (healthBody.version === "0.4.6") {
     assert.equal(typeof body.lifecycle?.main_window_visible, "boolean");
     assert.equal(typeof body.lifecycle?.recent_log_count, "number");
   }
@@ -118,7 +122,7 @@ async function verifyLiveHelper() {
     assert.equal(text.includes(secret), false, `diagnostics export leaked ${secret}`);
   }
 
-  if (healthBody.version === "0.4.5") {
+  if (healthBody.version === "0.4.6") {
     const lifecycleResponse = await fetch("http://127.0.0.1:18766/api/lifecycle/self-test", {
       method: "POST",
       headers: { Origin: "https://codex.woai.pro" },
@@ -128,6 +132,9 @@ async function verifyLiveHelper() {
     assert.equal(lifecycle.ok, true);
     assert.match(lifecycle.marker || "", /^lifecycle-self-test-/);
     assert.equal(lifecycle.log_found, true);
+    assert.equal(typeof lifecycle.log_view_fault_tested, "boolean");
+    assert.equal(typeof lifecycle.log_view_fault_recovered, "boolean");
+    if (lifecycle.log_view_fault_tested) assert.equal(lifecycle.log_view_fault_recovered, true);
     assert.equal(typeof lifecycle.tray?.visible, "boolean");
     assert.equal(typeof lifecycle.lifecycle?.helper_log_exists, "boolean");
 
@@ -137,7 +144,7 @@ async function verifyLiveHelper() {
     assert.equal(updateResponse.status, 200);
     const update = await updateResponse.json();
     assert.equal(update.ok, true);
-    assert.equal(update.current_version, "0.4.5");
+    assert.equal(update.current_version, "0.4.6");
     assert.match(update.latest_version || "", /^\d+\.\d+\.\d+$/);
     assert.equal(typeof update.update_available, "boolean");
     assert.match(update.download_url || "", /^https:\/\/codex\.woai\.pro\/downloads\/CodexDockHelper\.exe$/);

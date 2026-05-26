@@ -11,7 +11,7 @@ assert.equal(result.status, 0, result.stderr || result.stdout);
 
 const report = JSON.parse(result.stdout);
 assert.equal(report.ok, true);
-assert.equal(report.helper.version, "0.4.5");
+assert.equal(report.helper.version, "0.4.6");
 assert.equal(report.helper.lifecycle.health_ok, true);
 assert.equal(report.helper.lifecycle.self_test_ok, true);
 assert.equal(report.helper.lifecycle.self_test_log_found, true);

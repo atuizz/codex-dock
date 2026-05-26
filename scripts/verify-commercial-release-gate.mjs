@@ -123,7 +123,7 @@ const releaseGates = [
       { label: "failure backoff", pattern: /AutoSwitchFailureBackoff/ },
       { label: "failure pause", pattern: /AutoSwitchFailurePauseThreshold/ },
       { label: "update check", pattern: /\/api\/update\/check/ },
-      { label: "current Helper version", pattern: /0\.4\.5/ },
+      { label: "current Helper version", pattern: /0\.4\.6/ },
       { label: "portable release package", pattern: /Compress-Archive|CodexDockHelper-release\\\.json|portable\\\.zip/i },
     ],
   },
@@ -270,7 +270,7 @@ await expectText(".github/workflows/cloudflare-deploy.yml", [
 await expectText("docs/release-and-verification.md", [
   { label: "commercial quality gates", pattern: /## Commercial Quality Gates/ },
   { label: "current verification evidence", pattern: /## Current Verification Evidence/ },
-  { label: "latest Helper release", pattern: /Helper `0\.4\.5`/ },
+  { label: "latest Helper release", pattern: /Helper `0\.4\.6`/ },
   { label: "production smoke evidence", pattern: /npm run smoke:production/ },
 ]);
 

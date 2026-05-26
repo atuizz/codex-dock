@@ -59,7 +59,7 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.5";
+        private const string HelperVersion = "0.4.6";
         private const string HelperBuildDate = "2026-05-26";
         private const string HelperDownloadDefaultFile = "downloads/CodexDockHelper.exe";
         private const int HelperLogMaxBytes = 1024 * 1024;
@@ -77,7 +77,7 @@ namespace CodexPlusLocalHelper
         private readonly DateTime _startedAtUtc = DateTime.UtcNow;
         private readonly Label _statusLabel;
         private readonly Label _authLabel;
-        private readonly RichTextBox _logBox;
+        private readonly SafeLogRichTextBox _logBox;
         private readonly Font _logRegularFont;
         private readonly Font _logBoldFont;
         private readonly SoftButton _startButton;
@@ -2330,6 +2330,13 @@ namespace CodexPlusLocalHelper
                 RestoreRecentLogView("生命周期自检");
                 RefreshDashboardUi();
             });
+            var logViewFaultTested = false;
+            var logViewFaultRecovered = false;
+            RunOnUiAndWait(delegate
+            {
+                logViewFaultTested = CanRenderLogView();
+                if (logViewFaultTested) logViewFaultRecovered = SimulateLogViewFaultForSelfTest(marker);
+            });
             Thread.Sleep(160);
 
             var logFound = false;
@@ -2342,11 +2349,14 @@ namespace CodexPlusLocalHelper
                 WriteLifecycleLog("自检读取日志失败; marker=" + marker + "; " + ex.GetType().Name + ": " + ShortNonEmpty(ex.Message, 180));
             }
 
-            WriteLifecycleLog("自检完成; marker=" + marker + "; log_found=" + logFound);
+            var ok = logFound && (!logViewFaultTested || logViewFaultRecovered);
+            WriteLifecycleLog("自检完成; marker=" + marker + "; log_found=" + logFound + "; log_view_fault_tested=" + logViewFaultTested + "; log_view_fault_recovered=" + logViewFaultRecovered);
             return "{"
-                + "\"ok\":" + (logFound ? "true" : "false") + ","
+                + "\"ok\":" + (ok ? "true" : "false") + ","
                 + "\"marker\":\"" + JsonEscape(marker) + "\","
                 + "\"log_found\":" + (logFound ? "true" : "false") + ","
+                + "\"log_view_fault_tested\":" + (logViewFaultTested ? "true" : "false") + ","
+                + "\"log_view_fault_recovered\":" + (logViewFaultRecovered ? "true" : "false") + ","
                 + "\"tray\":" + TrayStatusJson() + ","
                 + "\"lifecycle\":" + LifecycleStatusJson()
                 + "}";
@@ -5178,6 +5188,23 @@ namespace CodexPlusLocalHelper
             RestoreRecentLogView("渲染故障恢复");
         }
 
+        private bool SimulateLogViewFaultForSelfTest(string marker)
+        {
+            try
+            {
+                if (!CanRenderLogView()) return false;
+                _logBox.SimulateRecoverForSelfTest(new ArgumentException("self-test simulated RichTextBox fault: " + marker));
+                RestoreRecentLogView("生命周期自检渲染故障");
+                return !_logViewNeedsReload && _logBox.Text.IndexOf(marker, StringComparison.Ordinal) >= 0;
+            }
+            catch (Exception ex)
+            {
+                RecordLogViewFailure("self-test-simulated-richtextbox-fault", ex);
+                _logViewNeedsReload = true;
+                return false;
+            }
+        }
+
         private void ResetVisibleLogBox(string reason)
         {
             try
@@ -5266,6 +5293,26 @@ namespace CodexPlusLocalHelper
                 action();
             }
             catch { }
+        }
+
+        private bool RunOnUiAndWait(Action action)
+        {
+            try
+            {
+                if (_applicationClosing || IsDisposed || Disposing || !IsHandleCreated) return false;
+                if (InvokeRequired)
+                {
+                    Invoke(action);
+                    return true;
+                }
+                action();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                WriteLifecycleLog("UI 同步调度失败; " + ex.GetType().Name + ": " + ShortNonEmpty(ex.Message, 160));
+                return false;
+            }
         }
 
         private void ShowOperationProgress(string title, string detail, int percent)
@@ -5841,6 +5888,11 @@ namespace CodexPlusLocalHelper
                     SelectionLength = 0;
                 }
                 catch { }
+            }
+
+            public void SimulateRecoverForSelfTest(Exception ex)
+            {
+                RecoverRichTextState(ex);
             }
         }
 
