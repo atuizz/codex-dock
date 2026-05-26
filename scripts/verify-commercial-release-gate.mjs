@@ -103,6 +103,7 @@ const releaseGates = [
       { label: "device token issuance", pattern: /auto-switch-token/ },
       { label: "token rotation", pattern: /replacementDeviceToken/ },
       { label: "token revocation", pattern: /revoked/ },
+      { label: "heartbeat-derived stale status", pattern: /HELPER_OFFLINE_AFTER_SECONDS|helperStale/ },
       { label: "safe boundary hold", pattern: /等待 Helper 确认安全轮次边界/ },
       { label: "no-candidate result", pattern: /没有可用候选账号/ },
       { label: "payload issued only after boundary confirmation", pattern: /payload-issued[\s\S]*boundaryConfirmed/ },
@@ -180,6 +181,7 @@ const uiGates = [
       { label: "account health UI", pattern: /账号健康/ },
       { label: "failure trend UI", pattern: /失败趋势/ },
       { label: "Helper version UI", pattern: /Helper 版本分布/ },
+      { label: "Helper reconnect UI", pattern: /需重连 Helper|helperStale/ },
       { label: "outdated Helper marker", pattern: /待升级/ },
     ],
   },
@@ -252,6 +254,7 @@ const visualEvidence = [
   "artifacts/verification/account-cleanup-modal-production.png",
   "artifacts/verification/helper-release-card-production.png",
   "artifacts/verification/auto-switch-stage-production.png",
+  "artifacts/verification/helper-stale-reconnect-production.png",
   "artifacts/verification/oauth-provider-error-production-result.json",
   "artifacts/verification/helper-update-release-production-result.json",
 ];

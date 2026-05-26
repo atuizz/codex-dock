@@ -27,8 +27,11 @@ class FakeD1 {
     this.sessions = [
       { id: "sess-1", user_id: "user-1", expires_at: "2999-01-01T00:00:00.000Z", last_seen_at: "2026-01-02" },
     ];
+    const recentSeenAt = new Date().toISOString();
+    const staleSeenAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     this.devices = [
-      { id: "dev-1", user_id: "user-1", device_key: "desktop", name: "Dock Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.3", helper_build_date: "2026-05-26", created_at: "", last_seen_at: "" },
+      { id: "dev-1", user_id: "user-1", device_key: "desktop", name: "Dock Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.3", helper_build_date: "2026-05-26", created_at: "", last_seen_at: recentSeenAt },
+      { id: "dev-stale", user_id: "user-1", device_key: "desktop-stale", name: "Stale Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.3", helper_build_date: "2026-05-26", created_at: "", last_seen_at: staleSeenAt },
     ];
     this.auditLogs = [];
   }
@@ -122,13 +125,18 @@ class FakeStatement {
         })),
       };
     }
+    if (sql.trim() === "SELECT * FROM devices") {
+      return { results: this.db.devices };
+    }
     if (sql.includes("GROUP BY helper_version")) {
+      const [freshCutoff] = this.params;
       const versions = new Map();
       for (const device of this.db.devices) {
         const version = device.helper_version || "未上报";
-        const current = versions.get(version) || { helper_version: version, total: 0, online: 0, last_seen_at: "" };
+        const current = versions.get(version) || { helper_version: version, total: 0, online: 0, stale: 0, last_seen_at: "" };
         current.total += 1;
-        if (device.helper_online) current.online += 1;
+        if (device.helper_online && device.last_seen_at && device.last_seen_at > freshCutoff) current.online += 1;
+        if (device.helper_online && (!device.last_seen_at || device.last_seen_at <= freshCutoff)) current.stale += 1;
         current.last_seen_at = current.last_seen_at || device.last_seen_at || "";
         versions.set(version, current);
       }
@@ -326,12 +334,24 @@ assert.equal(summaryBody.summary.accountHealth.usageFailed, 1);
 assert.equal(summaryBody.summary.failureTotals.usageRefreshFailures24h, 1);
 assert.ok(summaryBody.summary.failureTrend.some((bucket) => bucket.failures >= 1));
 assert.equal(summaryBody.summary.helperVersions[0].version, "0.4.3");
+assert.equal(summaryBody.summary.helperVersions[0].total, 2);
+assert.equal(summaryBody.summary.helperVersions[0].online, 1);
+assert.equal(summaryBody.summary.helperVersions[0].stale, 1);
+assert.equal(summaryBody.summary.deviceHealth.online, 1);
+assert.equal(summaryBody.summary.deviceHealth.offline, 1);
+assert.equal(summaryBody.summary.deviceHealth.stale, 1);
 assert.equal(summaryBody.summary.deviceHealth.outdated, 0);
 
 const devices = await handleAdmin(request("/api/admin/devices"), env, admin, "/api/admin/devices");
 const deviceBody = await devices.json();
-assert.equal(deviceBody.devices[0].helperVersion, "0.4.3");
-assert.equal(deviceBody.devices[0].helperBuildDate, "2026-05-26");
+const freshDevice = deviceBody.devices.find((item) => item.id === "dev-1");
+const staleDevice = deviceBody.devices.find((item) => item.id === "dev-stale");
+assert.equal(freshDevice.helperVersion, "0.4.3");
+assert.equal(freshDevice.helperBuildDate, "2026-05-26");
+assert.equal(freshDevice.helperOnline, true);
+assert.equal(staleDevice.helperReportedOnline, true);
+assert.equal(staleDevice.helperOnline, false);
+assert.equal(staleDevice.helperStale, true);
 
 const guard = await handleAdmin(request("/api/admin/users/admin-1", "PATCH", {
   role: "user",

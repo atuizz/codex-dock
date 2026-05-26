@@ -42,9 +42,10 @@
       const grouped = new Map();
       for (const device of devices) {
         const version = device.helperVersion || "未上报";
-        const current = grouped.get(version) || { version, total: 0, online: 0, lastSeenAt: "" };
+        const current = grouped.get(version) || { version, total: 0, online: 0, stale: 0, lastSeenAt: "" };
         current.total += 1;
         if (device.helperOnline) current.online += 1;
+        if (device.helperStale) current.stale += 1;
         current.lastSeenAt = current.lastSeenAt || device.lastSeenAt || "";
         grouped.set(version, current);
       }
@@ -73,7 +74,9 @@
           ${versions.slice(0, 4).map((item) => {
             const version = item.version || "未上报";
             const outdated = version === "未上报" || compareVersion(version, minVersion) < 0;
-            return `<span class="${outdated ? "warn" : ""}">${escapeHtml(version)} · ${Number(item.total || 0)} 台</span>`;
+            const stale = Number(item.stale || 0);
+            const suffix = stale ? ` · ${stale} 台需重连` : "";
+            return `<span class="${outdated || stale ? "warn" : ""}">${escapeHtml(version)} · ${Number(item.online || 0)}/${Number(item.total || 0)} 在线${escapeHtml(suffix)}</span>`;
           }).join("")}
         </div>
       `;
@@ -85,6 +88,9 @@
       const versions = summary.helperVersions?.length ? summary.helperVersions : derivedHelperVersions(devices);
       const fallbackOutdated = devices.filter((device) => !device.helperVersion || compareVersion(device.helperVersion, minVersion) < 0).length;
       const outdatedHelpers = Number.isFinite(Number(summary.deviceHealth?.outdated)) ? Number(summary.deviceHealth.outdated) : fallbackOutdated;
+      const staleHelpers = Number.isFinite(Number(summary.deviceHealth?.stale))
+        ? Number(summary.deviceHealth.stale)
+        : devices.filter((device) => device.helperStale).length;
       const accountHealth = summary.accountHealth || {};
       const failureTotals = summary.failureTotals || {};
       const basic = [
@@ -93,6 +99,7 @@
         ["账号数", summary.accounts],
         ["设备数", summary.deviceHealth?.total ?? devices.length],
         ["待升级 Helper", outdatedHelpers],
+        ["需重连 Helper", staleHelpers],
         ["在线 session", summary.onlineSessions],
         ["24h 导入", summary.imports24h],
         ["24h 切换", summary.switches24h],
@@ -113,7 +120,7 @@
           </div>
           <div class="ops-card">
             <span>Helper 版本分布</span>
-            <strong>${outdatedHelpers} 台待升级</strong>
+            <strong>${outdatedHelpers} 台待升级 · ${staleHelpers} 台需重连</strong>
             ${renderVersionList(versions, minVersion)}
             <p>最低支持版本 v${escapeHtml(minVersion)}</p>
           </div>
@@ -191,10 +198,15 @@
             ${devices.map((device) => {
               const version = device.helperVersion || "未上报";
               const versionStatus = !device.helperVersion || compareVersion(device.helperVersion, "0.4.2") < 0 ? " · 待升级" : "";
+              const age = Number(device.helperLastSeenAgeSeconds);
+              const ageLabel = Number.isFinite(age) ? ` · ${Math.floor(age / 60)} 分钟未心跳` : "";
+              const connection = device.helperStale
+                ? `需重连${ageLabel}`
+                : (device.helperOnline ? "在线" : "离线");
               return `<tr>
                 <td><strong>${escapeHtml(device.name || "设备")}</strong><span>${escapeHtml(shortId(device.id))}</span></td>
                 <td>${escapeHtml(device.userEmail || "未知用户")}</td>
-                <td>${escapeHtml(device.helperOnline ? "在线" : "离线")}</td>
+                <td>${escapeHtml(connection)}</td>
                 <td>${escapeHtml(version + versionStatus)}</td>
                 <td>${escapeHtml(formatTime(device.lastSeenAt))}</td>
               </tr>`;

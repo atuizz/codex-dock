@@ -3,11 +3,14 @@ import {
   DEVICE_TOKEN_ROTATE_AFTER_SECONDS,
   DEVICE_TOKEN_TTL_SECONDS,
   HELPER_HEARTBEAT_SECONDS,
+  HELPER_OFFLINE_AFTER_SECONDS,
   handleDeviceRoutes,
   handleHelperAutoSwitch,
+  helperDeviceHealth,
   helperTokenNeedsRotation,
   helperTokenStatus,
   insertDeviceToken,
+  publicDevice,
   requireHelperDevice,
 } from "../cloud-worker/worker-helper.js";
 import {
@@ -351,6 +354,31 @@ const status = helperTokenStatus({
 assert.equal(status.expiresInSeconds, 5);
 assert.equal(status.rotateAfterSeconds, DEVICE_TOKEN_ROTATE_AFTER_SECONDS);
 
+const healthBaseMs = Date.parse("2026-05-26T00:10:00.000Z");
+const freshDeviceHealth = helperDeviceHealth({
+  helper_online: 1,
+  last_seen_at: new Date(healthBaseMs - 30_000).toISOString(),
+}, healthBaseMs);
+assert.equal(freshDeviceHealth.helperOnline, true);
+assert.equal(freshDeviceHealth.helperStale, false);
+assert.equal(freshDeviceHealth.helperOfflineAfterSeconds, HELPER_OFFLINE_AFTER_SECONDS);
+
+const staleDevice = publicDevice({
+  id: "device-stale",
+  user_id: "user-1",
+  device_key: "desktop-stale",
+  name: "Dock Helper",
+  helper_online: 1,
+  helper_version: "0.4.4",
+  last_seen_at: new Date(healthBaseMs - (HELPER_OFFLINE_AFTER_SECONDS + 5) * 1000).toISOString(),
+}, healthBaseMs);
+assert.equal(staleDevice.helperOnline, false);
+assert.equal(staleDevice.helperStale, true);
+assert.equal(staleDevice.helperReportedOnline, true);
+assert.equal(staleDevice.helper_online, 0);
+assert.equal(staleDevice.helper_reported_online, 1);
+assert.equal(staleDevice.helperStatus, "stale");
+
 assert.equal(helperTokenNeedsRotation({
   tokenStatus: "active",
   tokenCreatedAt: new Date(Date.now() - 1000).toISOString(),
@@ -361,6 +389,16 @@ assert.equal(helperTokenNeedsRotation({
   tokenCreatedAt: new Date(Date.now() - (DEVICE_TOKEN_ROTATE_AFTER_SECONDS + 1) * 1000).toISOString(),
   tokenExpiresAt: new Date(Date.now() + DEVICE_TOKEN_TTL_SECONDS * 1000).toISOString(),
 }), true);
+
+env.DB.devices[0].helper_online = 1;
+env.DB.devices[0].last_seen_at = new Date(Date.now() - (HELPER_OFFLINE_AFTER_SECONDS + 10) * 1000).toISOString();
+const deviceList = await handleDeviceRoutes(jsonRequest("GET", "/api/devices"), env, user, "/api/devices", { writeAudit });
+assert.equal(deviceList.status, 200);
+const deviceListBody = await deviceList.json();
+assert.equal(deviceListBody.devices[0].helperReportedOnline, true);
+assert.equal(deviceListBody.devices[0].helperOnline, false);
+assert.equal(deviceListBody.devices[0].helperStale, true);
+assert.equal(deviceListBody.devices[0].helperOfflineAfterSeconds, HELPER_OFFLINE_AFTER_SECONDS);
 
 env.DB.deviceTokens[0].created_at = new Date(Date.now() - (DEVICE_TOKEN_ROTATE_AFTER_SECONDS + 60) * 1000).toISOString();
 const config = await handleHelperAutoSwitch(new Request("https://codex.example.test/api/helper/auto-switch/config", {

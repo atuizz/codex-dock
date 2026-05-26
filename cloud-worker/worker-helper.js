@@ -29,6 +29,72 @@ export const DEVICE_TOKEN_ROTATE_AFTER_SECONDS = 30 * 24 * 60 * 60;
 export const DEVICE_TOKEN_ROTATION_GRACE_SECONDS = 7 * 24 * 60 * 60;
 export const DEVICE_TOKEN_RENEW_WINDOW_SECONDS = 7 * 24 * 60 * 60;
 export const HELPER_HEARTBEAT_SECONDS = 60;
+export const HELPER_OFFLINE_AFTER_SECONDS = HELPER_HEARTBEAT_SECONDS * 3;
+
+function boolish(value) {
+  return value === true || value === 1 || value === "1" || value === "true";
+}
+
+export function helperDeviceHealth(row, baseMs = Date.now()) {
+  const lastSeenAt = row?.lastSeenAt || row?.last_seen_at || "";
+  const lastSeenMs = Date.parse(lastSeenAt);
+  const hasLastSeen = Number.isFinite(lastSeenMs);
+  const ageSeconds = hasLastSeen ? Math.max(0, Math.floor((baseMs - lastSeenMs) / 1000)) : null;
+  const reportedOnline = boolish(row?.helperReportedOnline ?? row?.helper_reported_online ?? row?.helperOnline ?? row?.helper_online);
+  const helperStale = reportedOnline && (!hasLastSeen || ageSeconds > HELPER_OFFLINE_AFTER_SECONDS);
+  const helperOnline = reportedOnline && !helperStale;
+  return {
+    helperOnline,
+    helperReportedOnline: reportedOnline,
+    helperStale,
+    helperReconnectRequired: reportedOnline && helperStale,
+    helperLastSeenAgeSeconds: ageSeconds,
+    helperHeartbeatSeconds: HELPER_HEARTBEAT_SECONDS,
+    helperOfflineAfterSeconds: HELPER_OFFLINE_AFTER_SECONDS,
+    helperStatus: helperOnline ? "online" : (helperStale ? "stale" : "offline"),
+  };
+}
+
+export function publicDevice(row, baseMs = Date.now()) {
+  const health = helperDeviceHealth(row, baseMs);
+  return {
+    ...row,
+    id: row?.id || "",
+    userId: row?.userId || row?.user_id || "",
+    user_id: row?.user_id || row?.userId || "",
+    userEmail: row?.userEmail || row?.user_email || "",
+    user_email: row?.user_email || row?.userEmail || "",
+    deviceKey: row?.deviceKey || row?.device_key || "",
+    device_key: row?.device_key || row?.deviceKey || "",
+    name: row?.name || "",
+    helperOnline: health.helperOnline,
+    helper_online: health.helperOnline ? 1 : 0,
+    helperReportedOnline: health.helperReportedOnline,
+    helper_reported_online: health.helperReportedOnline ? 1 : 0,
+    helperStale: health.helperStale,
+    helper_stale: health.helperStale ? 1 : 0,
+    helperReconnectRequired: health.helperReconnectRequired,
+    helper_reconnect_required: health.helperReconnectRequired ? 1 : 0,
+    helperLastSeenAgeSeconds: health.helperLastSeenAgeSeconds,
+    helper_last_seen_age_seconds: health.helperLastSeenAgeSeconds,
+    helperHeartbeatSeconds: health.helperHeartbeatSeconds,
+    helper_heartbeat_seconds: health.helperHeartbeatSeconds,
+    helperOfflineAfterSeconds: health.helperOfflineAfterSeconds,
+    helper_offline_after_seconds: health.helperOfflineAfterSeconds,
+    helperStatus: health.helperStatus,
+    helper_status: health.helperStatus,
+    helperBase: row?.helperBase || row?.helper_base || "",
+    helper_base: row?.helper_base || row?.helperBase || "",
+    helperVersion: row?.helperVersion || row?.helper_version || "",
+    helper_version: row?.helper_version || row?.helperVersion || "",
+    helperBuildDate: row?.helperBuildDate || row?.helper_build_date || "",
+    helper_build_date: row?.helper_build_date || row?.helperBuildDate || "",
+    createdAt: row?.createdAt || row?.created_at || "",
+    created_at: row?.created_at || row?.createdAt || "",
+    lastSeenAt: row?.lastSeenAt || row?.last_seen_at || "",
+    last_seen_at: row?.last_seen_at || row?.lastSeenAt || "",
+  };
+}
 
 export function helperTokenStatus(row, baseMs = Date.now()) {
   const expiresAt = row?.tokenExpiresAt || row?.token_expires_at || row?.expiresAt || row?.expires_at || "";
@@ -93,7 +159,7 @@ export async function handleDeviceRoutes(request, env, user, path, options = {})
 
   if (request.method === "GET" && path === "/api/devices") {
     const rows = await env.DB.prepare("SELECT * FROM devices WHERE user_id = ? ORDER BY last_seen_at DESC").bind(user.id).all();
-    return json({ ok: true, devices: rows.results || [] });
+    return json({ ok: true, devices: (rows.results || []).map((row) => publicDevice(row)) });
   }
 
   if (request.method === "POST" && path === "/api/devices/auto-switch-token") {

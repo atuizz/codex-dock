@@ -5,6 +5,10 @@ import {
   publicUser,
 } from "./worker-auth.js";
 import {
+  HELPER_OFFLINE_AFTER_SECONDS,
+  publicDevice,
+} from "./worker-helper.js";
+import {
   json,
   nowIso,
   parseJsonObject,
@@ -35,6 +39,7 @@ function compareVersion(left, right) {
 
 export async function adminSummary(env) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const helperFreshCutoff = new Date(Date.now() - HELPER_OFFLINE_AFTER_SECONDS * 1000).toISOString();
   const [users, accountHealth, sessions, imports, switches, usageFailures, auditTrend, helperVersions] = await Promise.all([
     env.DB.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active FROM users").first(),
     env.DB.prepare(
@@ -77,22 +82,25 @@ export async function adminSummary(env) {
     env.DB.prepare(
       `SELECT CASE WHEN helper_version = '' THEN '未上报' ELSE helper_version END AS helper_version,
               COUNT(*) AS total,
-              SUM(CASE WHEN helper_online = 1 THEN 1 ELSE 0 END) AS online,
+              SUM(CASE WHEN helper_online = 1 AND last_seen_at != '' AND last_seen_at > ? THEN 1 ELSE 0 END) AS online,
+              SUM(CASE WHEN helper_online = 1 AND (last_seen_at = '' OR last_seen_at <= ?) THEN 1 ELSE 0 END) AS stale,
               MAX(last_seen_at) AS last_seen_at
        FROM devices
        GROUP BY helper_version
        ORDER BY total DESC, helper_version ASC
        LIMIT 12`,
-    ).all(),
+    ).bind(helperFreshCutoff, helperFreshCutoff).all(),
   ]);
   const helperVersionRows = (helperVersions.results || []).map((row) => ({
     version: row.helper_version || "未上报",
     total: number(row.total),
     online: number(row.online),
+    stale: number(row.stale),
     lastSeenAt: row.last_seen_at || "",
   }));
   const deviceTotal = helperVersionRows.reduce((total, row) => total + row.total, 0);
   const deviceOnline = helperVersionRows.reduce((total, row) => total + row.online, 0);
+  const deviceStale = helperVersionRows.reduce((total, row) => total + row.stale, 0);
   const helperOutdated = helperVersionRows.reduce((total, row) => (
     total + (row.version === "未上报" || compareVersion(row.version, MIN_SUPPORTED_HELPER_VERSION) < 0 ? row.total : 0)
   ), 0);
@@ -124,6 +132,7 @@ export async function adminSummary(env) {
       total: deviceTotal,
       online: deviceOnline,
       offline: Math.max(0, deviceTotal - deviceOnline),
+      stale: deviceStale,
       outdated: helperOutdated,
     },
     helperVersions: helperVersionRows,
@@ -255,18 +264,7 @@ export async function adminDevices(env) {
      ORDER BY devices.last_seen_at DESC
      LIMIT 500`,
   ).all();
-  return (rows.results || []).map((row) => ({
-    id: row.id,
-    userId: row.user_id,
-    userEmail: row.user_email || "",
-    name: row.name || "",
-    helperOnline: Boolean(row.helper_online),
-    helperBase: row.helper_base || "",
-    helperVersion: row.helper_version || "",
-    helperBuildDate: row.helper_build_date || "",
-    createdAt: row.created_at,
-    lastSeenAt: row.last_seen_at,
-  }));
+  return (rows.results || []).map((row) => publicDevice(row));
 }
 
 export async function ensureAnotherAdmin(env, targetUserId) {
