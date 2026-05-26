@@ -204,6 +204,14 @@ const uiGates = [
       { label: "Helper portable package action", pattern: /下载 portable 包/ },
     ],
   },
+  {
+    file: "scripts/verify-manual-switch-guard.cjs",
+    checks: [
+      { label: "manual switch risk modal", pattern: /manualSwitchRiskModal|任务仍在运行/ },
+      { label: "safe boundary wait path", pattern: /waitedForBoundary|maybeRunPendingManualSwitchAfterBoundary/ },
+      { label: "manual force audit marker", pattern: /manualForce|manual-forced/ },
+    ],
+  },
 ];
 
 for (const gate of uiGates) {
@@ -260,6 +268,7 @@ const visualEvidence = [
   "artifacts/verification/helper-portable-release-production.png",
   "artifacts/verification/usage-refresh-scheduler-settings-local.png",
   "artifacts/verification/usage-refresh-scheduler-settings-production.png",
+  "artifacts/verification/manual-switch-risk-local.png",
   "artifacts/verification/auto-switch-stage-production.png",
   "artifacts/verification/helper-stale-reconnect-production.png",
   "artifacts/verification/oauth-provider-error-production-result.json",

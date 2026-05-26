@@ -74,6 +74,24 @@ const cases = [
     title: "额度刷新方式已更新",
     description: "执行通道：自动选择",
   },
+  {
+    item: {
+      action: "switch",
+      result: "manual-forced",
+      metadata: { manualForce: true, pendingSwitchReason: "当前任务仍在运行" },
+    },
+    title: "用户强制切换",
+    description: "用户确认后立即切换 · 当前任务仍在运行",
+  },
+  {
+    item: {
+      action: "switch",
+      result: "manual-waited-boundary",
+      metadata: { waitedForBoundary: true, lastTaskEvent: "response.completed" },
+    },
+    title: "安全边界后切换",
+    description: "等待安全边界后切换 · response.completed",
+  },
 ];
 
 for (const { item, title, description } of cases) {

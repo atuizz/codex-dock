@@ -74,4 +74,23 @@ assert.match(cleanup.riskHtml, /包含可用账号/);
 assert.match(cleanup.listHtml, /Broken &lt;RT&gt;/);
 assert.doesNotMatch(cleanup.listHtml, /<RT>/);
 
+const manualRisk = ui.renderManualSwitchRisk({
+  account: { name: "Plus <Main>", email: "main@example.test" },
+  codex: {
+    label: "任务执行中",
+    safe_to_switch: false,
+    pending_switch_reason: "当前轮正在输出",
+    last_task_event: "response.output_text.delta",
+    boundary_source: "Codex 日志",
+  },
+});
+assert.match(manualRisk.summaryText, /立即切换可能中断本轮/);
+assert.match(manualRisk.waitText, /等待安全边界后切换/);
+assert.equal(manualRisk.forceText, "仍然立即切换");
+assert.match(manualRisk.statsHtml, /Plus &lt;Main&gt;/);
+assert.match(manualRisk.statsHtml, /暂不安全/);
+assert.match(manualRisk.riskHtml, /强制切换会记录为用户动作/);
+assert.match(manualRisk.riskHtml, /response\.output_text\.delta/);
+assert.doesNotMatch(manualRisk.statsHtml, /Plus <Main>/);
+
 console.log("dialog-ui verification passed");

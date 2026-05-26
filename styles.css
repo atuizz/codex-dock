@@ -2311,7 +2311,8 @@ body.sidebar-collapsed .utility-button span:not(.nav-icon) {
 .sync-dialog,
 .settings-card,
 .account-detail-card,
-.cleanup-dialog {
+.cleanup-dialog,
+.switch-risk-dialog {
   position: relative;
   z-index: 1;
   border: 1px solid var(--border-control);
@@ -2393,13 +2394,22 @@ label span {
   padding: 24px;
 }
 
-.cleanup-dialog h2 {
+.switch-risk-dialog {
+  width: min(580px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 24px;
+}
+
+.cleanup-dialog h2,
+.switch-risk-dialog h2 {
   margin: 0;
   font-size: 24px;
   font-weight: 520;
 }
 
-.cleanup-dialog p {
+.cleanup-dialog p,
+.switch-risk-dialog p {
   margin: 0;
   color: var(--text-secondary);
   line-height: 1.55;
@@ -2509,6 +2519,64 @@ label span {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.switch-risk-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.switch-risk-stats strong {
+  font-size: 15px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.switch-risk-copy {
+  margin-bottom: 8px;
+}
+
+.switch-risk-detail {
+  display: grid;
+  gap: 8px;
+}
+
+.switch-risk-row {
+  display: grid;
+  grid-template-columns: 116px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: #fbfbfa;
+  padding: 10px 12px;
+}
+
+.switch-risk-row span,
+.switch-risk-row strong {
+  min-width: 0;
+}
+
+.switch-risk-row span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.switch-risk-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 520;
+}
+
+.switch-risk-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .progress-card {

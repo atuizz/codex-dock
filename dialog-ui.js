@@ -109,6 +109,51 @@
       };
     }
 
+    function renderManualSwitchRisk(context = {}) {
+      const account = context.account || {};
+      const codex = context.codex || {};
+      const pending = context.pending || {};
+      const accountLabel = account.name || account.email || account.accountId || "所选账号";
+      const runtimeState = codex.label || codex.state || "状态确认中";
+      const pendingReason = codex.pending_switch_reason || pending.reason || "当前 Codex 轮次仍在运行";
+      const taskEvent = codex.last_task_event || codex.lastTaskEvent || "";
+      const source = codex.boundary_source || codex.boundarySource || codex.runtime_source || "Helper 运行状态";
+      const waitQueued = Boolean(pending.waitForBoundary);
+      const summaryText = waitQueued
+        ? "已加入等待队列。Helper 确认安全边界后才会写入 auth 并重启 Codex。"
+        : "当前任务仍在运行，立即切换可能中断本轮并浪费剩余额度。";
+      const statsHtml = [
+        ["目标账号", accountLabel],
+        ["任务状态", runtimeState],
+        ["安全门", codex.safe_to_switch === false ? "暂不安全" : "确认中"],
+      ].map(([label, value]) => `
+        <div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>
+      `).join("");
+      const detailRows = [
+        ["保护原因", pendingReason],
+        taskEvent ? ["最近任务事件", taskEvent] : null,
+        ["状态来源", source],
+      ].filter(Boolean).map(([label, value]) => `
+        <div class="switch-risk-row">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `).join("");
+      return {
+        summaryText,
+        waitText: waitQueued ? "等待中" : "等待安全边界后切换",
+        forceText: "仍然立即切换",
+        statsHtml,
+        riskHtml: `
+          <div class="cleanup-risk warn switch-risk-copy">
+            <strong>保护当前任务</strong>
+            <span>Dock Helper 报告安全门未打开。本次默认不会抢切账号；强制切换会记录为用户动作。</span>
+          </div>
+          <div class="switch-risk-detail">${detailRows}</div>
+        `,
+      };
+    }
+
     return Object.freeze({
       renderSyncStats,
       modalState,
@@ -117,6 +162,7 @@
       isActive,
       renderAdminUserSummary,
       renderCleanupReview,
+      renderManualSwitchRisk,
     });
   }
 

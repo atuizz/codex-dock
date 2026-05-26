@@ -178,6 +178,7 @@ const state = {
     summary: "",
     items: [],
   },
+  pendingManualSwitch: null,
   authMode: "login",
   syncChoices: {},
   oauthAuthUrl: "",
@@ -1536,6 +1537,10 @@ function selectedAccount() {
   return state.accounts.find((account) => account.id === state.selectedId) || null;
 }
 
+function accountById(id) {
+  return state.accounts.find((account) => account.id === id) || null;
+}
+
 function usageIssue(account) {
   const usage = normalizeUsage(account?.usage, accountPlan(account));
   if (!usage.error) return null;
@@ -1864,6 +1869,7 @@ function render() {
   renderAdmin();
   renderImportPreview();
   renderOperationProgress();
+  renderManualSwitchRisk();
 }
 
 function switchView(view) {
@@ -2211,6 +2217,7 @@ async function checkHelper() {
         render();
         await registerDevice();
         await detectCurrentAuth();
+        await maybeRunPendingManualSwitchAfterBoundary();
         return true;
       }
     } catch {
@@ -2259,6 +2266,7 @@ async function refreshHelperRuntimeStatus() {
         state.cloudReloadingFromHelper = false;
       }
     }
+    await maybeRunPendingManualSwitchAfterBoundary();
     return true;
   } catch {
     return false;
@@ -2624,6 +2632,111 @@ function codexStatusDetail(codex) {
   return running > 0 ? `${label}，进程 ${running}` : label;
 }
 
+function normalizeSwitchOptions(options = {}) {
+  if (!options || (options.type && options.target)) return {};
+  return options;
+}
+
+function manualSwitchNeedsTaskConfirmation(options = {}) {
+  if (options.bypassTaskGuard || options.background || options.system) return false;
+  if (!state.helperReady || !state.helperBase) return false;
+  return (state.codexStatus || {}).safe_to_switch === false;
+}
+
+function manualSwitchRiskReason(codex = state.codexStatus || {}) {
+  return codex.pending_switch_reason
+    || codex.last_task_event
+    || codex.lastTaskEvent
+    || "当前 Codex 轮次仍在运行";
+}
+
+function renderManualSwitchRisk() {
+  if (!$("manualSwitchRiskSummary")) return;
+  const pending = state.pendingManualSwitch || {};
+  const account = accountById(pending.accountId) || selectedAccount();
+  const view = dialogUi.renderManualSwitchRisk({
+    account,
+    codex: state.codexStatus || {},
+    pending,
+  });
+  $("manualSwitchRiskSummary").textContent = view.summaryText;
+  $("manualSwitchRiskStats").innerHTML = view.statsHtml;
+  $("manualSwitchRiskDetail").innerHTML = view.riskHtml;
+  $("manualSwitchWaitBtn").textContent = view.waitText;
+  $("manualSwitchWaitBtn").disabled = Boolean(pending.waitForBoundary || pending.applying);
+  $("manualSwitchForceBtn").textContent = view.forceText;
+  $("manualSwitchForceBtn").disabled = Boolean(pending.applying);
+}
+
+function openManualSwitchRisk(account, options = {}) {
+  state.pendingManualSwitch = {
+    accountId: account.id,
+    source: options.source || "manual",
+    reason: manualSwitchRiskReason(),
+    requestedAt: new Date().toISOString(),
+    waitForBoundary: false,
+    applying: false,
+  };
+  renderManualSwitchRisk();
+  openModal("manualSwitchRiskModal");
+}
+
+function waitForManualSwitchBoundary() {
+  if (!state.pendingManualSwitch) return;
+  state.pendingManualSwitch = {
+    ...state.pendingManualSwitch,
+    waitForBoundary: true,
+  };
+  renderManualSwitchRisk();
+  closeModal("manualSwitchRiskModal");
+  toast("已等待安全边界。Helper 确认当前轮结束后会自动切换。");
+}
+
+async function forceManualSwitchNow() {
+  const pending = state.pendingManualSwitch;
+  const account = accountById(pending?.accountId);
+  state.pendingManualSwitch = null;
+  closeModal("manualSwitchRiskModal");
+  if (!account) {
+    renderManualSwitchRisk();
+    toast("目标账号已不存在，切换已取消。");
+    return;
+  }
+  state.selectedId = account.id;
+  saveLocalStore();
+  render();
+  await applySelectedAccount({
+    bypassTaskGuard: true,
+    manualForce: true,
+    source: pending?.source || "manual-force",
+  });
+}
+
+async function maybeRunPendingManualSwitchAfterBoundary() {
+  const pending = state.pendingManualSwitch;
+  if (!pending?.waitForBoundary || pending.applying || state.operationProgress.active) return false;
+  if ((state.codexStatus || {}).safe_to_switch !== true) return false;
+  const account = accountById(pending.accountId);
+  if (!account) {
+    state.pendingManualSwitch = null;
+    renderManualSwitchRisk();
+    toast("等待切换的账号已不存在，已取消。");
+    return false;
+  }
+  state.pendingManualSwitch = { ...pending, applying: true };
+  state.selectedId = account.id;
+  saveLocalStore();
+  render();
+  toast("安全边界已确认，开始切换账号。");
+  state.pendingManualSwitch = null;
+  await applySelectedAccount({
+    bypassTaskGuard: true,
+    waitedForBoundary: true,
+    source: pending.source || "manual-waited-boundary",
+  });
+  return true;
+}
+
 async function waitForCodexRestartProgress(itemIndex, accepted) {
   if (!accepted) {
     updateProgressItem(itemIndex, "已完成", "auth 已写入");
@@ -2663,11 +2776,16 @@ async function waitForCodexRestartProgress(itemIndex, accepted) {
   updateProgressItem(itemIndex, "已完成", `${lastDetail}，后台仍会继续恢复`);
 }
 
-async function applySelectedAccount() {
+async function applySelectedAccount(options = {}) {
+  const switchOptions = normalizeSwitchOptions(options);
   const account = selectedAccount();
   if (!account) return;
   if (state.operationProgress.active) {
     toast("已有切换任务正在进行。");
+    return;
+  }
+  if (manualSwitchNeedsTaskConfirmation(switchOptions)) {
+    openManualSwitchRisk(account, switchOptions);
     return;
   }
   if (!state.helperReady) {
@@ -2725,9 +2843,24 @@ async function applySelectedAccount() {
         body: {
           accountId: account.cloudId,
           action: "switch",
-          result: result.launch_mode || "已写入 auth.json",
+          result: switchOptions.manualForce
+            ? "manual-forced"
+            : switchOptions.waitedForBoundary
+              ? "manual-waited-boundary"
+              : (result.launch_mode || "已写入 auth.json"),
           deviceKey: state.deviceKey,
-          metadata: { helperBase: state.helperBase, accepted: Boolean(result.accepted), stoppedCount: result.stopped_count ?? 0 },
+          metadata: {
+            helperBase: state.helperBase,
+            accepted: Boolean(result.accepted),
+            stoppedCount: result.stopped_count ?? 0,
+            switchSource: switchOptions.source || "manual",
+            manualForce: Boolean(switchOptions.manualForce),
+            waitedForBoundary: Boolean(switchOptions.waitedForBoundary),
+            safeToSwitch: (state.codexStatus || {}).safe_to_switch ?? null,
+            runtimeState: (state.codexStatus || {}).state || (state.codexStatus || {}).label || "",
+            pendingSwitchReason: (state.codexStatus || {}).pending_switch_reason || "",
+            lastTaskEvent: (state.codexStatus || {}).last_task_event || (state.codexStatus || {}).lastTaskEvent || "",
+          },
         },
       }).catch(() => {});
       await loadCloudData();
@@ -2991,7 +3124,7 @@ async function smartSwitchBestAccount() {
   saveLocalStore();
   render();
   toast(`智能切换选择：${account.name || account.email}。${smartSwitchReasons(account)}`);
-  await applySelectedAccount();
+  await applySelectedAccount({ source: "manual-smart" });
 }
 
 function findAccountIndexByIdentity(accounts, account) {
@@ -3408,6 +3541,10 @@ function closeModal(id) {
   modal.classList.toggle("open", view.open);
   modal.setAttribute("aria-hidden", view.ariaHidden);
   if (id === "cleanupModal") state.cleanupPendingIds = [];
+  if (id === "manualSwitchRiskModal" && state.pendingManualSwitch && !state.pendingManualSwitch.waitForBoundary && !state.pendingManualSwitch.applying) {
+    state.pendingManualSwitch = null;
+    renderManualSwitchRisk();
+  }
 }
 
 function setDrawer(open, options = {}) {
@@ -4089,7 +4226,9 @@ function bindEvents() {
   });
   $("refreshAllUsageBtn").addEventListener("click", refreshAllUsage);
   $("quickSwitchBtn").addEventListener("click", parseCommandFilesToPreview);
-  $("switchBtn").addEventListener("click", applySelectedAccount);
+  $("switchBtn").addEventListener("click", () => applySelectedAccount({ source: "manual-detail" }));
+  $("manualSwitchWaitBtn").addEventListener("click", waitForManualSwitchBoundary);
+  $("manualSwitchForceBtn").addEventListener("click", forceManualSwitchNow);
   $("copyAuthBtn").addEventListener("click", async () => {
     const account = selectedAccount();
     if (!account) return;
@@ -4177,7 +4316,7 @@ function bindEvents() {
         state.selectedId = id;
         saveLocalStore();
         render();
-        await applySelectedAccount();
+        await applySelectedAccount({ source: "manual-list" });
       }
       if (button.dataset.accountAction === "recover-auth") {
         state.selectedId = id;

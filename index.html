@@ -405,6 +405,22 @@
       </section>
     </div>
 
+    <div class="modal" id="manualSwitchRiskModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal="manualSwitchRiskModal"></div>
+      <section class="switch-risk-dialog" role="dialog" aria-modal="true" aria-labelledby="manualSwitchRiskTitle">
+        <button class="modal-close" type="button" data-close-modal="manualSwitchRiskModal" aria-label="关闭">×</button>
+        <span class="eyebrow">任务保护</span>
+        <h2 id="manualSwitchRiskTitle">当前任务还不能安全切换</h2>
+        <p id="manualSwitchRiskSummary">当前任务仍在运行，立即切换可能中断本轮并浪费剩余额度。</p>
+        <div class="cleanup-stats switch-risk-stats" id="manualSwitchRiskStats"></div>
+        <div id="manualSwitchRiskDetail"></div>
+        <div class="switch-risk-actions">
+          <button id="manualSwitchWaitBtn" type="button">等待安全边界后切换</button>
+          <button class="danger" id="manualSwitchForceBtn" type="button">仍然立即切换</button>
+        </div>
+      </section>
+    </div>
+
     <div class="modal" id="settingsModal" aria-hidden="true">
       <div class="modal-backdrop" data-close-modal="settingsModal"></div>
       <section class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
