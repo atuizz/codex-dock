@@ -32,6 +32,14 @@
       return condition ? "checked" : "";
     }
 
+    function formatInterval(ms) {
+      const value = Number(ms || 0);
+      if (!Number.isFinite(value) || value <= 0) return "未配置";
+      if (value % 60000 === 0) return `${value / 60000} 分钟`;
+      if (value % 1000 === 0) return `${value / 1000} 秒`;
+      return `${value} 毫秒`;
+    }
+
     function optionList(options, current) {
       return options.map((option) => (
         `<option value="${escapeHtml(option.value)}" ${selected(option.value, current)}>${escapeHtml(option.label)}</option>`
@@ -89,7 +97,7 @@
       `;
     }
 
-    function renderUsageRefreshSettings({ user, helperReady, usageSettings = {} } = {}) {
+    function renderUsageRefreshSettings({ user, helperReady, usageSettings = {}, scheduler = {} } = {}) {
       const settings = {
         usageRefreshMode: "helper",
         cloudUsageRefreshEnabled: false,
@@ -109,6 +117,13 @@
         mixed: "混合通道（查看各账号结果）",
       };
       const lastSource = sourceLabels[settings.lastUsageRefreshSource] || "还没有刷新记录";
+      const schedulerEnabled = scheduler.enabled !== false && settings.usageRefreshMode !== "manual";
+      const schedulerState = scheduler.running
+        ? "正在补刷新"
+        : schedulerEnabled ? "已开启" : "仅手动模式已暂停";
+      const schedulerDetail = schedulerEnabled
+        ? `每 ${formatInterval(scheduler.intervalMs || 5 * 60 * 1000)}扫描过期额度，每轮最多 ${Number(scheduler.batchSize || 2)} 个；当前待刷新 ${Number(scheduler.refreshableCount ?? scheduler.staleCount ?? 0)} 个。`
+        : `当前有 ${Number(scheduler.staleCount || 0)} 个账号额度过期或未刷新，只会在你点击刷新时执行。`;
       return `
         <div class="settings-section-title">额度刷新方式</div>
         <label class="setting-line">
@@ -124,6 +139,11 @@
           <strong>最近实际通道：${escapeHtml(lastSource)}</strong>
           <span>${settings.lastUsageRefreshAt ? `最近刷新于 ${escapeHtml(settings.lastUsageRefreshAt)}` : "刷新完成后会显示本次实际通过哪条网络通道执行。"}</span>
           <span>${helperReady ? "本机 Helper 当前在线。" : "本机 Helper 当前离线；只有已授权云端刷新时才能从网页继续检查额度。"}</span>
+        </div>
+        <div class="setting-box compact usage-refresh-status">
+          <strong>定时补刷新：${escapeHtml(schedulerState)}</strong>
+          <span>${escapeHtml(schedulerDetail)}</span>
+          <span>${scheduler.lastRunAt ? `最近调度于 ${escapeHtml(scheduler.lastRunAt)}${scheduler.lastSummary ? ` · ${escapeHtml(scheduler.lastSummary)}` : ""}` : "页面保持打开时会低频补刷过期额度，不写入逐账号审计噪音。"}</span>
         </div>
         <label class="setting-toggle">
           <span><strong>允许云端 Worker 刷新</strong><small>Worker 将在受限额度内解密该账号授权并请求用量接口；适用于无 Helper 场景。</small></span>

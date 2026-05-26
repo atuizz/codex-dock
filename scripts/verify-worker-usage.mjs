@@ -166,6 +166,7 @@ assert.equal(audits.at(-1).action, "usage-refresh-settings");
 
 const refreshed = await handleUsageRoutes(request("/api/accounts/account-1/usage/refresh-cloud", "POST", {
   autoFallback: true,
+  background: true,
   audit: false,
 }), env, user, "/api/accounts/account-1/usage/refresh-cloud", { writeAudit, fetchImpl });
 assert.equal(refreshed.status, 200);
@@ -173,6 +174,7 @@ const refreshedBody = await refreshed.json();
 assert.equal(refreshedBody.source, "auto-cloud-fallback");
 assert.equal(refreshedBody.usage.refresh_source, "auto-cloud-fallback");
 assert.equal(env.DB.snapshots[0].refresh_source, "auto-cloud-fallback");
+assert.equal(env.DB.snapshots[0].refresh_kind, "background");
 assert.match(upstreamAuthorization, /^Bearer /);
 assert.equal(audits.filter((item) => item.action === "usage-refresh").length, 0);
 

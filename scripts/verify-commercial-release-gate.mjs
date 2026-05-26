@@ -83,6 +83,7 @@ const releaseGates = [
       { label: "auto cloud fallback", pattern: /auto-cloud-fallback/ },
       { label: "cloud daily limit", pattern: /cloud_usage_daily_limit/ },
       { label: "audit noise suppression", pattern: /audit:\s*false/ },
+      { label: "background refresh kind", pattern: /refresh_kind.*"background"|background:\s*true/ },
       { label: "source persistence", pattern: /refresh_source/ },
     ],
   },
@@ -92,6 +93,7 @@ const releaseGates = [
     checks: [
       { label: "30 minute freshness window", pattern: /usageFreshWindowMs|USAGE_STALE_MS/ },
       { label: "background stale refresh", pattern: /refreshStaleUsageInBackground/ },
+      { label: "manual mode pauses scheduler", pattern: /usageRefreshMode === "manual"/ },
       { label: "silent batch refresh", pattern: /silent:\\s\*true,\s*\\s\*batch:\\s\*true,\s*\\s\*background:\\s\*true/ },
       { label: "stale usage does not hard-block candidates", pattern: /avoidLow5h/ },
     ],
@@ -256,6 +258,7 @@ const visualEvidence = [
   "artifacts/verification/account-cleanup-modal-production.png",
   "artifacts/verification/helper-release-card-production.png",
   "artifacts/verification/helper-portable-release-production.png",
+  "artifacts/verification/usage-refresh-scheduler-settings-local.png",
   "artifacts/verification/auto-switch-stage-production.png",
   "artifacts/verification/helper-stale-reconnect-production.png",
   "artifacts/verification/oauth-provider-error-production-result.json",

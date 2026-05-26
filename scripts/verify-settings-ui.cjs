@@ -61,10 +61,24 @@ const usageHtml = ui.renderUsageRefreshSettings({
     lastUsageRefreshSource: "auto-cloud-fallback",
     lastUsageRefreshAt: "2026-05-26T00:00:00Z",
   },
+  scheduler: {
+    enabled: true,
+    intervalMs: 300000,
+    batchSize: 2,
+    staleCount: 5,
+    refreshableCount: 3,
+    running: false,
+    lastRunAt: "2026-05-26T00:05:00Z",
+    lastSummary: "后台补刷新 2/2",
+  },
 });
 assert.match(usageHtml, /data-usage-refresh-setting="usageRefreshMode"/);
 assert.match(usageHtml, /value="auto" selected/);
 assert.match(usageHtml, /自动选择 \/ 云端回退/);
+assert.match(usageHtml, /定时补刷新：已开启/);
+assert.match(usageHtml, /每 5 分钟扫描过期额度/);
+assert.match(usageHtml, /当前待刷新 3 个/);
+assert.match(usageHtml, /后台补刷新 2\/2/);
 assert.match(usageHtml, /data-usage-refresh-setting="cloudUsageRefreshEnabled"[^>]+checked/);
 assert.match(usageHtml, /data-usage-refresh-setting="helperFallbackToCloud"[^>]+checked/);
 assert.match(usageHtml, /value="2" selected>2/);
@@ -73,9 +87,12 @@ assert.match(usageHtml, /value="3000" selected>3 秒/);
 const localUsageHtml = ui.renderUsageRefreshSettings({
   user: null,
   helperReady: true,
-  usageSettings: { usageRefreshMode: "helper" },
+  usageSettings: { usageRefreshMode: "manual" },
+  scheduler: { enabled: false, staleCount: 4 },
 });
 assert.match(localUsageHtml, /value="cloud"[^>]+disabled/);
+assert.match(localUsageHtml, /定时补刷新：仅手动模式已暂停/);
+assert.match(localUsageHtml, /当前有 4 个账号额度过期或未刷新/);
 
 const smartHtml = ui.renderSmartSwitchSettings({
   user: { email: "ops@example.com" },

@@ -291,7 +291,7 @@ export async function handleUsageRoutes(request, env, user, path, options = {}) 
     : "cloud-worker";
   try {
     const usage = await fetchCloudUsage(env, user, accountId, { source, fetchImpl: options.fetchImpl });
-    await storeSnapshot(env, user, accountId, usage, true, "", source, body.batch ? "batch" : "manual");
+    await storeSnapshot(env, user, accountId, usage, true, "", source, body.background ? "background" : body.batch ? "batch" : "manual");
     const recent = await saveUsageRefreshSettings(env, user, { lastUsageRefreshSource: source, lastUsageRefreshAt: nowIso() });
     if (writeAudit && body.audit !== false) {
       await writeAudit(env, user, {
@@ -305,7 +305,7 @@ export async function handleUsageRoutes(request, env, user, path, options = {}) 
   } catch (error) {
     const message = error instanceof ApiError ? error.message : "云端额度刷新失败";
     const failure = normalizeUsage({ status: "刷新失败", error: message, refresh_source: source }, "");
-    await storeSnapshot(env, user, accountId, failure, false, message, source, body.batch ? "batch" : "manual").catch(() => {});
+    await storeSnapshot(env, user, accountId, failure, false, message, source, body.background ? "background" : body.batch ? "batch" : "manual").catch(() => {});
     if (writeAudit && body.audit !== false) {
       await writeAudit(env, user, { accountId, action: "usage-refresh", result: "error", metadata: { source, error: message } });
     }

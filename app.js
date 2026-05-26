@@ -165,6 +165,8 @@ const state = {
   autoImportingLocalAuth: false,
   refreshingUsage: false,
   backgroundUsageRefreshRunning: false,
+  lastBackgroundUsageRefreshAt: "",
+  lastBackgroundUsageRefreshSummary: "",
   pendingImportItems: [],
   commandFiles: [],
   importMode: "oauth",
@@ -1443,12 +1445,13 @@ function cloudBackupEnabled() {
   return Boolean(state.user && syncMode() !== "local-only");
 }
 
-function canRefreshAccountUsage(account) {
+function canRefreshAccountUsage(account, options = {}) {
   const settings = state.usageRefreshSettings || defaultUsageRefreshSettings;
   const cloudAvailable = Boolean(state.user && account?.cloudId && settings.cloudUsageRefreshEnabled);
   if (settings.usageRefreshMode === "helper") return state.helperReady;
   if (settings.usageRefreshMode === "cloud") return cloudAvailable;
   if (settings.usageRefreshMode === "auto") return state.helperReady || Boolean(settings.helperFallbackToCloud && cloudAvailable);
+  if (options.background) return false;
   return state.helperReady || cloudAvailable;
 }
 
@@ -1483,11 +1486,34 @@ function accountUsageFresh(account, maxAgeMs = usageFreshWindowMs) {
   return usageFresh(accountUsage(account), maxAgeMs);
 }
 
-function accountUsageNeedsRefresh(account, maxAgeMs = usageFreshWindowMs) {
-  if (!canUseAccount(account) || !canRefreshAccountUsage(account)) return false;
+function accountUsageNeedsRefresh(account, maxAgeMs = usageFreshWindowMs, options = {}) {
+  if (!canUseAccount(account) || !canRefreshAccountUsage(account, options)) return false;
   const usage = accountUsage(account);
   if (usage.status === "刷新中") return false;
   return !usageFresh(usage, maxAgeMs);
+}
+
+function accountUsageStale(account, maxAgeMs = usageFreshWindowMs) {
+  if (!canUseAccount(account)) return false;
+  const usage = accountUsage(account);
+  if (usage.status === "刷新中") return false;
+  return !usageFresh(usage, maxAgeMs);
+}
+
+function usageRefreshSchedulerState() {
+  const settings = state.usageRefreshSettings || defaultUsageRefreshSettings;
+  const staleCount = state.accounts.filter((account) => accountUsageStale(account)).length;
+  const refreshableCount = state.accounts.filter((account) => accountUsageNeedsRefresh(account, usageFreshWindowMs, { background: true })).length;
+  return {
+    enabled: settings.usageRefreshMode !== "manual",
+    intervalMs: backgroundUsageRefreshIntervalMs,
+    batchSize: backgroundUsageRefreshBatchSize,
+    staleCount,
+    refreshableCount,
+    running: state.backgroundUsageRefreshRunning,
+    lastRunAt: state.lastBackgroundUsageRefreshAt,
+    lastSummary: state.lastBackgroundUsageRefreshSummary,
+  };
 }
 
 function readMigratedLocalStorage(currentKey, previousKey) {
@@ -2121,6 +2147,7 @@ function renderSettings() {
     user: state.user,
     helperReady: state.helperReady,
     usageSettings: state.usageRefreshSettings,
+    scheduler: usageRefreshSchedulerState(),
   });
   renderSmartSwitchSettings();
 }
@@ -2766,11 +2793,12 @@ async function refreshUsageThroughHelper(account, route, options = {}) {
         usage: normalized,
         source: route.source,
         batch: Boolean(options.batch),
+        background: Boolean(options.background),
         ok: Boolean(result.ok),
         error: result.ok ? "" : (result.error || "刷新失败"),
       },
     }).catch(() => {});
-    if (!options.batch) {
+    if (!options.batch && !options.background) {
       await api("/api/audit", {
         method: "POST",
         body: {
@@ -2788,7 +2816,12 @@ async function refreshUsageThroughHelper(account, route, options = {}) {
 async function refreshUsageThroughCloud(account, route, options = {}) {
   const result = await api(`/api/accounts/${encodeURIComponent(account.cloudId)}/usage/refresh-cloud`, {
     method: "POST",
-    body: { autoFallback: Boolean(route.autoFallback), batch: Boolean(options.batch), audit: !options.batch },
+    body: {
+      autoFallback: Boolean(route.autoFallback),
+      batch: Boolean(options.batch),
+      background: Boolean(options.background),
+      audit: !options.batch && !options.background,
+    },
   });
   return {
     ok: true,
@@ -2906,20 +2939,42 @@ async function refreshAllUsage() {
 async function refreshStaleUsageInBackground() {
   if (state.refreshingUsage || state.backgroundUsageRefreshRunning) return;
   if (document.hidden) return;
+  if ((state.usageRefreshSettings || defaultUsageRefreshSettings).usageRefreshMode === "manual") {
+    state.lastBackgroundUsageRefreshAt = new Date().toISOString();
+    state.lastBackgroundUsageRefreshSummary = "仅手动模式，后台补刷新已暂停。";
+    renderSettings();
+    return;
+  }
   const accounts = state.accounts
-    .filter((account) => accountUsageNeedsRefresh(account))
+    .filter((account) => accountUsageNeedsRefresh(account, usageFreshWindowMs, { background: true }))
     .slice(0, backgroundUsageRefreshBatchSize);
-  if (!accounts.length) return;
+  if (!accounts.length) {
+    state.lastBackgroundUsageRefreshAt = new Date().toISOString();
+    state.lastBackgroundUsageRefreshSummary = "没有需要自动补刷新的账号。";
+    renderSettings();
+    return;
+  }
   state.backgroundUsageRefreshRunning = true;
+  renderSettings();
+  const sources = {};
+  let ok = 0;
   try {
     const interval = Math.max(1000, Number(state.usageRefreshSettings.usageRefreshIntervalMs || 1500));
     for (let index = 0; index < accounts.length; index++) {
       if (state.refreshingUsage) break;
-      await refreshAccountUsage(accounts[index].id, { silent: true, batch: true, background: true });
+      const success = await refreshAccountUsage(accounts[index].id, { silent: true, batch: true, background: true });
+      const source = accounts[index].usage?.refresh_source || "";
+      if (success) ok++;
+      if (source) sources[source] = (sources[source] || 0) + 1;
       if (index + 1 < accounts.length) await wait(interval);
     }
+    const lastSource = Object.keys(sources).length === 1 ? Object.keys(sources)[0] : (Object.keys(sources).length ? "mixed" : "");
+    if (lastSource) await noteUsageRefreshSource(lastSource);
+    state.lastBackgroundUsageRefreshAt = new Date().toISOString();
+    state.lastBackgroundUsageRefreshSummary = `后台补刷新 ${ok}/${accounts.length}`;
   } finally {
     state.backgroundUsageRefreshRunning = false;
+    renderSettings();
   }
 }
 

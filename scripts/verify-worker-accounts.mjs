@@ -245,6 +245,43 @@ class RouteDB {
   }
 }
 
+class UsageRouteDB {
+  constructor(row) {
+    this.row = row;
+    this.snapshots = [];
+    this.updatedPlan = "";
+  }
+
+  prepare(sql) {
+    if (/SELECT \* FROM accounts/.test(sql)) {
+      return {
+        bind: (accountId, userId) => ({
+          first: async () => (this.row.id === accountId && this.row.user_id === userId ? this.row : null),
+        }),
+      };
+    }
+    if (/INSERT INTO usage_snapshots/.test(sql)) {
+      return {
+        bind: (...args) => ({
+          run: async () => {
+            this.snapshots.push(args);
+          },
+        }),
+      };
+    }
+    if (/UPDATE accounts SET plan_type/.test(sql)) {
+      return {
+        bind: (...args) => ({
+          run: async () => {
+            this.updatedPlan = args[0] || "";
+          },
+        }),
+      };
+    }
+    throw new Error(`unexpected usage SQL: ${sql}`);
+  }
+}
+
 function post(path, body) {
   return new Request(`https://codex.example.test${path}`, {
     method: "POST",
@@ -269,6 +306,18 @@ const rtRouteRow = {
   usage_json: JSON.stringify(viable.usage),
   encrypted_auth_json: await encryptSecret(env, { session }),
 };
+const usageRouteDb = new UsageRouteDB(rtRouteRow);
+env.DB = usageRouteDb;
+const usagePost = await handleAccounts(post("/api/accounts/a1/usage", {
+  usage: { plan_type: "plus", refreshed_at: new Date().toISOString(), five_hour: { remaining_percent: 88 } },
+  source: "helper",
+  batch: true,
+  background: true,
+  ok: true,
+}), env, { id: "user-1" }, "/api/accounts/a1/usage", { writeAudit });
+assert.equal(usagePost.status, 200);
+assert.equal(usageRouteDb.snapshots[0][7], "background");
+
 env.DB = new RouteDB([rtRouteRow]);
 const manualPayload = await handleAccounts(post("/api/accounts/a1/switch-payload", {
   deviceKey: "desktop-1",
