@@ -99,7 +99,7 @@ const deviceHtml = ui.renderDevice({
     version: "0.4.2",
     build_date: "2026-05-26",
     bytes: 164352,
-    sha256: "D516CA84CF3FCAA4F09A3F4C806BD1685CF719497CE4D7816529BA6AC41743EB",
+    sha256: "099D63B12FBCD7990FA6A8F5EB0DFDCB9F6B06EA558E0CDFF36098C217961AAD",
   },
   helperBase: "http://127.0.0.1:18766",
   helperAuthorized: true,
@@ -128,7 +128,7 @@ assert.match(deviceHtml, /data-helper-action="export-diagnostics"/);
 assert.match(deviceHtml, /Helper 分发/);
 assert.match(deviceHtml, /下载最新版/);
 assert.match(deviceHtml, /data-helper-action="copy-helper-sha"/);
-assert.match(deviceHtml, /D516CA84CF3F/);
+assert.match(deviceHtml, /099D63B12FBC/);
 assert.match(deviceHtml, /自动切换阶段/);
 assert.match(deviceHtml, /持续监控/);
 assert.match(deviceHtml, /在线/);
