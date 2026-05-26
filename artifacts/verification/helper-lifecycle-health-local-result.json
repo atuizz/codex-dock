@@ -1,0 +1,44 @@
+{
+  "ok": true,
+  "mode": "native-helper",
+  "version": "0.4.5",
+  "build_date": "2026-05-26",
+  "port": 18766,
+  "tray": {
+    "visible": true,
+    "last_reason": "托盘心跳",
+    "last_error": "",
+    "text": "Codex Dock Helper - 运行中：http://127.0.0.1:18766/"
+  },
+  "lifecycle": {
+    "main_window_visible": true,
+    "show_in_taskbar": true,
+    "window_state": "Normal",
+    "application_closing": false,
+    "log_view_needs_reload": false,
+    "recent_log_count": 400,
+    "helper_log_exists": true,
+    "helper_log_bytes": 290482,
+    "operation_progress_visible": false
+  },
+  "auto_switch": {
+    "enabled": true,
+    "authorized": true,
+    "last_stage": "normal",
+    "last_stage_label": "检查正常",
+    "failure_count": 0,
+    "failure_backoff_until": "",
+    "failure_pause_until": "",
+    "failure_pause_reason": "",
+    "only_when_idle": true,
+    "effective_poll_seconds": 15
+  },
+  "codex_status": {
+    "state": "active",
+    "label": "任务中",
+    "source": "logs_2.sqlite",
+    "safe_to_switch": false,
+    "pending_switch_reason": "",
+    "checked_at": "2026-05-26T11:15:21.7431453Z"
+  }
+}

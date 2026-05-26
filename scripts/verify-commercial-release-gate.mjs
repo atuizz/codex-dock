@@ -123,7 +123,7 @@ const releaseGates = [
       { label: "failure backoff", pattern: /AutoSwitchFailureBackoff/ },
       { label: "failure pause", pattern: /AutoSwitchFailurePauseThreshold/ },
       { label: "update check", pattern: /\/api\/update\/check/ },
-      { label: "current Helper version", pattern: /0\.4\.4/ },
+      { label: "current Helper version", pattern: /0\.4\.5/ },
       { label: "portable release package", pattern: /Compress-Archive|CodexDockHelper-release\\\.json|portable\\\.zip/i },
     ],
   },
@@ -245,7 +245,7 @@ await expectText(".github/workflows/cloudflare-deploy.yml", [
 await expectText("docs/release-and-verification.md", [
   { label: "commercial quality gates", pattern: /## Commercial Quality Gates/ },
   { label: "current verification evidence", pattern: /## Current Verification Evidence/ },
-  { label: "latest Helper release", pattern: /Helper `0\.4\.4`/ },
+  { label: "latest Helper release", pattern: /Helper `0\.4\.5`/ },
   { label: "production smoke evidence", pattern: /npm run smoke:production/ },
 ]);
 
@@ -269,6 +269,8 @@ const visualEvidence = [
   "artifacts/verification/usage-refresh-scheduler-settings-local.png",
   "artifacts/verification/usage-refresh-scheduler-settings-production.png",
   "artifacts/verification/manual-switch-risk-local.png",
+  "artifacts/verification/helper-lifecycle-health-local-result.json",
+  "artifacts/verification/helper-lifecycle-self-test-local-result.json",
   "artifacts/verification/auto-switch-stage-production.png",
   "artifacts/verification/helper-stale-reconnect-production.png",
   "artifacts/verification/oauth-provider-error-production-result.json",

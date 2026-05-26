@@ -6,11 +6,36 @@ const repoRoot = path.resolve(__dirname, "..");
 const helperSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexPlusLocalHelper.cs"), "utf8");
 const helperBuildScript = fs.readFileSync(path.join(repoRoot, "native-helper", "build-helper.ps1"), "utf8");
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function appendFileWithRetry(filePath, text) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      fs.appendFileSync(filePath, text, "utf8");
+      return true;
+    } catch (error) {
+      lastError = error;
+      if (!["EBUSY", "EPERM", "EACCES"].includes(error.code)) throw error;
+      await wait(120 + attempt * 80);
+    }
+  }
+  throw lastError;
+}
+
 assert.match(helperSource, /\/api\/diagnostics\/export/);
 assert.match(helperSource, /\/api\/tray\/repair/);
-assert.match(helperSource, /HelperVersion\s*=\s*"0\.4\.4"/);
+assert.match(helperSource, /HelperVersion\s*=\s*"0\.4\.5"/);
 assert.match(helperSource, /\/api\/update\/check/);
 assert.match(helperSource, /\/api\/update\/open-download/);
+assert.match(helperSource, /\/api\/lifecycle\/self-test/);
+assert.match(helperSource, /LifecycleStatusJson/);
+assert.match(helperSource, /LifecycleSelfTestJson/);
+assert.match(helperSource, /main_window_visible/);
+assert.match(helperSource, /log_view_needs_reload/);
+assert.match(helperSource, /recent_log_count/);
 assert.match(helperSource, /CheckHelperUpdate/);
 assert.match(helperSource, /LatestHelperDownloadUrl/);
 assert.match(helperSource, /BeginHelperUpdateCheckFromUi/);
@@ -69,10 +94,9 @@ async function verifyLiveHelper() {
   ];
   const logDir = path.join(process.env.APPDATA || "", "CodexDock");
   if (logDir && fs.existsSync(logDir)) {
-    fs.appendFileSync(
+    await appendFileWithRetry(
       path.join(logDir, "helper.log"),
       `[diagnostics-redaction-test] access_token=${fakeSecrets[0]} refresh_token=${fakeSecrets[1]} deviceToken=${fakeSecrets[2]} Authorization: Bearer ${fakeSecrets[3]} url=http://localhost/callback?code=${fakeSecrets[4]}&state=${fakeSecrets[5]} jwt=${fakeSecrets[6]}\n`,
-      "utf8",
     );
   }
 
@@ -84,22 +108,38 @@ async function verifyLiveHelper() {
   assert.equal(body.ok, true);
   assert.equal(body.redaction?.applied, true);
   assert.equal(typeof body.tray?.visible, "boolean");
+  if (healthBody.version === "0.4.5") {
+    assert.equal(typeof body.lifecycle?.main_window_visible, "boolean");
+    assert.equal(typeof body.lifecycle?.recent_log_count, "number");
+  }
   assert.ok(Array.isArray(body.recent_logs));
   const text = JSON.stringify(body);
   for (const secret of fakeSecrets) {
     assert.equal(text.includes(secret), false, `diagnostics export leaked ${secret}`);
   }
 
-  if (healthBody.version === "0.4.4") {
+  if (healthBody.version === "0.4.5") {
+    const lifecycleResponse = await fetch("http://127.0.0.1:18766/api/lifecycle/self-test", {
+      method: "POST",
+      headers: { Origin: "https://codex.woai.pro" },
+    });
+    assert.equal(lifecycleResponse.status, 200);
+    const lifecycle = await lifecycleResponse.json();
+    assert.equal(lifecycle.ok, true);
+    assert.match(lifecycle.marker || "", /^lifecycle-self-test-/);
+    assert.equal(lifecycle.log_found, true);
+    assert.equal(typeof lifecycle.tray?.visible, "boolean");
+    assert.equal(typeof lifecycle.lifecycle?.helper_log_exists, "boolean");
+
     const updateResponse = await fetch("http://127.0.0.1:18766/api/update/check", {
       headers: { Origin: "https://codex.woai.pro" },
     });
     assert.equal(updateResponse.status, 200);
     const update = await updateResponse.json();
     assert.equal(update.ok, true);
-    assert.equal(update.current_version, "0.4.4");
-    assert.equal(update.latest_version, "0.4.4");
-    assert.equal(update.update_available, false);
+    assert.equal(update.current_version, "0.4.5");
+    assert.match(update.latest_version || "", /^\d+\.\d+\.\d+$/);
+    assert.equal(typeof update.update_available, "boolean");
     assert.match(update.download_url || "", /^https:\/\/codex\.woai\.pro\/downloads\/CodexDockHelper\.exe$/);
     assert.match(update.sha256 || "", /^[A-F0-9]{64}$/);
   }

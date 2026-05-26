@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "marker": "lifecycle-self-test-20260526111523353",
+  "log_found": true,
+  "tray": {
+    "visible": true,
+    "last_confirmed_at": "2026-05-26T11:15:23.3653142Z",
+    "last_reason": "生命周期自检",
+    "last_error": "",
+    "text": "Codex Dock Helper - 运行中：http://127.0.0.1:18766/"
+  },
+  "lifecycle": {
+    "main_window_visible": true,
+    "show_in_taskbar": true,
+    "window_state": "Normal",
+    "application_closing": false,
+    "log_view_needs_reload": false,
+    "recent_log_count": 400,
+    "helper_log_exists": true,
+    "helper_log_bytes": 291065,
+    "operation_progress_visible": false
+  }
+}

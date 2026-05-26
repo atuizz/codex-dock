@@ -33,7 +33,7 @@ const helperHtml = ui.renderHelperState({
   helper: { version: "0.3.1" },
   minimumHelperVersion: "0.4.2",
   helperRelease: {
-    version: "0.4.4",
+    version: "0.4.5",
     build_date: "2026-05-26",
     sha256: "1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B",
   },
@@ -44,7 +44,7 @@ const helperHtml = ui.renderHelperState({
   },
 });
 assert.match(helperHtml, /Codex：空闲/);
-assert.match(helperHtml, /最新发布：v0\.4\.4 · 2026-05-26/);
+assert.match(helperHtml, /最新发布：v0\.4\.5 · 2026-05-26/);
 assert.match(helperHtml, /1EC50E1E2006/);
 assert.match(helperHtml, /5H 剩余 0%/);
 assert.match(helperHtml, /版本过旧/);

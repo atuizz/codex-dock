@@ -1,14 +1,26 @@
 {
-  "title": "Codex Dock",
-  "staticVersion": "57707afa2760",
+  "ok": true,
+  "verified_at": "2026-05-26T11:18:45.4189747Z",
+  "asset_version": "9855935fb6d6",
   "helper": {
     "file": "downloads/CodexDockHelper.exe",
-    "version": "0.4.4",
+    "version": "0.4.5",
     "build_date": "2026-05-26",
-    "bytes": 174592,
-    "sha256": "1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B"
+    "bytes": 177152,
+    "sha256": "8BD4576C05126F5BBC949244214A77BB7F29518511BCC9A1BFB2AC28CDEE96E2",
+    "release_manifest": "downloads/CodexDockHelper-release.json",
+    "package": {
+      "file": "downloads/CodexDockHelper-0.4.5-portable.zip",
+      "format": "zip",
+      "bytes": 190457,
+      "sha256": "DEF26412BAAAA1FC13E6C796E403063BE404713C9F497A97CFDF907C411B4D5A"
+    }
   },
-  "hasUpdateCopy": true,
-  "hasLocalCheckAction": true,
-  "hasTokenText": false
+  "release_version": "0.4.5",
+  "release_package": {
+    "file": "downloads/CodexDockHelper-0.4.5-portable.zip",
+    "format": "zip",
+    "bytes": 190457,
+    "sha256": "DEF26412BAAAA1FC13E6C796E403063BE404713C9F497A97CFDF907C411B4D5A"
+  }
 }

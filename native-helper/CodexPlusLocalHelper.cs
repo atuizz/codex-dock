@@ -59,7 +59,7 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.4";
+        private const string HelperVersion = "0.4.5";
         private const string HelperBuildDate = "2026-05-26";
         private const string HelperDownloadDefaultFile = "downloads/CodexDockHelper.exe";
         private const int HelperLogMaxBytes = 1024 * 1024;
@@ -1369,7 +1369,7 @@ namespace CodexPlusLocalHelper
 
             if (request.HttpMethod == "GET" && path == "/api/health")
             {
-                SendJson(context.Response, 200, "{\"ok\":true,\"mode\":\"native-helper\",\"version\":\"" + JsonEscape(HelperVersion) + "\",\"build_date\":\"" + JsonEscape(HelperBuildDate) + "\",\"port\":" + _port + ",\"cloud_console_url\":\"" + JsonEscape(CloudConsoleUrl) + "\",\"tray\":" + TrayStatusJson() + ",\"auto_switch\":" + AutoSwitchStatusJson() + ",\"codex_proxy\":" + CodexProxyStatusJson() + ",\"codex_status\":" + CodexStatusJson() + "}");
+                SendJson(context.Response, 200, "{\"ok\":true,\"mode\":\"native-helper\",\"version\":\"" + JsonEscape(HelperVersion) + "\",\"build_date\":\"" + JsonEscape(HelperBuildDate) + "\",\"port\":" + _port + ",\"cloud_console_url\":\"" + JsonEscape(CloudConsoleUrl) + "\",\"tray\":" + TrayStatusJson() + ",\"lifecycle\":" + LifecycleStatusJson() + ",\"auto_switch\":" + AutoSwitchStatusJson() + ",\"codex_proxy\":" + CodexProxyStatusJson() + ",\"codex_status\":" + CodexStatusJson() + "}");
                 return true;
             }
 
@@ -1417,6 +1417,17 @@ namespace CodexPlusLocalHelper
                     return true;
                 }
                 SendJson(context.Response, 200, DiagnosticsExportJson());
+                return true;
+            }
+
+            if (request.HttpMethod == "POST" && path == "/api/lifecycle/self-test")
+            {
+                if (!IsAllowedOrigin(request))
+                {
+                    SendJson(context.Response, 403, "{\"ok\":false,\"error\":\"来源未授权\"}");
+                    return true;
+                }
+                SendJson(context.Response, 200, LifecycleSelfTestJson());
                 return true;
             }
 
@@ -2270,6 +2281,77 @@ namespace CodexPlusLocalHelper
                 + "}";
         }
 
+        private string LifecycleStatusJson()
+        {
+            var recentCount = 0;
+            lock (_recentLogLock)
+            {
+                recentCount = _recentLogLines.Count;
+            }
+
+            var progressVisible = false;
+            lock (_operationProgressLock)
+            {
+                progressVisible = _operationProgressForm != null && !_operationProgressForm.IsDisposed && _operationProgressForm.Visible;
+            }
+
+            var helperLogExists = false;
+            long helperLogBytes = 0;
+            try
+            {
+                var file = new FileInfo(HelperLogPath());
+                helperLogExists = file.Exists;
+                helperLogBytes = helperLogExists ? file.Length : 0;
+            }
+            catch { }
+
+            return "{"
+                + "\"main_window_visible\":" + (Visible ? "true" : "false") + ","
+                + "\"show_in_taskbar\":" + (ShowInTaskbar ? "true" : "false") + ","
+                + "\"window_state\":\"" + JsonEscape(WindowState.ToString()) + "\","
+                + "\"application_closing\":" + (_applicationClosing ? "true" : "false") + ","
+                + "\"log_view_needs_reload\":" + (_logViewNeedsReload ? "true" : "false") + ","
+                + "\"recent_log_count\":" + recentCount.ToString(CultureInfo.InvariantCulture) + ","
+                + "\"helper_log_exists\":" + (helperLogExists ? "true" : "false") + ","
+                + "\"helper_log_bytes\":" + helperLogBytes.ToString(CultureInfo.InvariantCulture) + ","
+                + "\"operation_progress_visible\":" + (progressVisible ? "true" : "false")
+                + "}";
+        }
+
+        private string LifecycleSelfTestJson()
+        {
+            var marker = "lifecycle-self-test-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff", CultureInfo.InvariantCulture);
+            WriteLifecycleLog("自检开始; marker=" + marker + "; visible=" + Visible + "; handle=" + IsHandleCreated + "; disposing=" + Disposing);
+            Log("生命周期自检 " + marker + " 中文日志 URL http://localhost/self-test?code=fake-code&state=fake-state");
+            LoadRecentLogHistory();
+            RepairTrayIconFromAnyThread("生命周期自检", true);
+            RunOnUi(delegate
+            {
+                RestoreRecentLogView("生命周期自检");
+                RefreshDashboardUi();
+            });
+            Thread.Sleep(160);
+
+            var logFound = false;
+            try
+            {
+                logFound = File.ReadAllText(HelperLogPath(), Encoding.UTF8).IndexOf(marker, StringComparison.Ordinal) >= 0;
+            }
+            catch (Exception ex)
+            {
+                WriteLifecycleLog("自检读取日志失败; marker=" + marker + "; " + ex.GetType().Name + ": " + ShortNonEmpty(ex.Message, 180));
+            }
+
+            WriteLifecycleLog("自检完成; marker=" + marker + "; log_found=" + logFound);
+            return "{"
+                + "\"ok\":" + (logFound ? "true" : "false") + ","
+                + "\"marker\":\"" + JsonEscape(marker) + "\","
+                + "\"log_found\":" + (logFound ? "true" : "false") + ","
+                + "\"tray\":" + TrayStatusJson() + ","
+                + "\"lifecycle\":" + LifecycleStatusJson()
+                + "}";
+        }
+
         private string DiagnosticsExportJson()
         {
             var lines = ReadHelperLogTail(HelperUiLogLineLimit);
@@ -2284,6 +2366,7 @@ namespace CodexPlusLocalHelper
             sb.Append("\"cloud_console_url\":\"").Append(JsonEscape(CloudConsoleUrl)).Append("\",");
             sb.Append("\"helper_log_exists\":").Append(File.Exists(HelperLogPath()) ? "true" : "false").Append(",");
             sb.Append("\"tray\":").Append(TrayStatusJson()).Append(",");
+            sb.Append("\"lifecycle\":").Append(LifecycleStatusJson()).Append(",");
             sb.Append("\"auto_switch\":").Append(RedactDiagnosticText(AutoSwitchStatusJson())).Append(",");
             sb.Append("\"codex_proxy\":").Append(RedactDiagnosticText(CodexProxyStatusJson())).Append(",");
             sb.Append("\"codex_status\":").Append(RedactDiagnosticText(CodexStatusJson())).Append(",");

@@ -1,13 +1,13 @@
 {
   "ok": true,
-  "current_version": "0.4.4",
-  "latest_version": "0.4.4",
+  "current_version": "0.4.5",
+  "latest_version": "0.4.5",
   "latest_build_date": "2026-05-26",
-  "asset_version": "57707afa2760",
+  "asset_version": "9855935fb6d6",
   "update_available": false,
   "file": "downloads/CodexDockHelper.exe",
   "download_url": "https://codex.woai.pro/downloads/CodexDockHelper.exe",
-  "sha256": "1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B",
-  "bytes": 174592,
-  "checked_at": "2026-05-26T02:01:15.2004569Z"
+  "sha256": "8BD4576C05126F5BBC949244214A77BB7F29518511BCC9A1BFB2AC28CDEE96E2",
+  "bytes": 177152,
+  "checked_at": "2026-05-26T11:18:31.0550819Z"
 }
