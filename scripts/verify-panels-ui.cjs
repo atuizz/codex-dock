@@ -61,6 +61,26 @@ assert.equal(ui.autoSwitchStage({
   helperAuthorized: true,
   codex: { safe_to_switch: true },
 }).key, "failed");
+const backoffStage = ui.autoSwitchStage({
+  helperReady: true,
+  helper: {
+    version: "0.4.2",
+    auto_switch: {
+      enabled: true,
+      last_stage: "failure-backoff",
+      last_stage_label: "失败退避",
+      last_failure_stage: "no-candidate",
+      last_failure_detail: "没有可用 RT 账号",
+      failure_backoff_until: "2026-05-26T00:10:00.000Z",
+    },
+  },
+  helperAuthorized: true,
+  codex: { safe_to_switch: true },
+});
+assert.equal(backoffStage.key, "failure_backoff");
+assert.match(backoffStage.result, /没有可用 RT 账号/);
+assert.match(ui.renderAutoSwitchStage(backoffStage), /失败退避中/);
+assert.match(ui.renderAutoSwitchStage(backoffStage), /当前阶段/);
 
 const emptyAudit = ui.renderAudit([]);
 assert.match(emptyAudit, /还没有云端运行记录/);

@@ -75,9 +75,15 @@
       const version = helper.version || "";
       const outdated = helperReady && (!version || compareVersion(version, minimumHelperVersion) < 0);
       const pendingReason = meaningfulText(codex.pending_switch_reason);
+      const stageKey = meaningfulText(autoSwitch.last_stage || autoSwitch.lastStage);
+      const stageLabel = meaningfulText(autoSwitch.last_stage_label || autoSwitch.lastStageLabel);
+      const failureStage = meaningfulText(autoSwitch.last_failure_stage || autoSwitch.lastFailureStage);
+      const failureDetail = meaningfulText(autoSwitch.last_failure_detail || autoSwitch.lastFailureDetail);
+      const backoffUntil = autoSwitch.failure_backoff_until || autoSwitch.failureBackoffUntil || "";
       const lastResult = meaningfulText(autoSwitch.last_result || autoSwitch.lastResult);
       const lastReason = meaningfulText(autoSwitch.last_reason || autoSwitch.lastReason);
-      const resultText = meaningfulText([lastReason, lastResult].filter(Boolean).join("；"));
+      const backoffText = backoffUntil ? `退避至 ${formatTime(backoffUntil)}` : "";
+      const resultText = meaningfulText([lastReason, lastResult, failureDetail ? `失败详情：${failureDetail}` : "", backoffText].filter(Boolean).join("；"));
       const resultProbe = resultText.toLowerCase();
       const sourceLabel = helperReady ? codexStatusSourceLabel(codex) : "未连接";
       const taskEvent = meaningfulText(codex.last_task_event) || meaningfulText(codex.detail) || meaningfulText(codex.label);
@@ -95,6 +101,7 @@
         trigger,
         evidence,
         result: resultText || "暂无执行结果",
+        stage: stageLabel || stageKey || "监控中",
         next: "保持 Helper 在线；触发后会先保护当前任务。",
         lastSeen,
       };
@@ -145,6 +152,18 @@
           next: "在智能切换设置中开启后台自动切换。",
         };
       }
+      if (stageKey === "failure-backoff" || backoffUntil) {
+        return {
+          ...base,
+          className: "warn",
+          key: "failure_backoff",
+          title: "失败退避中",
+          summary: "上一轮自动切换未完成，Helper 已暂停重复触发，避免循环刷屏和审计噪音。",
+          result: resultText || "等待退避结束",
+          stage: stageLabel || "失败退避",
+          next: "等待退避结束；同时检查候选账号、RT 状态和额度刷新来源。",
+        };
+      }
       if (pendingReason && codex.safe_to_switch === false) {
         return {
           ...base,
@@ -187,7 +206,7 @@
           next: "导出诊断并检查账号 RT、设备授权、auth 写入权限和本机 Codex 启动状态。",
         };
       }
-      if (hasAnyText(resultProbe, [/无可用候选|no-candidate|候选账号/i])) {
+      if (failureStage === "no-candidate" || hasAnyText(resultProbe, [/无可用候选|no-candidate|候选账号/i])) {
         return {
           ...base,
           className: "bad",
@@ -249,9 +268,11 @@
 
     function renderAutoSwitchStage(stage = {}) {
       const rows = [
+        ["当前阶段", stage.stage || stage.title || "状态确认中"],
         ["触发", stage.trigger || "暂无触发"],
         ["边界证据", stage.evidence || "暂无证据"],
         ["最近结果", stage.result || "暂无执行结果"],
+        ["最近检查", stage.lastSeen ? formatTime(stage.lastSeen) : "暂无记录"],
         ["下一步", stage.next || "继续观察"],
       ];
       return `
