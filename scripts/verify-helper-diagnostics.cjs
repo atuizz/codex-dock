@@ -35,7 +35,7 @@ async function appendFileWithRetry(filePath, text) {
 
 assert.match(helperSource, /\/api\/diagnostics\/export/);
 assert.match(helperSource, /\/api\/tray\/repair/);
-assert.match(helperSource, /HelperVersion\s*=\s*"0\.4\.6"/);
+assert.match(helperSource, /HelperVersion\s*=\s*"0\.4\.7"/);
 assert.match(helperSource, /\/api\/update\/check/);
 assert.match(helperSource, /\/api\/update\/open-download/);
 assert.match(helperSource, /\/api\/lifecycle\/self-test/);
@@ -70,6 +70,12 @@ assert.match(helperSource, /failure_pause_until/);
 assert.match(helperSource, /failure_pause_reason/);
 assert.match(helperSource, /SetAutoSwitchStage\("failure-paused", "自动暂停"\)/);
 assert.match(helperSource, /AutoSwitchFailureStageLabel/);
+assert.match(helperSource, /PendingSwitchReason/);
+assert.match(helperSource, /PendingSwitchAuthFingerprint/);
+assert.match(helperSource, /RestorePersistedAutoSwitchPendingState/);
+assert.match(helperSource, /PersistAutoSwitchPending/);
+assert.match(helperSource, /ClearPersistedAutoSwitchPending/);
+assert.match(helperSource, /pending_revalidation/);
 assert.match(helperSource, /internal sealed class AutoSwitchConfig/);
 assert.match(helperSource, /public AutoSwitchConfig Clamp\(\)/);
 assert.match(helperSource, /internal sealed class AuthWriteResult/);
@@ -153,7 +159,7 @@ async function verifyLiveHelper() {
   assert.equal(body.ok, true);
   assert.equal(body.redaction?.applied, true);
   assert.equal(typeof body.tray?.visible, "boolean");
-  if (healthBody.version === "0.4.6") {
+  if (healthBody.version === "0.4.7") {
     assert.equal(typeof body.lifecycle?.main_window_visible, "boolean");
     assert.equal(typeof body.lifecycle?.recent_log_count, "number");
   }
@@ -163,7 +169,7 @@ async function verifyLiveHelper() {
     assert.equal(text.includes(secret), false, `diagnostics export leaked ${secret}`);
   }
 
-  if (healthBody.version === "0.4.6") {
+  if (healthBody.version === "0.4.7") {
     const lifecycleResponse = await fetch("http://127.0.0.1:18766/api/lifecycle/self-test", {
       method: "POST",
       headers: { Origin: "https://codex.woai.pro" },
@@ -185,7 +191,7 @@ async function verifyLiveHelper() {
     assert.equal(updateResponse.status, 200);
     const update = await updateResponse.json();
     assert.equal(update.ok, true);
-    assert.equal(update.current_version, "0.4.6");
+    assert.equal(update.current_version, "0.4.7");
     assert.match(update.latest_version || "", /^\d+\.\d+\.\d+$/);
     assert.equal(typeof update.update_available, "boolean");
     assert.match(update.download_url || "", /^https:\/\/codex\.woai\.pro\/downloads\/CodexDockHelper\.exe$/);

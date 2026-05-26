@@ -59,8 +59,8 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.6";
-        private const string HelperBuildDate = "2026-05-26";
+        private const string HelperVersion = "0.4.7";
+        private const string HelperBuildDate = "2026-05-27";
         private const string HelperDownloadDefaultFile = "downloads/CodexDockHelper.exe";
         private const int HelperLogMaxBytes = 1024 * 1024;
         private const int HelperLogBackups = 5;
@@ -195,6 +195,7 @@ namespace CodexPlusLocalHelper
         {
             _root = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             _autoSwitchConfig = LoadAutoSwitchConfig();
+            RestorePersistedAutoSwitchPendingState();
 
             _appIcon = CreateAppIcon();
             _logRegularFont = new Font("Consolas", 9.5F, FontStyle.Regular);
@@ -2368,6 +2369,11 @@ namespace CodexPlusLocalHelper
                     CloudLastSyncAt = MatchJsonString(raw, "cloudLastSyncAt"),
                     LastSwitchAt = MatchJsonString(raw, "lastSwitchAt"),
                     LastSwitchLabel = MatchJsonString(raw, "lastSwitchLabel"),
+                    PendingSwitchReason = MatchJsonString(raw, "pendingSwitchReason"),
+                    PendingSwitchType = MatchJsonString(raw, "pendingSwitchType"),
+                    PendingSwitchSource = MatchJsonString(raw, "pendingSwitchSource"),
+                    PendingSwitchAt = MatchJsonString(raw, "pendingSwitchAt"),
+                    PendingSwitchAuthFingerprint = MatchJsonString(raw, "pendingSwitchAuthFingerprint"),
                     FiveHourThreshold = MatchJsonInt(raw, "fiveHourThreshold", 5),
                     OneWeekThreshold = MatchJsonInt(raw, "oneWeekThreshold", 5),
                     PollSeconds = MatchJsonInt(raw, "pollSeconds", 15),
@@ -2398,6 +2404,11 @@ namespace CodexPlusLocalHelper
                 + "\"cloudLastSyncAt\":\"" + JsonEscape(config.CloudLastSyncAt) + "\","
                 + "\"lastSwitchAt\":\"" + JsonEscape(config.LastSwitchAt) + "\","
                 + "\"lastSwitchLabel\":\"" + JsonEscape(config.LastSwitchLabel) + "\","
+                + "\"pendingSwitchReason\":\"" + JsonEscape(config.PendingSwitchReason) + "\","
+                + "\"pendingSwitchType\":\"" + JsonEscape(config.PendingSwitchType) + "\","
+                + "\"pendingSwitchSource\":\"" + JsonEscape(config.PendingSwitchSource) + "\","
+                + "\"pendingSwitchAt\":\"" + JsonEscape(config.PendingSwitchAt) + "\","
+                + "\"pendingSwitchAuthFingerprint\":\"" + JsonEscape(config.PendingSwitchAuthFingerprint) + "\","
                 + "\"fiveHourThreshold\":" + config.FiveHourThreshold + ","
                 + "\"oneWeekThreshold\":" + config.OneWeekThreshold + ","
                 + "\"pollSeconds\":" + config.PollSeconds + ","
@@ -2425,6 +2436,11 @@ namespace CodexPlusLocalHelper
                 + "\"last_switch\":\"" + JsonEscape(_lastAutoSwitchAt == DateTime.MinValue ? config.LastSwitchAt : _lastAutoSwitchAt.ToString("o")) + "\","
                 + "\"last_switch_label\":\"" + JsonEscape(config.LastSwitchLabel) + "\","
                 + "\"last_reason\":\"" + JsonEscape(_lastAutoSwitchReason) + "\","
+                + "\"pending_reason\":\"" + JsonEscape(config.PendingSwitchReason) + "\","
+                + "\"pending_type\":\"" + JsonEscape(config.PendingSwitchType) + "\","
+                + "\"pending_source\":\"" + JsonEscape(config.PendingSwitchSource) + "\","
+                + "\"pending_since\":\"" + JsonEscape(config.PendingSwitchAt) + "\","
+                + "\"pending_revalidation\":" + (!string.IsNullOrEmpty(config.PendingSwitchReason) ? "true" : "false") + ","
                 + "\"last_result\":\"" + JsonEscape(_lastAutoSwitchResult) + "\","
                 + "\"last_stage\":\"" + JsonEscape(_lastAutoSwitchStage) + "\","
                 + "\"last_stage_label\":\"" + JsonEscape(_lastAutoSwitchStageLabel) + "\","
@@ -3714,6 +3730,8 @@ namespace CodexPlusLocalHelper
             var authPath = CurrentAuthPath();
             if (!File.Exists(authPath))
             {
+                ClearPersistedAutoSwitchPending();
+                _lastAutoSwitchReason = "";
                 SetAutoSwitchStage("missing-auth", "缺少 auth");
                 SetAutoSwitchResult("未找到 auth.json", "missing-auth");
                 return;
@@ -3765,6 +3783,16 @@ namespace CodexPlusLocalHelper
             }
             var currentAccountId = MatchJsonString(authJson, "account_id");
             var currentEmail = EmailFromAuthJson(authJson);
+            if (string.IsNullOrEmpty(trigger))
+            {
+                _lastAutoSwitchReason = "";
+                ClearPersistedAutoSwitchPending();
+            }
+            else
+            {
+                _lastAutoSwitchReason = trigger;
+                PersistAutoSwitchPending(trigger, triggerType, triggerSource, AuthFingerprint(authJson), now);
+            }
             PostHelperJson(config, "/api/helper/auto-switch/current-usage", "{"
                 + "\"deviceKey\":\"" + JsonEscape(config.DeviceKey) + "\","
                 + "\"currentAccountId\":\"" + JsonEscape(currentAccountId) + "\","
@@ -3776,14 +3804,12 @@ namespace CodexPlusLocalHelper
 
             if (string.IsNullOrEmpty(trigger))
             {
-                _lastAutoSwitchReason = "";
                 ClearAutoSwitchFailureBackoff();
                 SetAutoSwitchStage("normal", "检查正常");
                 SetAutoSwitchResult(string.IsNullOrEmpty(clearedRuntimeTriggerReason) ? "检查正常" : "检查正常：" + clearedRuntimeTriggerReason,
                     string.IsNullOrEmpty(clearedRuntimeTriggerReason) ? "normal" : "normal:runtime-trigger-cleared:" + ShortText(clearedRuntimeTriggerReason, 80));
                 return;
             }
-            _lastAutoSwitchReason = trigger;
             var triggerLabel = string.IsNullOrEmpty(triggerSource) ? trigger : triggerSource + "：" + trigger;
             var failureBackoffKey = triggerType + ":" + triggerSource + ":" + trigger;
             int failurePauseSeconds;
@@ -3913,6 +3939,11 @@ namespace CodexPlusLocalHelper
                     var config = _autoSwitchConfig == null ? LoadAutoSwitchConfig() : _autoSwitchConfig.Clone();
                     config.LastSwitchAt = switchedAtUtc.ToString("o");
                     config.LastSwitchLabel = targetName ?? "";
+                    config.PendingSwitchReason = "";
+                    config.PendingSwitchType = "";
+                    config.PendingSwitchSource = "";
+                    config.PendingSwitchAt = "";
+                    config.PendingSwitchAuthFingerprint = "";
                     _autoSwitchConfig = config.Clamp();
                     SaveAutoSwitchConfig(_autoSwitchConfig);
                 }
@@ -3920,6 +3951,70 @@ namespace CodexPlusLocalHelper
             catch (Exception ex)
             {
                 Log("自动切换：保存最近切换状态失败：" + ex.Message);
+            }
+        }
+
+        private void RestorePersistedAutoSwitchPendingState()
+        {
+            if (_autoSwitchConfig == null || string.IsNullOrWhiteSpace(_autoSwitchConfig.PendingSwitchReason)) return;
+            _lastAutoSwitchReason = _autoSwitchConfig.PendingSwitchReason;
+            _lastAutoSwitchStage = "pending-revalidation";
+            _lastAutoSwitchStageLabel = "恢复待切计划";
+            _lastAutoSwitchResult = "Helper 重启后已恢复待切原因，正在重新核验额度与任务边界：" + ShortText(_autoSwitchConfig.PendingSwitchReason, 90);
+        }
+
+        private void PersistAutoSwitchPending(string reason, string triggerType, string source, string authFingerprint, DateTime observedAtUtc)
+        {
+            if (string.IsNullOrWhiteSpace(reason)) return;
+            try
+            {
+                lock (_autoSwitchLock)
+                {
+                    var config = _autoSwitchConfig == null ? LoadAutoSwitchConfig() : _autoSwitchConfig.Clone();
+                    var samePlan = string.Equals(config.PendingSwitchReason, reason, StringComparison.Ordinal)
+                        && string.Equals(config.PendingSwitchType, triggerType ?? "", StringComparison.Ordinal)
+                        && string.Equals(config.PendingSwitchSource, source ?? "", StringComparison.Ordinal)
+                        && string.Equals(config.PendingSwitchAuthFingerprint, authFingerprint ?? "", StringComparison.Ordinal);
+                    if (samePlan) return;
+                    config.PendingSwitchReason = reason;
+                    config.PendingSwitchType = triggerType ?? "";
+                    config.PendingSwitchSource = source ?? "";
+                    config.PendingSwitchAt = observedAtUtc.ToString("o");
+                    config.PendingSwitchAuthFingerprint = authFingerprint ?? "";
+                    _autoSwitchConfig = config.Clamp();
+                    SaveAutoSwitchConfig(_autoSwitchConfig);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("自动切换：保存待切计划失败：" + ShortText(ex.Message, 120));
+            }
+        }
+
+        private void ClearPersistedAutoSwitchPending()
+        {
+            try
+            {
+                lock (_autoSwitchLock)
+                {
+                    var config = _autoSwitchConfig == null ? LoadAutoSwitchConfig() : _autoSwitchConfig.Clone();
+                    if (string.IsNullOrEmpty(config.PendingSwitchReason)
+                        && string.IsNullOrEmpty(config.PendingSwitchType)
+                        && string.IsNullOrEmpty(config.PendingSwitchSource)
+                        && string.IsNullOrEmpty(config.PendingSwitchAt)
+                        && string.IsNullOrEmpty(config.PendingSwitchAuthFingerprint)) return;
+                    config.PendingSwitchReason = "";
+                    config.PendingSwitchType = "";
+                    config.PendingSwitchSource = "";
+                    config.PendingSwitchAt = "";
+                    config.PendingSwitchAuthFingerprint = "";
+                    _autoSwitchConfig = config.Clamp();
+                    SaveAutoSwitchConfig(_autoSwitchConfig);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("自动切换：清理待切计划失败：" + ShortText(ex.Message, 120));
             }
         }
 

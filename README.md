@@ -16,7 +16,7 @@ https://codex.woai.pro
 - 云端 API：`cloud-worker/worker.js` 聚合 `worker-auth.js`、`worker-accounts.js`、`worker-usage.js`、`worker-settings.js`、`worker-helper.js`、`worker-audit.js`、`worker-admin.js` 和 `worker-user.js`，处理注册、登录、账号导入、额度快照、刷新通道、切换 payload、设备、审计记录和管理员接口。
 - 云端数据库：Cloudflare D1，数据库名 `codex-cloud-console`。
 - token 存储：`account_secrets.encrypted_auth_json`，使用 Worker secret `TOKEN_ENCRYPTION_KEY` 加密落库。
-- Dock Helper：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.6`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
+- Dock Helper：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.7`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
 - Helper 源码：`native-helper/build-helper.ps1` 编译 `native-helper/*.cs`，其中 `CodexPlusLocalHelper.cs` 保留主窗口/API 编排，`HelperDesktopUi.cs` 承载托盘菜单、软按钮、日志框和任务进度弹窗等桌面控件，`AutoSwitchConfig.cs` 承载自动切换配置模型，`HelperModels.cs` 承载通用数据模型，`CodexRuntimeStatus.cs` 承载 Codex 运行态与安全切换状态模型。
 
 ## 使用模型
@@ -47,7 +47,7 @@ http://127.0.0.1:18766/
 
 Dock Helper 不托管账号管理页，`/console/` 会返回 404。关闭窗口不会退出，只会驻留系统托盘；托盘菜单可以显示窗口、打开 Codex Dock、重启服务或退出。
 
-Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Helper 0.4.2 起会无论窗口是否可见都低频重新注册托盘图标，并提供本地托盘修复接口，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。Helper 0.4.3 起会在同类自动切换失败连续出现 3 次后暂停 30 分钟，并允许控制台一键恢复。Helper 0.4.4 起内置更新检查、状态页更新入口和安全下载动作；Helper 0.4.5 起提供本地生命周期自检接口，用于验证日志持久化、日志视图恢复调度和托盘修复链路；Helper 0.4.6 起生命周期自检会主动模拟 RichTextBox 渲染故障并确认日志视图可从事实源恢复。控制台会显示 Helper 版本并提示低于最新发布或最低支持版本的设备升级，Helper 页会展示最新版、构建日期、EXE 下载、portable 包下载和 SHA-256 校验值。
+Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Helper 0.4.2 起会无论窗口是否可见都低频重新注册托盘图标，并提供本地托盘修复接口，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。Helper 0.4.3 起会在同类自动切换失败连续出现 3 次后暂停 30 分钟，并允许控制台一键恢复。Helper 0.4.4 起内置更新检查、状态页更新入口和安全下载动作；Helper 0.4.5 起提供本地生命周期自检接口，用于验证日志持久化、日志视图恢复调度和托盘修复链路；Helper 0.4.6 起生命周期自检会主动模拟 RichTextBox 渲染故障并确认日志视图可从事实源恢复；Helper 0.4.7 起会持久保存待切计划，并在重启后先重新核验额度和安全边界，核验前不写入 auth。控制台会显示 Helper 版本并提示低于最新发布或最低支持版本的设备升级，Helper 页会展示最新版、构建日期、EXE 下载、portable 包下载和 SHA-256 校验值。
 
 ## 额度刷新与智能切换
 
@@ -84,15 +84,16 @@ CLOUDFLARE_API_TOKEN
 ```powershell
 npm --prefix cloud-worker ci
 npm run preflight
+npm run release:report
 npm run release:github-ci
 npm run release:github-readiness
 ```
 
-`preflight` 会把 Helper 验证构建输出到 `artifacts/build/CodexDockHelper`，避免本机正在运行的 `dist\CodexDockHelper\CodexDockHelper.exe` 锁住发布包时导致验证失败。正式更新发布包仍使用 `npm run helper:build` 或 `.\native-helper\build-helper.ps1`。Helper 构建会生成 `CodexDockHelper-release.json` 和 `CodexDockHelper-<version>-portable.zip`；静态资源构建会把 EXE、portable 包和 release manifest 发布到 `/downloads/`，并在 `asset-manifest.json` 写入 Helper 版本、构建日期、大小和 SHA-256。商业发布门 `scripts/verify-commercial-release-gate.mjs` 也会随 `verify/preflight` 自动运行，防止登录、RT 导入、额度刷新、自动切换、Helper、管理员、生产 smoke、CI/CD 和截图证据从发布链里脱落。
+`preflight` 会把 Helper 验证构建输出到 `artifacts/build/CodexDockHelper`，避免本机正在运行的 `dist\CodexDockHelper\CodexDockHelper.exe` 锁住发布包时导致验证失败。正式更新发布包仍使用 `npm run helper:build` 或 `.\native-helper\build-helper.ps1`。Helper 构建会生成 `CodexDockHelper-release.json` 和 `CodexDockHelper-<version>-portable.zip`；静态资源构建会把 EXE、portable 包和 release manifest 发布到 `/downloads/`，并在 `asset-manifest.json` 写入 Helper 版本、构建日期、大小和 SHA-256。`release:report` 验证部署候选的本地包、清单、生命周期与证据链，允许候选版本领先线上；部署完成后运行 `npm run release:report:production`，才严格要求线上 EXE/portable 包与候选哈希一致。商业发布门 `scripts/verify-commercial-release-gate.mjs` 也会随 `verify/preflight` 自动运行，防止登录、RT 导入、额度刷新、自动切换、Helper、管理员、生产 smoke、CI/CD 和截图证据从发布链里脱落。
 
-`release:github-readiness` 会调用 `gh` 检查当前提交的 CI 是否真的通过、GitHub 是否记录了 PushEvent、push 触发是否实际生成运行记录、GitHub Cloudflare Deploy 所需 secret 名称是否存在，以及外部 check suite 是否卡住；它只输出 secret 名称是否存在，不读取或打印 secret 值，并把结果写到被忽略的本地证据文件 `artifacts/verification/github-release-readiness-result.json`。缺少 `CLOUDFLARE_API_TOKEN` 或没有观察到当前提交的 push-triggered CI 时，该命令会以非零状态退出，作为正式发布前的外部状态门。
+`release:github-readiness` 会调用 `gh` 检查当前提交的 CI 是否真的通过、GitHub 是否记录了 PushEvent、push 触发是否实际生成运行记录、GitHub Cloudflare Deploy 所需 secret 名称是否存在，以及外部 check suite 是否卡住；它只输出 secret 名称是否存在，不读取或打印 secret 值，并把结果写到被忽略的本地证据文件 `artifacts/verification/github-release-readiness-result.json`。缺少 `CLOUDFLARE_API_TOKEN` 或没有观察到当前提交的 push-triggered CI 时，该命令会以非零状态退出，用于选择 GitHub 托管 CD 时的操作提醒；它不阻断本机 `preflight`、具备本地 Cloudflare 权限时的直接部署，也不计入当前产品完成度评分。
 
-`release:github-ci` 是 push-triggered CI 修复前的可控兜底：它对当前分支触发 GitHub Actions CI，等待当前 commit 的 workflow_dispatch run 完成，并把运行 URL 与结论写入被忽略的本地证据文件 `artifacts/verification/github-ci-dispatch-result.json`。这不是自动 push CI 的替代品；`release:github-readiness` 仍会把缺少 push-triggered CI 作为正式发布缺口报告出来。
+`release:github-ci` 是 push-triggered CI 修复前的可控兜底：它对当前分支触发 GitHub Actions CI，等待当前 commit 的 workflow_dispatch run 完成，并把运行 URL 与结论写入被忽略的本地证据文件 `artifacts/verification/github-ci-dispatch-result.json`。这不是自动 push CI 的替代品；`release:github-readiness` 仍会把缺少 push-triggered CI 作为 GitHub 托管发布链路的运营提示报告出来。
 
 只跑 Worker/UI/静态资源验证时：
 

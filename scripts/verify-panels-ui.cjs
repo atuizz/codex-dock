@@ -55,6 +55,31 @@ assert.equal(ui.autoSwitchStage({
   helperAuthorized: true,
   codex: { safe_to_switch: true, pending_switch_reason: "7D 剩余 2%" },
 }).key, "boundary_confirming");
+const restoredPendingStage = ui.autoSwitchStage({
+  helperReady: true,
+  helper: {
+    version: "0.4.7",
+    auto_switch: {
+      enabled: true,
+      pending_reason: "5H 剩余 0%",
+      pending_type: "quota",
+      pending_revalidation: true,
+      last_stage: "pending-revalidation",
+      last_stage_label: "恢复待切计划",
+    },
+  },
+  helperAuthorized: true,
+  codex: { safe_to_switch: false, detail: "正在重新读取运行状态" },
+});
+assert.equal(restoredPendingStage.key, "pending_revalidation");
+assert.match(restoredPendingStage.summary, /重新核验额度与任务边界/);
+assert.match(restoredPendingStage.next, /不会写入 auth/);
+assert.equal(ui.helperDiagnostic({
+  helperReady: true,
+  helper: { version: "0.4.7", auto_switch: { enabled: true, pending_reason: "5H 剩余 0%", pending_revalidation: true } },
+  helperAuthorized: true,
+  codex: { safe_to_switch: false },
+}).title, "恢复待切计划");
 assert.equal(ui.autoSwitchStage({
   helperReady: true,
   helper: { version: "0.4.2", auto_switch: { enabled: true, last_result: "自动切换失败：账号 A", last_reason: "5H 剩余 0%" } },
@@ -119,12 +144,12 @@ const deviceHtml = ui.renderDevice({
   helper: { port: 18766, version: "0.4.2", build_date: "2026-05-26" },
   helperRelease: {
     file: "downloads/CodexDockHelper.exe",
-    version: "0.4.6",
+    version: "0.4.7",
     build_date: "2026-05-26",
     bytes: 178688,
     sha256: "6E936870B63ECC8A8A4C1357D56FDC850B2D9FDA81CD88967EC9D4038CDB90B2",
     package: {
-      file: "downloads/CodexDockHelper-0.4.6-portable.zip",
+      file: "downloads/CodexDockHelper-0.4.7-portable.zip",
       bytes: 192112,
       sha256: "830D363FC4A8CBE471F154BF4BAE5B058DDC06715E18F9CE1546353648D04D89",
     },
@@ -157,7 +182,7 @@ assert.match(deviceHtml, /Helper 分发/);
 assert.match(deviceHtml, /下载最新版/);
 assert.match(deviceHtml, /下载 portable 包/);
 assert.match(deviceHtml, /本机检查更新/);
-assert.match(deviceHtml, /已有 v0\.4\.6 发布/);
+assert.match(deviceHtml, /已有 v0\.4\.7 发布/);
 assert.match(deviceHtml, /data-helper-action="copy-helper-sha"/);
 assert.match(deviceHtml, /data-helper-action="check-update"/);
 assert.match(deviceHtml, /6E936870B63E/);
@@ -213,6 +238,27 @@ const boundaryDeviceHtml = ui.renderDevice({
 });
 assert.match(boundaryDeviceHtml, /安全边界已确认/);
 assert.match(boundaryDeviceHtml, /请求云端候选账号/);
+
+const restoredPendingDeviceHtml = ui.renderDevice({
+  helperReady: true,
+  helper: {
+    port: 18766,
+    version: "0.4.7",
+    auto_switch: {
+      enabled: true,
+      pending_reason: "5H 剩余 0%",
+      pending_revalidation: true,
+      last_stage: "pending-revalidation",
+      last_stage_label: "恢复待切计划",
+    },
+  },
+  helperAuthorized: true,
+  userPresent: true,
+  codex: { source: "logs_2.sqlite", safe_to_switch: false },
+});
+assert.match(restoredPendingDeviceHtml, /恢复待切计划/);
+assert.match(restoredPendingDeviceHtml, /核验前不会写入 auth/);
+assert.match(restoredPendingDeviceHtml, /5H 剩余 0%/);
 
 const failedDeviceHtml = ui.renderDevice({
   helperReady: true,

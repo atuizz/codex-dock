@@ -9,6 +9,7 @@
     "release:github-ci": "node ./scripts/run-github-ci.mjs --out artifacts/verification/github-ci-dispatch-result.json",
     "release:github-readiness": "node ./scripts/check-github-release-readiness.mjs --out artifacts/verification/github-release-readiness-result.json",
     "release:report": "node ./scripts/generate-release-evidence-report.mjs",
+    "release:report:production": "node ./scripts/generate-release-evidence-report.mjs --require-production-parity",
     "smoke:production": "npm --prefix cloud-worker run smoke:production",
     "smoke:production:surface": "node ./scripts/smoke-production-surface.mjs --out artifacts/verification/production-surface-result.json",
     "test": "npm run verify",

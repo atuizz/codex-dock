@@ -72,18 +72,23 @@
 
     function renderHelperState({ helperReady, helper = {}, codex, minimumHelperVersion = "0.4.2", helperRelease = {} } = {}) {
       const status = codex || {};
+      const autoSwitch = helper.auto_switch || helper.autoSwitch || {};
       const version = helper.version || "";
       const outdated = helperReady && (!version || compareVersion(version, minimumHelperVersion) < 0);
       const latest = helperRelease.version || minimumHelperVersion;
       const buildDate = helperRelease.build_date || helperRelease.buildDate || "";
       const checksum = helperRelease.sha256 ? ` · SHA-256 ${shortSha(helperRelease.sha256)}` : "";
+      const livePendingReason = status.pending_switch_reason || "";
+      const restoredPendingReason = autoSwitch.pending_reason || autoSwitch.pendingReason || "";
+      const pendingMessage = livePendingReason
+        || (restoredPendingReason ? `已恢复待切计划，核验前不会写入 auth：${restoredPendingReason}` : "");
       return `
         <strong>${helperReady ? `Helper 在线${version ? ` · v${escapeHtml(version)}` : ""}` : "Helper 离线"}</strong>
         <span>${escapeHtml(helperReady ? `Codex：${status.label || "状态确认中"}` : "未安装时可下载 auth.json 手动替换。")}</span>
         <span>最新发布：v${escapeHtml(latest)}${buildDate ? ` · ${escapeHtml(buildDate)}` : ""}${escapeHtml(checksum)}</span>
         ${outdated ? `<span class="warning-text">Helper 版本过旧，请升级至 v${escapeHtml(minimumHelperVersion)} 或更高版本。</span>` : ""}
         ${helperReady && status.detail ? `<span>${escapeHtml(status.detail)}</span>` : ""}
-        ${helperReady && status.pending_switch_reason ? `<span>${escapeHtml(status.pending_switch_reason)}</span>` : ""}
+        ${helperReady && pendingMessage ? `<span>${escapeHtml(pendingMessage)}</span>` : ""}
       `;
     }
 

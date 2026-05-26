@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 const args = new Set(process.argv.slice(2));
+const requireProductionParity = args.has("--require-production-parity");
 
 const requiredEvidence = [
   "artifacts/design/codex-dock-commercial-interface-reference-board-v1.png",
@@ -29,6 +30,8 @@ const requiredEvidence = [
   "artifacts/verification/manual-switch-risk-local.png",
   "artifacts/verification/helper-lifecycle-health-local-result.json",
   "artifacts/verification/helper-lifecycle-self-test-local-result.json",
+  "artifacts/verification/helper-pending-revalidation-local-result.json",
+  "artifacts/verification/helper-pending-revalidation-local.png",
   "artifacts/verification/auto-switch-stage-production.png",
   "artifacts/verification/helper-stale-reconnect-production.png",
   "artifacts/verification/oauth-provider-error-production-result.json",
@@ -141,15 +144,23 @@ const helperConsistency = {
   exe_sha_matches_production: helperRelease?.files?.some((file) => file.file === "CodexDockHelper.exe" && file.sha256 === productionHelper.sha256) || false,
   package_sha_matches_production: Boolean(releasePackage.sha256 && releasePackage.sha256 === productionPackage.sha256),
 };
+const candidateOk = missingEvidence.length === 0
+  && helperConsistency.version_matches_manifest
+  && helperConsistency.exe_sha_matches_manifest
+  && lifecycleHealth?.ok === true
+  && lifecycleSelfTest?.ok === true
+  && lifecycleSelfTest?.log_found === true
+  && productionSurface?.ok === true;
+const productionParityOk = productionUpdate?.ok === true
+  && helperConsistency.version_matches_production
+  && helperConsistency.exe_sha_matches_production
+  && helperConsistency.package_sha_matches_production;
 
 const report = {
-  ok: missingEvidence.length === 0
-    && Object.values(helperConsistency).every(Boolean)
-    && lifecycleHealth?.ok === true
-    && lifecycleSelfTest?.ok === true
-    && lifecycleSelfTest?.log_found === true
-    && productionUpdate?.ok === true
-    && productionSurface?.ok === true,
+  mode: requireProductionParity ? "post-deploy" : "candidate",
+  ok: candidateOk && (!requireProductionParity || productionParityOk),
+  candidate_ok: candidateOk,
+  production_parity_ok: productionParityOk,
   generated_at: new Date().toISOString(),
   git: {
     branch: runGit(["branch", "--show-current"]),

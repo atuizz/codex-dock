@@ -1,0 +1,21 @@
+{
+  "checked_at": "2026-05-26T17:04:33.3065388Z",
+  "ok": true,
+  "version": "0.4.7",
+  "build_date": "2026-05-27",
+  "auto_switch": {
+    "enabled": false,
+    "authorized": false,
+    "pending_reason": "验证重启恢复：5H 额度待重新核验",
+    "pending_type": "quota",
+    "pending_source": "verification",
+    "pending_revalidation": true,
+    "last_stage": "pending-revalidation",
+    "last_stage_label": "恢复待切计划",
+    "last_result": "Helper 重启后已恢复待切原因，正在重新核验额度与任务边界：验证重启恢复：5H 额度待重新核验"
+  },
+  "lifecycle": {
+    "main_window_visible": true,
+    "tray_visible": true
+  }
+}

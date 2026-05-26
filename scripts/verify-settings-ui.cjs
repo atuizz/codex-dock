@@ -33,8 +33,8 @@ const helperHtml = ui.renderHelperState({
   helper: { version: "0.3.1" },
   minimumHelperVersion: "0.4.2",
   helperRelease: {
-    version: "0.4.6",
-    build_date: "2026-05-26",
+    version: "0.4.7",
+    build_date: "2026-05-27",
     sha256: "6E936870B63ECC8A8A4C1357D56FDC850B2D9FDA81CD88967EC9D4038CDB90B2",
   },
   codex: {
@@ -44,10 +44,19 @@ const helperHtml = ui.renderHelperState({
   },
 });
 assert.match(helperHtml, /Codex：空闲/);
-assert.match(helperHtml, /最新发布：v0\.4\.6 · 2026-05-26/);
+assert.match(helperHtml, /最新发布：v0\.4\.7 · 2026-05-27/);
 assert.match(helperHtml, /6E936870B63E/);
 assert.match(helperHtml, /5H 剩余 0%/);
 assert.match(helperHtml, /版本过旧/);
+
+const restoredPendingHelperHtml = ui.renderHelperState({
+  helperReady: true,
+  helper: { version: "0.4.7", auto_switch: { pending_reason: "5H 剩余 0%", pending_revalidation: true } },
+  helperRelease: { version: "0.4.7", build_date: "2026-05-27" },
+  codex: { label: "确认中" },
+});
+assert.match(restoredPendingHelperHtml, /已恢复待切计划/);
+assert.match(restoredPendingHelperHtml, /核验前不会写入 auth/);
 
 const usageHtml = ui.renderUsageRefreshSettings({
   user: { email: "ops@example.com" },

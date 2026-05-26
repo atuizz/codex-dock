@@ -82,7 +82,11 @@
       const autoSwitch = helperAutoSwitch(helper);
       const version = helper.version || "";
       const outdated = helperReady && (!version || compareVersion(version, minimumHelperVersion) < 0);
-      const pendingReason = meaningfulText(codex.pending_switch_reason);
+      const livePendingReason = meaningfulText(codex.pending_switch_reason);
+      const restoredPendingReason = meaningfulText(autoSwitch.pending_reason || autoSwitch.pendingReason);
+      const pendingReason = livePendingReason || restoredPendingReason;
+      const pendingRevalidation = !livePendingReason && Boolean(restoredPendingReason)
+        && (autoSwitch.pending_revalidation ?? autoSwitch.pendingRevalidation ?? true) !== false;
       const stageKey = meaningfulText(autoSwitch.last_stage || autoSwitch.lastStage);
       const stageLabel = meaningfulText(autoSwitch.last_stage_label || autoSwitch.lastStageLabel);
       const failureStage = meaningfulText(autoSwitch.last_failure_stage || autoSwitch.lastFailureStage);
@@ -186,6 +190,18 @@
           result: resultText || "等待退避结束",
           stage: stageLabel || "失败退避",
           next: "等待退避结束；同时检查候选账号、RT 状态和额度刷新来源。",
+        };
+      }
+      if (pendingRevalidation) {
+        return {
+          ...base,
+          className: "warn",
+          key: "pending_revalidation",
+          title: "恢复待切计划",
+          summary: "Helper 重启后保留了尚未处理的触发原因，当前正在重新核验额度与任务边界。",
+          result: resultText || "等待重新核验",
+          stage: stageLabel || "恢复待切计划",
+          next: "核验完成前不会写入 auth 或重启 Codex；保持 Helper 在线即可。",
         };
       }
       if (pendingReason && codex.safe_to_switch === false) {
@@ -374,6 +390,10 @@
       const tray = helper.tray || {};
       const failurePauseUntil = autoSwitch.failure_pause_until || autoSwitch.failurePauseUntil || "";
       const failurePauseReason = meaningfulText(autoSwitch.failure_pause_reason || autoSwitch.failurePauseReason);
+      const livePendingReason = meaningfulText(codex.pending_switch_reason);
+      const restoredPendingReason = meaningfulText(autoSwitch.pending_reason || autoSwitch.pendingReason);
+      const pendingRevalidation = !livePendingReason && Boolean(restoredPendingReason)
+        && (autoSwitch.pending_revalidation ?? autoSwitch.pendingRevalidation ?? true) !== false;
       if (!helperReady) {
         return {
           className: "bad",
@@ -416,7 +436,15 @@
           action: "处理失败原因后点击“恢复自动切换”，或等待暂停到期自动重试。",
         };
       }
-      const pendingSwitchReason = meaningfulText(codex.pending_switch_reason);
+      if (pendingRevalidation) {
+        return {
+          className: "warn",
+          title: "恢复待切计划",
+          reason: restoredPendingReason,
+          action: "Helper 正在重新核验额度和任务边界；核验前不会写入 auth。",
+        };
+      }
+      const pendingSwitchReason = livePendingReason;
       if (pendingSwitchReason) {
         return {
           className: codex.safe_to_switch ? "ok" : "warn",
@@ -498,7 +526,9 @@
         : Number.isFinite(stableSeconds) && stableSeconds >= 0 ? `${Math.floor(stableSeconds)} 秒` : "未确认";
       const lastEventTime = codex.last_task_event_at ? ` · ${formatTime(codex.last_task_event_at)}` : "";
       const lastEvent = codex.last_task_event ? `${codex.last_task_event}${lastEventTime}` : "暂无近期任务事件";
-      const pendingReason = meaningfulText(codex.pending_switch_reason) || "无";
+      const pendingReason = meaningfulText(codex.pending_switch_reason)
+        || meaningfulText(autoSwitch.pending_reason || autoSwitch.pendingReason)
+        || "无";
       const switchSafety = codex.safe_to_switch ? "可安全切换" : "暂不切换";
       const failurePauseUntil = autoSwitch.failure_pause_until || autoSwitch.failurePauseUntil || "";
       const lastSwitch = autoSwitch.last_switch

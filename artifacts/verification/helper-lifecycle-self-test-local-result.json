@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "marker": "lifecycle-self-test-20260526120310092",
+  "marker": "lifecycle-self-test-20260526170948834",
   "log_found": true,
   "log_view_fault_tested": true,
   "log_view_fault_recovered": true,
@@ -18,7 +18,7 @@
     "log_view_needs_reload": false,
     "recent_log_count": 400,
     "helper_log_exists": true,
-    "helper_log_bytes": 303800,
+    "helper_log_bytes": 347926,
     "operation_progress_visible": false
   }
 }

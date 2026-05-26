@@ -10,6 +10,11 @@ namespace CodexPlusLocalHelper
         public string CloudLastSyncAt = "";
         public string LastSwitchAt = "";
         public string LastSwitchLabel = "";
+        public string PendingSwitchReason = "";
+        public string PendingSwitchType = "";
+        public string PendingSwitchSource = "";
+        public string PendingSwitchAt = "";
+        public string PendingSwitchAuthFingerprint = "";
         public int FiveHourThreshold = 5;
         public int OneWeekThreshold = 5;
         public int PollSeconds = 15;
@@ -34,6 +39,11 @@ namespace CodexPlusLocalHelper
                 CloudLastSyncAt = CloudLastSyncAt,
                 LastSwitchAt = LastSwitchAt,
                 LastSwitchLabel = LastSwitchLabel,
+                PendingSwitchReason = PendingSwitchReason,
+                PendingSwitchType = PendingSwitchType,
+                PendingSwitchSource = PendingSwitchSource,
+                PendingSwitchAt = PendingSwitchAt,
+                PendingSwitchAuthFingerprint = PendingSwitchAuthFingerprint,
                 FiveHourThreshold = FiveHourThreshold,
                 OneWeekThreshold = OneWeekThreshold,
                 PollSeconds = PollSeconds,
