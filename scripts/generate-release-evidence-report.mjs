@@ -67,6 +67,12 @@ function runGit(gitArgs) {
   return result.stdout.trim();
 }
 
+function remoteHead(ref) {
+  const output = runGit(["ls-remote", "origin", ref]);
+  const sha = output.split(/\s+/)[0] || "";
+  return sha ? sha.slice(0, 12) : "";
+}
+
 function extractWorkerVersion(releaseDoc) {
   const latest = releaseDoc.match(/Latest production release verified[\s\S]*?Worker version `([^`]+)`/);
   return latest ? latest[1] : "";
@@ -80,6 +86,7 @@ const [
   lifecycleHealth,
   lifecycleSelfTest,
   productionSurface,
+  githubReadiness,
   releaseDoc,
   packageJson,
   ciWorkflow,
@@ -92,6 +99,7 @@ const [
   readJson("artifacts/verification/helper-lifecycle-health-local-result.json"),
   readJson("artifacts/verification/helper-lifecycle-self-test-local-result.json"),
   readJson("artifacts/verification/production-surface-result.json"),
+  readJson("artifacts/verification/github-release-readiness-result.json"),
   readText("docs/release-and-verification.md").catch(() => ""),
   readJson("package.json"),
   readText(".github/workflows/ci.yml").catch(() => ""),
@@ -125,8 +133,8 @@ const report = {
     branch: runGit(["branch", "--show-current"]),
     commit: runGit(["rev-parse", "--short=12", "HEAD"]),
     status_short: runGit(["status", "--short"]).split(/\r?\n/).filter(Boolean),
-    remote_main: runGit(["rev-parse", "--short=12", "origin/main"]),
-    remote_branch: runGit(["rev-parse", "--short=12", "origin/codex/commercial-productization"]),
+    remote_main: remoteHead("refs/heads/main") || runGit(["rev-parse", "--short=12", "origin/main"]),
+    remote_branch: remoteHead("refs/heads/codex/commercial-productization") || runGit(["rev-parse", "--short=12", "origin/codex/commercial-productization"]),
   },
   cloudflare: {
     production_url: "https://codex.woai.pro",
@@ -160,9 +168,18 @@ const report = {
     production_smoke_command: "npm run smoke:production",
     production_surface_command: "npm run smoke:production:surface",
     release_report_command: "npm run release:report",
+    github_readiness_command: "npm run release:github-readiness",
     ci_workflow_configured: /npm run preflight/.test(ciWorkflow) && /actions\/upload-artifact/.test(ciWorkflow),
     deploy_workflow_configured: /wrangler deploy/.test(deployWorkflow) && /npm run smoke:production/.test(deployWorkflow),
     workflow_dispatch_configured: /workflow_dispatch/.test(deployWorkflow),
+    github_readiness: githubReadiness ? {
+      ok: githubReadiness.ok === true,
+      checked_at: githubReadiness.checked_at || "",
+      repository: githubReadiness.repository || "",
+      sha: githubReadiness.sha || "",
+      gaps: Array.isArray(githubReadiness.gaps) ? githubReadiness.gaps : [],
+      warnings: Array.isArray(githubReadiness.warnings) ? githubReadiness.warnings : [],
+    } : null,
   },
   evidence: {
     required_count: requiredEvidence.length,
@@ -174,6 +191,7 @@ const report = {
     release_doc_has_quality_gates: /## Commercial Quality Gates/.test(releaseDoc),
     release_doc_mentions_helper: new RegExp(`Helper \`${helperRelease?.version || "0.0.0"}\``).test(releaseDoc),
     package_has_release_report: Boolean(packageJson?.scripts?.["release:report"]),
+    package_has_github_readiness: Boolean(packageJson?.scripts?.["release:github-readiness"]),
   },
 };
 

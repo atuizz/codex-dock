@@ -1,0 +1,222 @@
+{
+  "checked_at": "2026-05-26T12:42:42.647Z",
+  "ok": false,
+  "repository": "atuizz/codex-dock",
+  "branch": "codex/commercial-productization",
+  "sha": "8baca05832dae5072ff7a7a70142fbec2822575c",
+  "checks": [
+    {
+      "id": "git-context",
+      "ok": true,
+      "severity": "error",
+      "message": "Resolved local git branch and commit",
+      "details": {
+        "branch": "codex/commercial-productization",
+        "sha": "8baca05832dae5072ff7a7a70142fbec2822575c"
+      }
+    },
+    {
+      "id": "github-repository",
+      "ok": true,
+      "severity": "error",
+      "message": "Resolved GitHub repository",
+      "details": {
+        "nameWithOwner": "atuizz/codex-dock",
+        "isPrivate": true,
+        "defaultBranch": "main",
+        "viewerPermission": "ADMIN"
+      }
+    },
+    {
+      "id": "ci-workflow-active",
+      "ok": true,
+      "severity": "error",
+      "message": "CI workflow is active",
+      "details": {
+        "id": 283151745,
+        "node_id": "W_kwDOSnx3xs4Q4I2B",
+        "name": "CI",
+        "path": ".github/workflows/ci.yml",
+        "state": "active",
+        "created_at": "2026-05-26T08:07:30.000+08:00",
+        "updated_at": "2026-05-26T08:07:30.000+08:00",
+        "url": "https://api.github.com/repos/atuizz/codex-dock/actions/workflows/283151745",
+        "html_url": "https://github.com/atuizz/codex-dock/blob/main/.github/workflows/ci.yml",
+        "badge_url": "https://github.com/atuizz/codex-dock/workflows/CI/badge.svg"
+      }
+    },
+    {
+      "id": "cloudflare-deploy-workflow-active",
+      "ok": true,
+      "severity": "error",
+      "message": "Cloudflare Deploy workflow is active",
+      "details": {
+        "id": 283151747,
+        "node_id": "W_kwDOSnx3xs4Q4I2D",
+        "name": "Cloudflare Deploy",
+        "path": ".github/workflows/cloudflare-deploy.yml",
+        "state": "active",
+        "created_at": "2026-05-26T08:07:30.000+08:00",
+        "updated_at": "2026-05-26T08:07:30.000+08:00",
+        "url": "https://api.github.com/repos/atuizz/codex-dock/actions/workflows/283151747",
+        "html_url": "https://github.com/atuizz/codex-dock/blob/main/.github/workflows/cloudflare-deploy.yml",
+        "badge_url": "https://github.com/atuizz/codex-dock/workflows/Cloudflare%20Deploy/badge.svg"
+      }
+    },
+    {
+      "id": "checkout-token-secret",
+      "ok": true,
+      "severity": "warning",
+      "message": "CHECKOUT_TOKEN secret is present",
+      "details": {}
+    },
+    {
+      "id": "cloudflare-account-secret",
+      "ok": true,
+      "severity": "error",
+      "message": "CLOUDFLARE_ACCOUNT_ID secret is present",
+      "details": {}
+    },
+    {
+      "id": "cloudflare-api-token-secret",
+      "ok": false,
+      "severity": "error",
+      "message": "CLOUDFLARE_API_TOKEN is missing for GitHub-hosted Cloudflare deploys",
+      "details": {}
+    },
+    {
+      "id": "current-sha-ci-green",
+      "ok": true,
+      "severity": "error",
+      "message": "Current commit has a successful CI run",
+      "details": {
+        "conclusion": "success",
+        "createdAt": "2026-05-26T12:31:57Z",
+        "databaseId": 26448234944,
+        "event": "workflow_dispatch",
+        "headBranch": "codex/commercial-productization",
+        "headSha": "8baca05832dae5072ff7a7a70142fbec2822575c",
+        "status": "completed",
+        "url": "https://github.com/atuizz/codex-dock/actions/runs/26448234944",
+        "workflowName": "CI"
+      }
+    },
+    {
+      "id": "current-sha-push-ci-green",
+      "ok": false,
+      "severity": "error",
+      "message": "No successful push-triggered CI run exists for the current commit",
+      "details": {}
+    },
+    {
+      "id": "current-sha-manual-ci-green",
+      "ok": true,
+      "severity": "warning",
+      "message": "Current commit has a successful manual CI run",
+      "details": {
+        "conclusion": "success",
+        "createdAt": "2026-05-26T12:31:57Z",
+        "databaseId": 26448234944,
+        "event": "workflow_dispatch",
+        "headBranch": "codex/commercial-productization",
+        "headSha": "8baca05832dae5072ff7a7a70142fbec2822575c",
+        "status": "completed",
+        "url": "https://github.com/atuizz/codex-dock/actions/runs/26448234944",
+        "workflowName": "CI"
+      }
+    },
+    {
+      "id": "external-check-suites-completed",
+      "ok": false,
+      "severity": "warning",
+      "message": "External check suites are still queued or in progress",
+      "details": {
+        "queuedExternal": [
+          {
+            "app": "vercel",
+            "status": "queued",
+            "conclusion": null,
+            "latest_check_runs_count": 0
+          },
+          {
+            "app": "cloudflare-workers-and-pages",
+            "status": "queued",
+            "conclusion": null,
+            "latest_check_runs_count": 0
+          }
+        ]
+      }
+    }
+  ],
+  "gaps": [
+    "CLOUDFLARE_API_TOKEN is missing for GitHub-hosted Cloudflare deploys",
+    "No successful push-triggered CI run exists for the current commit"
+  ],
+  "warnings": [
+    "External check suites are still queued or in progress"
+  ],
+  "evidence": {
+    "repository": {
+      "nameWithOwner": "atuizz/codex-dock",
+      "isPrivate": true,
+      "defaultBranch": "main",
+      "viewerPermission": "ADMIN"
+    },
+    "workflows": [
+      {
+        "id": 283151745,
+        "name": "CI",
+        "path": ".github/workflows/ci.yml",
+        "state": "active"
+      },
+      {
+        "id": 283151747,
+        "name": "Cloudflare Deploy",
+        "path": ".github/workflows/cloudflare-deploy.yml",
+        "state": "active"
+      }
+    ],
+    "secrets": {
+      "present": [
+        "CHECKOUT_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID"
+      ],
+      "missing": [
+        "CLOUDFLARE_API_TOKEN"
+      ]
+    },
+    "runs": [
+      {
+        "conclusion": "success",
+        "createdAt": "2026-05-26T12:31:57Z",
+        "databaseId": 26448234944,
+        "event": "workflow_dispatch",
+        "headBranch": "codex/commercial-productization",
+        "headSha": "8baca05832dae5072ff7a7a70142fbec2822575c",
+        "status": "completed",
+        "url": "https://github.com/atuizz/codex-dock/actions/runs/26448234944",
+        "workflowName": "CI"
+      }
+    ],
+    "check_suites": [
+      {
+        "app": "vercel",
+        "status": "queued",
+        "conclusion": null,
+        "latest_check_runs_count": 0
+      },
+      {
+        "app": "cloudflare-workers-and-pages",
+        "status": "queued",
+        "conclusion": null,
+        "latest_check_runs_count": 0
+      },
+      {
+        "app": "github-actions",
+        "status": "completed",
+        "conclusion": "success",
+        "latest_check_runs_count": 1
+      }
+    ]
+  }
+}
