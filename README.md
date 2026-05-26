@@ -66,7 +66,7 @@ Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲
 GitHub Actions 已提供：
 
 - `.github/workflows/ci.yml`：运行 `npm run preflight`，验证 Worker/UI/Helper 逻辑、构建 Cloudflare 静态资源、构建 Windows Helper 并上传产物。
-- `.github/workflows/cloudflare-deploy.yml`：手动触发，`preview` 做 dry-run，`production` 应用远端 D1 迁移、部署 Worker，并执行线上 smoke。
+- `.github/workflows/cloudflare-deploy.yml`：手动触发，先在 Windows runner 跑完整 `preflight`，再由 `preview` 做 dry-run，或由 `production` 应用远端 D1 迁移、部署 Worker，并执行线上 smoke。
 
 本地发布前验证：
 

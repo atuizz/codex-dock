@@ -61,9 +61,10 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 
 - `.github/workflows/ci.yml` runs on push, pull request, and manual dispatch.
 - CI installs Worker dependencies, runs the root `npm run preflight` command, and uploads `artifacts/build/CodexDockHelper/` as an artifact. `preflight` builds the Windows Helper, builds Static Assets with a content-derived asset version, and runs every local `scripts/verify-*` verifier except production smoke.
-- `.github/workflows/cloudflare-deploy.yml` is manual only:
+- `.github/workflows/cloudflare-deploy.yml` is manual only and always runs the Windows release preflight before any Cloudflare action:
   - `preview` builds and runs `wrangler deploy --dry-run`.
   - `production` is guarded to `master` or `main`, applies remote D1 migrations, runs `wrangler deploy`, then runs `npm run smoke:production`.
+- `scripts/verify-github-workflows.cjs` keeps the CI/CD shape under local preflight so deployments cannot silently lose Helper build validation, D1 migration, production smoke, or Cloudflare secret wiring.
 
 ## Production Deploy Checklist
 
