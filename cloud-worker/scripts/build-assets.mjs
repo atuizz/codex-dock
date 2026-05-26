@@ -130,6 +130,10 @@ try {
     await writeFile(join(downloadsDir, "CodexDockHelper.exe"), helperBytes);
     await writeFile(join(downloadsDir, packageName), packageBytes);
     await writeFile(join(downloadsDir, releaseManifestName), finalReleaseManifestBytes);
+    if (source === helperSource) {
+      await writeFile(join(helperDistDir, releaseManifestName), finalReleaseManifestBytes).catch(() => {});
+      await writeFile(join(helperDistDir, packageName), packageBytes).catch(() => {});
+    }
   }
 } catch {
   // The cloud console can still build without a local helper binary.
