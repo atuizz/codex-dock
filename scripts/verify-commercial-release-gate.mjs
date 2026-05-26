@@ -229,6 +229,7 @@ for (const gate of uiGates) {
 await expectText("package.json", [
   { label: "Helper build in preflight", pattern: /"preflight":\s*"npm run helper:verify-build && npm run verify"/ },
   { label: "release evidence report command", pattern: /"release:report":\s*"node \.\/scripts\/generate-release-evidence-report\.mjs"/ },
+  { label: "production surface smoke command", pattern: /"smoke:production:surface":\s*"node \.\/scripts\/smoke-production-surface\.mjs --out artifacts\/verification\/production-surface-result\.json"/ },
   { label: "local verifier runner", pattern: /"verify":\s*"node \.\/scripts\/run-local-verifiers\.mjs"/ },
 ]);
 
@@ -241,7 +242,16 @@ await expectText("scripts/run-local-verifiers.mjs", [
 await expectText("scripts/generate-release-evidence-report.mjs", [
   { label: "Helper lifecycle evidence", pattern: /helper-lifecycle-self-test-local-result\.json/ },
   { label: "production Helper evidence", pattern: /helper-update-release-production-result\.json/ },
+  { label: "production surface evidence", pattern: /production-surface-result\.json/ },
   { label: "CI/CD evidence", pattern: /ci_workflow_configured|deploy_workflow_configured/ },
+]);
+
+await expectText("scripts/smoke-production-surface.mjs", [
+  { label: "production URL", pattern: /https:\/\/codex\.woai\.pro/ },
+  { label: "asset version parity", pattern: /asset-manifest\.json[\s\S]*manifest\.data\.version/ },
+  { label: "manual switch modal", pattern: /manualSwitchRiskModal/ },
+  { label: "responsive surface checks", pattern: /max-width: 1180px[\s\S]*max-width: 860px[\s\S]*max-width: 460px/ },
+  { label: "secret redaction checks", pattern: /assertPublicSurfaceHasNoSecretMaterial/ },
 ]);
 
 await expectText(".github/workflows/ci.yml", [
@@ -290,6 +300,7 @@ const visualEvidence = [
   "artifacts/verification/helper-stale-reconnect-production.png",
   "artifacts/verification/oauth-provider-error-production-result.json",
   "artifacts/verification/helper-update-release-production-result.json",
+  "artifacts/verification/production-surface-result.json",
 ];
 
 for (const artifact of visualEvidence) {

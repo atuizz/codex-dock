@@ -47,9 +47,13 @@ After a production deploy, run:
 ```powershell
 cd cloud-worker
 npm run smoke:production
+cd ..
+npm run smoke:production:surface
 ```
 
 The smoke script registers a disposable cloud user, verifies login/logout, static asset manifest/version parity, usage-refresh settings persistence, device registration with Helper version, non-admin access denial, token-free account listing, and online Helper download hash parity with `dist/CodexDockHelper/CodexDockHelper.exe`.
+
+The production surface smoke checks the deployed HTML, manifest, split JS/CSS modules, Helper release metadata, OAuth error handling copy, manual-switch guard, account health, Helper diagnostics/update, admin metrics, responsive breakpoints, and obvious secret leakage patterns without creating an account.
 
 For a local Worker smoke test:
 
@@ -109,9 +113,10 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 ## Current Verification Evidence
 
 - Latest production release verified on `2026-05-26`: `wrangler deploy` published Worker version `e1ffdbc4-2bfd-4d10-922b-f2aee13b9f9b` with static asset version `9855935fb6d6`; production smoke passed in strict local-helper-hash mode; production Browser verification loaded `app.js?v=9855935fb6d6`, confirmed the manual switch risk modal exists, found no token text, no horizontal overflow, and no console warnings/errors; online Helper distribution now reports `0.4.5` with EXE SHA-256 `8BD4576C05126F5BBC949244214A77BB7F29518511BCC9A1BFB2AC28CDEE96E2`.
-- Commercial release gate added on `2026-05-26`: `scripts/verify-commercial-release-gate.mjs` checks 17 named commercial gates and 25 tracked evidence artifacts, and is auto-discovered by `scripts/run-local-verifiers.mjs` during `npm run verify` and `npm run preflight`.
+- Commercial release gate added on `2026-05-26`: `scripts/verify-commercial-release-gate.mjs` checks 17 named commercial gates and 26 tracked evidence artifacts, and is auto-discovered by `scripts/run-local-verifiers.mjs` during `npm run verify` and `npm run preflight`.
 - Release evidence report added on `2026-05-26`: `npm run release:report` emits a machine-readable summary for git commit, Cloudflare Worker/static asset version, Helper release manifest, production Helper distribution, lifecycle self-test, CI/CD workflow coverage, and required evidence artifacts; `npm run verify` now runs 32 verifier scripts including `scripts/verify-release-evidence-report.mjs`.
 - Responsive layout gate added on `2026-05-26`: `scripts/verify-responsive-layout.cjs` guards desktop/tablet/phone breakpoints, overflow containment, mobile drawer bottom sheet behavior, account health/Helper/auto-switch card collapse, admin table mobile rendering, focus states, and disabled-state affordances.
+- Production surface smoke added on `2026-05-26`: `npm run smoke:production:surface` verified deployed static asset version `9855935fb6d6`, Helper `0.4.5`, 17 versioned frontend assets, key `app.js`/`styles.css`/`shell-ui.js`/`panels-ui.js`/`settings-ui.js`/`dialog-ui.js`/`admin-ui.js`/`oauth-core.js` surfaces, responsive breakpoints, manual-switch guard, OAuth error copy, and no obvious public secret leakage. Evidence: `artifacts/verification/production-surface-result.json`.
 - GitHub CI/CD hardening verified on `2026-05-26`: main CI was re-run successfully after the workflow changes, ran the pinned Windows release preflight, and uploaded the Helper artifact. Repository secret `CLOUDFLARE_ACCOUNT_ID` is set; `CLOUDFLARE_API_TOKEN` still needs to be added before GitHub-hosted Cloudflare deploys can run.
 - Helper `0.4.5` local release verified on `2026-05-26`: `dist\CodexDockHelper\CodexDockHelper.exe` SHA-256 is `8BD4576C05126F5BBC949244214A77BB7F29518511BCC9A1BFB2AC28CDEE96E2`, portable zip SHA-256 is `DEF26412BAAAA1FC13E6C796E403063BE404713C9F497A97CFDF907C411B4D5A`, `/api/health` reports `lifecycle`, failure-pause fields, and tray state, `/api/lifecycle/self-test` returns `log_found: true`, and the device panel renders both the `failure_paused` stage plus `恢复自动切换` action and the Helper update check action.
 - Auto-switch failure-loop hotfix verified on `2026-05-26`: Helper health now exposes `last_stage`, `last_stage_label`, `last_failure_stage`, `last_failure_detail`, and `failure_backoff_until`; repeated no-candidate/not-switched/switch-failed outcomes enter a 180 second backoff; stale usage snapshots older than 30 minutes are displayed as needing refresh instead of hard-blocking candidate selection as 0% quota; the browser console remained free of warnings/errors after loading `https://codex.woai.pro`.

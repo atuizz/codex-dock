@@ -8,6 +8,7 @@
     "preflight": "npm run helper:verify-build && npm run verify",
     "release:report": "node ./scripts/generate-release-evidence-report.mjs",
     "smoke:production": "npm --prefix cloud-worker run smoke:production",
+    "smoke:production:surface": "node ./scripts/smoke-production-surface.mjs --out artifacts/verification/production-surface-result.json",
     "test": "npm run verify",
     "verify": "node ./scripts/run-local-verifiers.mjs"
   }

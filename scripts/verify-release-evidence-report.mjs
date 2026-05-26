@@ -25,11 +25,12 @@ assert.match(report.cloudflare.static_asset_version, /^[a-f0-9]{12}$/);
 assert.equal(report.ci_cd.ci_workflow_configured, true);
 assert.equal(report.ci_cd.deploy_workflow_configured, true);
 assert.equal(report.ci_cd.workflow_dispatch_configured, true);
+assert.equal(report.ci_cd.production_surface_command, "npm run smoke:production:surface");
 assert.equal(report.docs.release_doc_has_quality_gates, true);
 assert.equal(report.docs.release_doc_mentions_helper, true);
 assert.equal(report.docs.package_has_release_report, true);
-assert.equal(report.evidence.required_count, 25);
-assert.equal(report.evidence.present_count, 25);
+assert.equal(report.evidence.required_count, 26);
+assert.equal(report.evidence.present_count, 26);
 assert.deepEqual(report.evidence.missing, []);
 
 const serialized = JSON.stringify(report);

@@ -33,6 +33,7 @@ const requiredEvidence = [
   "artifacts/verification/helper-stale-reconnect-production.png",
   "artifacts/verification/oauth-provider-error-production-result.json",
   "artifacts/verification/helper-update-release-production-result.json",
+  "artifacts/verification/production-surface-result.json",
 ];
 
 async function readText(relativePath) {
@@ -78,6 +79,7 @@ const [
   productionUpdate,
   lifecycleHealth,
   lifecycleSelfTest,
+  productionSurface,
   releaseDoc,
   packageJson,
   ciWorkflow,
@@ -89,6 +91,7 @@ const [
   readJson("artifacts/verification/helper-update-release-production-result.json"),
   readJson("artifacts/verification/helper-lifecycle-health-local-result.json"),
   readJson("artifacts/verification/helper-lifecycle-self-test-local-result.json"),
+  readJson("artifacts/verification/production-surface-result.json"),
   readText("docs/release-and-verification.md").catch(() => ""),
   readJson("package.json"),
   readText(".github/workflows/ci.yml").catch(() => ""),
@@ -115,7 +118,8 @@ const report = {
     && lifecycleHealth?.ok === true
     && lifecycleSelfTest?.ok === true
     && lifecycleSelfTest?.log_found === true
-    && productionUpdate?.ok === true,
+    && productionUpdate?.ok === true
+    && productionSurface?.ok === true,
   generated_at: new Date().toISOString(),
   git: {
     branch: runGit(["branch", "--show-current"]),
@@ -129,6 +133,7 @@ const report = {
     worker_version: extractWorkerVersion(releaseDoc),
     static_asset_version: assetManifest?.version || "",
     production_manifest_verified_at: productionUpdate?.verified_at || "",
+    production_surface_checked_at: productionSurface?.checked_at || "",
   },
   helper: {
     version: helperRelease?.version || "",
@@ -153,6 +158,7 @@ const report = {
   ci_cd: {
     preflight_command: "npm run preflight",
     production_smoke_command: "npm run smoke:production",
+    production_surface_command: "npm run smoke:production:surface",
     release_report_command: "npm run release:report",
     ci_workflow_configured: /npm run preflight/.test(ciWorkflow) && /actions\/upload-artifact/.test(ciWorkflow),
     deploy_workflow_configured: /wrangler deploy/.test(deployWorkflow) && /npm run smoke:production/.test(deployWorkflow),
