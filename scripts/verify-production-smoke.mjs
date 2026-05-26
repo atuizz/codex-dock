@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -63,6 +64,13 @@ function assertRequestId(result, label) {
   assert.match(result.response.headers.get("x-request-id") || "", /^[a-f0-9-]{8,}$/i, `${label} should include X-Request-Id`);
 }
 
+function loadBrowserUmd(source, globalName) {
+  const sandbox = { window: {}, URL, URLSearchParams };
+  sandbox.globalThis = sandbox.window;
+  runInNewContext(source, sandbox, { timeout: 1000 });
+  return sandbox.window[globalName];
+}
+
 const index = await request("/");
 assert.equal(index.response.status, 200, "index should load");
 assert.match(index.text, /Codex Dock/, "index should contain product name");
@@ -75,6 +83,17 @@ const versionedRefs = [...index.text.matchAll(/(?:href|src)="([^"]+\.(?:css|js)(
 assert.ok(versionedRefs.length >= 10, "index should include versioned JS/CSS references");
 assert.deepEqual(new Set(versionedRefs.map((ref) => ref.version)), new Set([manifest.data.version]), "all online JS/CSS refs should use manifest version");
 assert.doesNotMatch(index.text, /20260525-oauth-primary2/, "online index should not keep a stale hand-written asset version");
+const oauthCoreRef = versionedRefs.find((ref) => ref.file.endsWith("oauth-core.js"));
+assert.ok(oauthCoreRef, "index should load oauth-core.js");
+const oauthCoreAsset = await request(`/${oauthCoreRef.file.replace(/^\/+/, "")}?v=${manifest.data.version}`);
+assert.equal(oauthCoreAsset.response.status, 200, "versioned oauth-core.js should load");
+const oauthCore = loadBrowserUmd(oauthCoreAsset.text, "CodexOauthCore");
+assert.ok(oauthCore?.providerErrorStatus, "production oauth-core should expose providerErrorStatus");
+const oauthDenied = oauthCore.providerErrorStatus("error=access_denied&error_description=User%20cancelled&state=fresh");
+assert.equal(oauthDenied.code, "oauth_provider_error", "OAuth provider denial should have a stable code");
+assert.match(oauthDenied.message, /重新打开授权页面/, "OAuth provider denial should give one recovery action");
+assert.doesNotMatch(oauthDenied.message, /没有收到有效授权结果/, "OAuth provider denial should not look like an empty callback");
+assert.equal(oauthCore.callbackStateStatus("http://localhost:1455/auth/callback?code=old&state=old", "fresh").code, "oauth_state_mismatch", "stale OAuth callbacks should remain rejected");
 
 const meBefore = await request("/api/me");
 assert.equal(meBefore.response.status, 200, "me before login should return 200");
