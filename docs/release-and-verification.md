@@ -38,6 +38,8 @@ For a faster Worker/UI-only loop, use `npm test`. It builds Cloudflare Static As
 
 `npm run preflight` builds the Helper into `artifacts/build/CodexDockHelper` so local verification still works while the installed Helper is running from `dist\CodexDockHelper`. Use `npm run helper:build` when intentionally refreshing the distributable `dist` package.
 
+`scripts/verify-commercial-release-gate.mjs` is part of `npm run verify` and fails the release if the fixed commercial path evidence disappears from CI: auth/session, OAuth RT import, account health, usage refresh channels, safe auto-switch, Helper lifecycle/update, admin/audit, production smoke, CI/CD, design prototype, and responsive/browser screenshots.
+
 After a production deploy, run:
 
 ```powershell
@@ -105,6 +107,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 ## Current Verification Evidence
 
 - Latest production release verified on `2026-05-26`: `wrangler deploy` published Worker version `3746b8fc-12b3-4951-879c-76b477ef870d` with static asset version `57707afa2760`; production smoke passed in strict local-helper-hash mode; online Helper download and local `dist\CodexDockHelper\CodexDockHelper.exe` both report SHA-256 `1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B`.
+- Commercial release gate added on `2026-05-26`: `scripts/verify-commercial-release-gate.mjs` checks 15 named commercial gates and 16 tracked evidence artifacts, and is auto-discovered by `scripts/run-local-verifiers.mjs` during `npm run verify` and `npm run preflight`.
 - GitHub CI/CD hardening verified on `2026-05-26`: main CI was re-run successfully after the workflow changes, ran the pinned Windows release preflight, and uploaded the Helper artifact. Repository secret `CLOUDFLARE_ACCOUNT_ID` is set; `CLOUDFLARE_API_TOKEN` still needs to be added before GitHub-hosted Cloudflare deploys can run.
 - Helper `0.4.4` local release verified on `2026-05-26`: `dist\CodexDockHelper\CodexDockHelper.exe` SHA-256 is `1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B`, `/api/health` reports `failure_count`, `failure_pause_until`, and `failure_pause_reason`, `/api/update/check` reports latest version `0.4.4`, and the device panel renders both the `failure_paused` stage plus `恢复自动切换` action and the Helper update check action.
 - Auto-switch failure-loop hotfix verified on `2026-05-26`: Helper health now exposes `last_stage`, `last_stage_label`, `last_failure_stage`, `last_failure_detail`, and `failure_backoff_until`; repeated no-candidate/not-switched/switch-failed outcomes enter a 180 second backoff; stale usage snapshots older than 30 minutes are displayed as needing refresh instead of hard-blocking candidate selection as 0% quota; the browser console remained free of warnings/errors after loading `https://codex.woai.pro`.
@@ -158,4 +161,5 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 - Helper lifecycle: close-to-tray, persistent `%APPDATA%\CodexDock\helper.log`, bounded UI log buffer, redacted diagnostics export, log restore, and RichTextBox recovery are required before publishing a Helper artifact.
 - Admin operations: users, devices, Helper versions, RT/AT account health, 24h failure trend, usage-refresh failures, and audit are visible without exposing credentials.
 - API diagnostics: JSON API errors include stable `code`, body/header request id, and a short `diagnostic.summary` without exposing credentials or stack traces.
+- Release gate: the commercial verifier keeps the above gates, production smoke, CI/CD workflow shape, design board, and browser/desktop evidence attached to the normal preflight path instead of relying on an informal manual checklist.
 

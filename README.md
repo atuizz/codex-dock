@@ -84,7 +84,7 @@ npm --prefix cloud-worker ci
 npm run preflight
 ```
 
-`preflight` 会把 Helper 验证构建输出到 `artifacts/build/CodexDockHelper`，避免本机正在运行的 `dist\CodexDockHelper\CodexDockHelper.exe` 锁住发布包时导致验证失败。正式更新发布包仍使用 `npm run helper:build` 或 `.\native-helper\build-helper.ps1`。静态资源构建会把发布包复制到 `downloads/CodexDockHelper.exe`，并在 `asset-manifest.json` 写入 Helper 版本、构建日期、大小和 SHA-256。
+`preflight` 会把 Helper 验证构建输出到 `artifacts/build/CodexDockHelper`，避免本机正在运行的 `dist\CodexDockHelper\CodexDockHelper.exe` 锁住发布包时导致验证失败。正式更新发布包仍使用 `npm run helper:build` 或 `.\native-helper\build-helper.ps1`。静态资源构建会把发布包复制到 `downloads/CodexDockHelper.exe`，并在 `asset-manifest.json` 写入 Helper 版本、构建日期、大小和 SHA-256。商业发布门 `scripts/verify-commercial-release-gate.mjs` 也会随 `verify/preflight` 自动运行，防止登录、RT 导入、额度刷新、自动切换、Helper、管理员、生产 smoke、CI/CD 和截图证据从发布链里脱落。
 
 只跑 Worker/UI/静态资源验证时：
 
