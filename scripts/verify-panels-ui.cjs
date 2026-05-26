@@ -123,6 +123,11 @@ const deviceHtml = ui.renderDevice({
     build_date: "2026-05-26",
     bytes: 174592,
     sha256: "1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B",
+    package: {
+      file: "downloads/CodexDockHelper-0.4.4-portable.zip",
+      bytes: 181024,
+      sha256: "9BC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B",
+    },
   },
   helperBase: "http://127.0.0.1:18766",
   helperAuthorized: true,
@@ -150,11 +155,13 @@ assert.match(deviceHtml, /data-helper-action="authorize"/);
 assert.match(deviceHtml, /data-helper-action="export-diagnostics"/);
 assert.match(deviceHtml, /Helper 分发/);
 assert.match(deviceHtml, /下载最新版/);
+assert.match(deviceHtml, /下载 portable 包/);
 assert.match(deviceHtml, /本机检查更新/);
 assert.match(deviceHtml, /已有 v0\.4\.4 发布/);
 assert.match(deviceHtml, /data-helper-action="copy-helper-sha"/);
 assert.match(deviceHtml, /data-helper-action="check-update"/);
 assert.match(deviceHtml, /1EC50E1E2006/);
+assert.match(deviceHtml, /9BC50E1E2006/);
 assert.match(deviceHtml, /自动切换阶段/);
 assert.match(deviceHtml, /持续监控/);
 assert.match(deviceHtml, /在线/);

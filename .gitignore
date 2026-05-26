@@ -10,4 +10,5 @@ cloud-worker/public/
 cloud-worker/.wrangler-dry-run/
 artifacts/build/
 dist/CodexDockHelper/CodexAppServerProxy.exe
+dist/CodexDockHelper/*.zip
 dist/CodexPlusLocalHelper/

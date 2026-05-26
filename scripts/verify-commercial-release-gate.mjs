@@ -122,6 +122,7 @@ const releaseGates = [
       { label: "failure pause", pattern: /AutoSwitchFailurePauseThreshold/ },
       { label: "update check", pattern: /\/api\/update\/check/ },
       { label: "current Helper version", pattern: /0\.4\.4/ },
+      { label: "portable release package", pattern: /Compress-Archive|CodexDockHelper-release\\\.json|portable\\\.zip/i },
     ],
   },
   {
@@ -198,6 +199,7 @@ const uiGates = [
       { label: "Helper diagnostics panel", pattern: /helperDiagnostic|Helper 诊断/ },
       { label: "auto-switch stage panel", pattern: /autoSwitchStage|自动切换阶段/ },
       { label: "Helper update panel", pattern: /检查更新|update/i },
+      { label: "Helper portable package action", pattern: /下载 portable 包/ },
     ],
   },
 ];
@@ -253,6 +255,7 @@ const visualEvidence = [
   "artifacts/verification/account-health-production-preview.png",
   "artifacts/verification/account-cleanup-modal-production.png",
   "artifacts/verification/helper-release-card-production.png",
+  "artifacts/verification/helper-portable-release-production.png",
   "artifacts/verification/auto-switch-stage-production.png",
   "artifacts/verification/helper-stale-reconnect-production.png",
   "artifacts/verification/oauth-provider-error-production-result.json",

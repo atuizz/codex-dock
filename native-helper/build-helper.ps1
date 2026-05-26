@@ -4,6 +4,37 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Get-Sha256([string]$Path) {
+  $stream = [System.IO.File]::OpenRead($Path)
+  try {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+      $hash = $sha.ComputeHash($stream)
+      return ([System.BitConverter]::ToString($hash) -replace "-", "").ToUpperInvariant()
+    } finally {
+      $sha.Dispose()
+    }
+  } finally {
+    $stream.Dispose()
+  }
+}
+
+function Get-HelperMetadata([string]$SourcePath) {
+  $sourceText = Get-Content -LiteralPath $SourcePath -Raw
+  $version = ""
+  $buildDate = ""
+  if ($sourceText -match 'HelperVersion\s*=\s*"([^"]+)"') {
+    $version = $Matches[1]
+  }
+  if ($sourceText -match 'HelperBuildDate\s*=\s*"([^"]+)"') {
+    $buildDate = $Matches[1]
+  }
+  return [pscustomobject]@{
+    Version = $version
+    BuildDate = $buildDate
+  }
+}
+
 $root = Split-Path -Parent $PSScriptRoot
 $outDir = if ([string]::IsNullOrWhiteSpace($OutDir)) {
   Join-Path $root "dist\CodexDockHelper"
@@ -114,4 +145,62 @@ foreach ($obsolete in @("index.html", "app.js", "styles.css", "server.js", "star
   }
 }
 
+$metadata = Get-HelperMetadata $source
+$releaseManifest = Join-Path $outDir "CodexDockHelper-release.json"
+$releaseZip = Join-Path $outDir ("CodexDockHelper-" + ($(if ($metadata.Version) { $metadata.Version } else { "latest" })) + "-portable.zip")
+$releaseFiles = @()
+foreach ($name in @("CodexDockHelper.exe", "CodexDockHelper.ico", "README.md", "CodexAppServerProxy.exe")) {
+  $path = Join-Path $outDir $name
+  if (Test-Path -LiteralPath $path) {
+    $item = Get-Item -LiteralPath $path
+    $releaseFiles += [pscustomobject]@{
+      file = $name
+      bytes = $item.Length
+      sha256 = Get-Sha256 $path
+    }
+  }
+}
+$manifestObject = [ordered]@{
+  product = "Codex Dock Helper"
+  kind = "portable-windows-helper"
+  version = $metadata.Version
+  build_date = $metadata.BuildDate
+  minimum_cloud_console = "https://codex.woai.pro"
+  install = [ordered]@{
+    mode = "portable"
+    steps = @(
+      "关闭正在运行的 Codex Dock Helper。",
+      "解压 CodexDockHelper portable 包到一个固定目录。",
+      "运行 CodexDockHelper.exe，并在云控制台设备页完成授权。"
+    )
+  }
+  files = $releaseFiles
+}
+$manifestObject | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $releaseManifest -Encoding UTF8
+
+if (Test-Path -LiteralPath $releaseZip) {
+  Remove-Item -LiteralPath $releaseZip -Force
+}
+$staging = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-dock-helper-package-" + [System.Guid]::NewGuid().ToString("N"))
+$packageRoot = Join-Path $staging "CodexDockHelper"
+New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
+foreach ($name in @("CodexDockHelper.exe", "CodexDockHelper.ico", "README.md", "CodexAppServerProxy.exe", "CodexDockHelper-release.json")) {
+  $path = Join-Path $outDir $name
+  if (Test-Path -LiteralPath $path) {
+    Copy-Item -LiteralPath $path -Destination (Join-Path $packageRoot $name) -Force
+  }
+}
+Compress-Archive -LiteralPath $packageRoot -DestinationPath $releaseZip -CompressionLevel Optimal -Force
+Remove-Item -LiteralPath $staging -Recurse -Force
+
+$zipItem = Get-Item -LiteralPath $releaseZip
+$manifestObject["package"] = [ordered]@{
+  file = $zipItem.Name
+  format = "zip"
+  bytes = $zipItem.Length
+  sha256 = Get-Sha256 $releaseZip
+}
+$manifestObject | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $releaseManifest -Encoding UTF8
+
 Write-Host "Built: $exe"
+Write-Host "Packaged: $releaseZip"

@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  listStoreZipEntries,
+} from "./helper-release-utils.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -78,5 +81,28 @@ assert.equal(sha256(await readFile(helperPath)), manifest.helper.sha256, "Helper
 const helperSource = await readFile(join(repoRoot, "native-helper", "CodexPlusLocalHelper.cs"), "utf8");
 assert.equal(manifest.helper.version, helperSource.match(/HelperVersion\s*=\s*"([^"]+)"/)?.[1], "Helper version should match source");
 assert.equal(manifest.helper.build_date, helperSource.match(/HelperBuildDate\s*=\s*"([^"]+)"/)?.[1], "Helper build date should match source");
+assert.ok(manifest.helper.release_manifest, "manifest should expose the Helper release manifest");
+assert.ok(manifest.helper.package?.file, "manifest should expose the Helper portable package");
+assert.match(manifest.helper.package.file, /CodexDockHelper-\d+\.\d+\.\d+-portable\.zip$/, "Helper package should be versioned");
+const releaseManifest = JSON.parse(await readFile(join(publicDir, manifest.helper.release_manifest), "utf8"));
+assert.equal(releaseManifest.version, manifest.helper.version, "Helper release manifest version should match asset manifest");
+assert.equal(releaseManifest.files.find((file) => file.file === "CodexDockHelper.exe")?.sha256, manifest.helper.sha256, "release manifest should include the exe hash");
+assert.equal(releaseManifest.package.sha256, manifest.helper.package.sha256, "release manifest package hash should match asset manifest");
+const helperPackagePath = join(publicDir, manifest.helper.package.file);
+const helperPackageStat = await stat(helperPackagePath);
+assert.equal(helperPackageStat.size, manifest.helper.package.bytes, "Helper package size should match manifest");
+const helperPackageBytes = await readFile(helperPackagePath);
+assert.equal(sha256(helperPackageBytes), manifest.helper.package.sha256, "Helper package hash should match manifest");
+const zipNames = new Set(listStoreZipEntries(helperPackageBytes).map((entry) => entry.name));
+assert.ok(zipNames.has("CodexDockHelper/CodexDockHelper.exe"), "Helper package should include the exe");
+assert.ok(zipNames.has("CodexDockHelper/CodexDockHelper.ico"), "Helper package should include the icon");
+assert.ok(zipNames.has("CodexDockHelper/README.md"), "Helper package should include install docs");
+assert.ok(zipNames.has("CodexDockHelper/CodexDockHelper-release.json"), "Helper package should include release manifest");
+const distReleaseManifest = JSON.parse(await readFile(join(repoRoot, "dist", "CodexDockHelper", "CodexDockHelper-release.json"), "utf8"));
+assert.equal(distReleaseManifest.version, manifest.helper.version, "dist release manifest version should match asset manifest");
+assert.equal(distReleaseManifest.files.find((file) => file.file === "CodexDockHelper.exe")?.sha256, manifest.helper.sha256, "dist release manifest should match the committed Helper exe");
+assert.equal(distReleaseManifest.files.find((file) => file.file === "README.md")?.sha256, sha256(await readFile(join(repoRoot, "dist", "CodexDockHelper", "README.md"))), "dist release manifest should match bundled README");
+assert.equal(basename(distReleaseManifest.package.file || ""), basename(manifest.helper.package.file), "dist release manifest package name should match asset manifest");
+assert.equal(distReleaseManifest.package.sha256, manifest.helper.package.sha256, "dist release manifest package hash should match asset manifest");
 
 console.log("static asset versioning verification passed");

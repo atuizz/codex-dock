@@ -4,6 +4,7 @@ const path = require("node:path");
 
 const repoRoot = path.resolve(__dirname, "..");
 const helperSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexPlusLocalHelper.cs"), "utf8");
+const helperBuildScript = fs.readFileSync(path.join(repoRoot, "native-helper", "build-helper.ps1"), "utf8");
 
 assert.match(helperSource, /\/api\/diagnostics\/export/);
 assert.match(helperSource, /\/api\/tray\/repair/);
@@ -34,6 +35,9 @@ assert.match(helperSource, /SetAutoSwitchStage\("failure-paused", "自动暂停"
 assert.match(helperSource, /AutoSwitchFailureStageLabel/);
 assert.ok(helperSource.includes("\\\\bAuthorization\\\\s*:\\\\s*Bearer"));
 assert.match(helperSource, /cdh_\[REDACTED\]/);
+assert.match(helperBuildScript, /CodexDockHelper-release\.json/);
+assert.match(helperBuildScript, /portable\.zip/);
+assert.match(helperBuildScript, /Compress-Archive/);
 
 async function verifyLiveHelper() {
   const controller = new AbortController();

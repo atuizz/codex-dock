@@ -1,0 +1,38 @@
+{
+  "product": "Codex Dock Helper",
+  "kind": "portable-windows-helper",
+  "version": "0.4.4",
+  "build_date": "2026-05-26",
+  "minimum_cloud_console": "https://codex.woai.pro",
+  "install": {
+    "mode": "portable",
+    "steps": [
+      "关闭正在运行的 Codex Dock Helper。",
+      "解压 CodexDockHelper portable 包到一个固定目录。",
+      "运行 CodexDockHelper.exe，并在云控制台设备页完成授权。"
+    ]
+  },
+  "files": [
+    {
+      "file": "CodexDockHelper.exe",
+      "bytes": 174592,
+      "sha256": "1EC50E1E200624A639E4213092481A63572C365E06DD4A19047797D13525039B"
+    },
+    {
+      "file": "CodexDockHelper.ico",
+      "bytes": 2686,
+      "sha256": "BD2CE21848379EBE2980FA8577359751644C84245F6C918E33B591FC95C6A786"
+    },
+    {
+      "file": "README.md",
+      "bytes": 8966,
+      "sha256": "56FD761BA853007B587E21B72B0F53056597ED49D8495EFB35D8FE07DCC02B0A"
+    }
+  ],
+  "package": {
+    "file": "downloads/CodexDockHelper-0.4.4-portable.zip",
+    "format": "zip",
+    "bytes": 187764,
+    "sha256": "4992690203D6803BE34E9EC86479F21FDB38045799579851100E2DB8C7A13A94"
+  }
+}

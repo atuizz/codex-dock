@@ -53,6 +53,14 @@
       return file.startsWith("/") ? file : `/${file}`;
     }
 
+    function helperPackageUrl(release = {}) {
+      const helperPackage = release.package || {};
+      const file = helperPackage.downloadUrl || helperPackage.file || "";
+      if (!file) return "";
+      if (/^https?:\/\//i.test(file)) return file;
+      return file.startsWith("/") ? file : `/${file}`;
+    }
+
     function shortSha(value) {
       const text = String(value || "").trim();
       if (text.length <= 18) return text;
@@ -318,6 +326,11 @@
       const currentUnsupported = helperReady && (!helper.version || compareVersion(helper.version, minimumHelperVersion) < 0);
       const updateAvailable = helperReady && helper.version && latestVersion && compareVersion(helper.version, latestVersion) < 0;
       const releaseKnown = Boolean(helperRelease.file || helperRelease.sha256 || helperRelease.version);
+      const packageInfo = helperRelease.package || {};
+      const packageUrl = helperPackageUrl(helperRelease);
+      const packageSummary = packageInfo.sha256
+        ? ` · portable ${escapeHtml(formatBytes(packageInfo.bytes || 0))} · ZIP ${escapeHtml(shortSha(packageInfo.sha256))}`
+        : "";
       const cardClass = helperReady && !currentUnsupported && !updateAvailable ? "ok" : "warn";
       const statusText = !helperReady
         ? "未检测到本机 Helper，可先下载最新版。"
@@ -331,7 +344,7 @@
           <div class="helper-release-main">
             <span>Helper 分发</span>
             <strong>最新版 v${escapeHtml(latestVersion)}${latestBuild ? ` · ${escapeHtml(latestBuild)}` : ""}</strong>
-            <small>${releaseKnown ? `发布包 ${escapeHtml(formatBytes(helperRelease.bytes || 0))} · SHA-256 ${escapeHtml(shortSha(helperRelease.sha256))}` : "发布包信息加载中。"}</small>
+            <small>${releaseKnown ? `EXE ${escapeHtml(formatBytes(helperRelease.bytes || 0))} · SHA-256 ${escapeHtml(shortSha(helperRelease.sha256))}${packageSummary}` : "发布包信息加载中。"}</small>
           </div>
           <div class="helper-release-current">
             <span>当前设备</span>
@@ -339,6 +352,7 @@
           </div>
           <div class="helper-release-actions">
             <a class="button-link primary-link" href="${escapeHtml(helperDownloadUrl(helperRelease))}" download>下载最新版</a>
+            ${packageUrl ? `<a class="button-link" href="${escapeHtml(packageUrl)}" download>下载 portable 包</a>` : ""}
             <button type="button" data-helper-action="check-update" ${helperReady ? "" : "disabled"}>本机检查更新</button>
             <button type="button" data-helper-action="copy-helper-sha" ${helperRelease.sha256 ? "" : "disabled"}>复制校验值</button>
           </div>

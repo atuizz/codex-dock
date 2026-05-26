@@ -328,12 +328,17 @@ function helperClient() {
 function normalizeHelperRelease(manifest = {}) {
   const helper = manifest.helper || {};
   if (!helper.file && !helper.sha256 && !helper.version) return null;
+  const helperPackage = helper.package || {};
   return {
     ...helper,
     version: helper.version || minimumHelperVersion,
     build_date: helper.build_date || helper.buildDate || "",
     assetVersion: manifest.version || "",
     downloadUrl: helper.file ? `/${String(helper.file).replace(/^\/+/, "")}` : "/downloads/CodexDockHelper.exe",
+    package: {
+      ...helperPackage,
+      downloadUrl: helperPackage.file ? `/${String(helperPackage.file).replace(/^\/+/, "")}` : "",
+    },
   };
 }
 
@@ -3542,7 +3547,11 @@ async function copyHelperChecksum() {
     toast("Helper 校验值还在加载，请稍后重试。");
     return;
   }
-  const text = `${sha}  CodexDockHelper.exe`;
+  const packageSha = state.helperRelease?.package?.sha256 || "";
+  const packageFile = state.helperRelease?.package?.file || "CodexDockHelper-portable.zip";
+  const lines = [`${sha}  CodexDockHelper.exe`];
+  if (packageSha) lines.push(`${packageSha}  ${String(packageFile).split("/").pop()}`);
+  const text = lines.join("\n");
   try {
     await navigator.clipboard.writeText(text);
     toast("已复制 Helper SHA-256 校验值。");

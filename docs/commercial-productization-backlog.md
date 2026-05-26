@@ -8,7 +8,7 @@
 - AT-only 账号已明确标注“不支持 Codex”，默认不进入候选。
 - OAuth 回调基础闭环已验收成功：用户已通过回调流程成功导入一个账号。
 - Helper、Worker、前端已具备基本联动：回调接收、账号导入、账号池展示、手动切换、自动切换框架、审计和本地验证脚本都已经存在。
-- 当前整体已具备商业化运行骨架：账号体系、设备授权、RT-first 导入、额度刷新通道、任务连续性保护、Helper 日志可靠性、管理员用户/设备/审计视图、账号健康/失败趋势/Helper 版本与需重连聚合指标、内容哈希静态资源版本戳、CI/CD 基线和商业发布验收门均已落地；剩余事项主要是更多真实账号场景回归、Helper 安装/签名/自动升级分发和更完整的 Windows DPI 视觉矩阵。
+- 当前整体已具备商业化运行骨架：账号体系、设备授权、RT-first 导入、额度刷新通道、任务连续性保护、Helper 日志可靠性、管理员用户/设备/审计视图、账号健康/失败趋势/Helper 版本与需重连聚合指标、Helper EXE/portable 包/release manifest 分发链、内容哈希静态资源版本戳、CI/CD 基线和商业发布验收门均已落地；剩余事项主要是更多真实账号场景回归、Helper 安装签名/真正自动更新器和更完整的 Windows DPI 视觉矩阵。
 
 ## 当前优先级：账号回调自动读取
 
@@ -156,6 +156,7 @@
 - Helper 主窗口和本地状态页支持检查发布清单；Helper 不静默覆盖当前运行文件，只引导用户打开官方下载页面。
 - 支持导出本机日志用于客服排查。
 - `asset-manifest.json` 记录 Helper 发布包版本、构建日期、大小和 SHA-256，控制台 Helper 页展示最新发布、当前版本、下载入口、本机检查更新和复制校验值动作。
+- Helper 构建和 Static Assets 发布会生成并验证三件套：`CodexDockHelper.exe`、`CodexDockHelper-<version>-portable.zip` 和 `CodexDockHelper-release.json`；生产 smoke 会校验 EXE、zip、release manifest 哈希和 zip 内容。
 
 仍需打磨：
 - Windows 签名安装器、安装路径迁移和真正自动更新器。

@@ -4,6 +4,9 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
+import {
+  listStoreZipEntries,
+} from "./helper-release-utils.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -177,6 +180,18 @@ const onlineHash = sha256(helperBytes);
 assert.equal(manifest.data.helper?.sha256, onlineHash, "manifest Helper hash should match online download");
 assert.match(manifest.data.helper?.version || "", /^\d+\.\d+\.\d+$/, "manifest Helper version should be present");
 assert.match(manifest.data.helper?.build_date || "", /^\d{4}-\d{2}-\d{2}$/, "manifest Helper build date should be present");
+assert.ok(manifest.data.helper?.release_manifest, "manifest should expose online Helper release manifest");
+assert.ok(manifest.data.helper?.package?.file, "manifest should expose online Helper portable package");
+const helperReleaseManifest = await request(`/${manifest.data.helper.release_manifest.replace(/^\/+/, "")}`);
+assert.equal(helperReleaseManifest.response.status, 200, "Helper release manifest should load");
+assert.equal(helperReleaseManifest.data.version, manifest.data.helper.version, "Helper release manifest version should match asset manifest");
+const helperPackageBytes = await download(`/${manifest.data.helper.package.file.replace(/^\/+/, "")}`);
+assert.equal(sha256(helperPackageBytes), manifest.data.helper.package.sha256, "online Helper package hash should match manifest");
+assert.equal(helperPackageBytes.length, manifest.data.helper.package.bytes, "online Helper package size should match manifest");
+const helperPackageEntries = new Set(listStoreZipEntries(helperPackageBytes).map((entry) => entry.name));
+assert.ok(helperPackageEntries.has("CodexDockHelper/CodexDockHelper.exe"), "online Helper package should include the exe");
+assert.ok(helperPackageEntries.has("CodexDockHelper/README.md"), "online Helper package should include installation docs");
+assert.ok(helperPackageEntries.has("CodexDockHelper/CodexDockHelper-release.json"), "online Helper package should include release manifest");
 let localHash = "";
 try {
   localHash = sha256(await readFile(helperPath));
