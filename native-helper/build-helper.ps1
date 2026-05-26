@@ -147,7 +147,8 @@ foreach ($obsolete in @("index.html", "app.js", "styles.css", "server.js", "star
 
 $metadata = Get-HelperMetadata $source
 $releaseManifest = Join-Path $outDir "CodexDockHelper-release.json"
-$releaseZip = Join-Path $outDir ("CodexDockHelper-" + ($(if ($metadata.Version) { $metadata.Version } else { "latest" })) + "-portable.zip")
+$releaseVersion = if ($metadata.Version) { $metadata.Version } else { "latest" }
+$releaseZip = Join-Path $outDir ("CodexDockHelper-" + $releaseVersion + "-portable.zip")
 $releaseFiles = @()
 foreach ($name in @("CodexDockHelper.exe", "CodexDockHelper.ico", "README.md", "CodexAppServerProxy.exe")) {
   $path = Join-Path $outDir $name
@@ -169,9 +170,9 @@ $manifestObject = [ordered]@{
   install = [ordered]@{
     mode = "portable"
     steps = @(
-      "关闭正在运行的 Codex Dock Helper。",
-      "解压 CodexDockHelper portable 包到一个固定目录。",
-      "运行 CodexDockHelper.exe，并在云控制台设备页完成授权。"
+      "Close any running Codex Dock Helper.",
+      "Extract the CodexDockHelper portable package to a stable folder.",
+      "Run CodexDockHelper.exe and authorize the device from the cloud console."
     )
   }
   files = $releaseFiles
