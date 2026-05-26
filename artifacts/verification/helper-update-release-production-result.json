@@ -1,7 +1,7 @@
 {
   "ok": true,
-  "verified_at": "2026-05-26T12:05:34.5282747Z",
-  "asset_version": "9855935fb6d6",
+  "verified_at": "2026-05-26T12:28:17.4967626Z",
+  "asset_version": "24a0d58f631b",
   "helper": {
     "file": "downloads/CodexDockHelper.exe",
     "version": "0.4.6",
@@ -12,15 +12,15 @@
     "package": {
       "file": "downloads/CodexDockHelper-0.4.6-portable.zip",
       "format": "zip",
-      "bytes": 192112,
-      "sha256": "830D363FC4A8CBE471F154BF4BAE5B058DDC06715E18F9CE1546353648D04D89"
+      "bytes": 192111,
+      "sha256": "780F6A5FBBEAA5DBF0721A013F1B3C34F99BB8CB8321968B9BA50C2F1E1E9C45"
     }
   },
   "release_version": "0.4.6",
   "release_package": {
     "file": "downloads/CodexDockHelper-0.4.6-portable.zip",
     "format": "zip",
-    "bytes": 192112,
-    "sha256": "830D363FC4A8CBE471F154BF4BAE5B058DDC06715E18F9CE1546353648D04D89"
+    "bytes": 192111,
+    "sha256": "780F6A5FBBEAA5DBF0721A013F1B3C34F99BB8CB8321968B9BA50C2F1E1E9C45"
   }
 }

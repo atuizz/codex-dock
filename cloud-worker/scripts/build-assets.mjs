@@ -20,8 +20,13 @@ const versionedAssets = assetFiles.filter((file) => file !== "index.html");
 const assetEntries = [];
 const versionHash = createHash("sha256");
 
+async function readNormalizedTextBytes(filePath) {
+  const text = await readFile(filePath, "utf8");
+  return Buffer.from(text.replace(/\r\n?/g, "\n"), "utf8");
+}
+
 async function hashFile(file) {
-  const bytes = await readFile(join(repoRoot, file));
+  const bytes = await readNormalizedTextBytes(join(repoRoot, file));
   const digest = sha256(bytes);
   versionHash.update(file);
   versionHash.update("\0");
@@ -38,7 +43,7 @@ for (const file of assetFiles) {
 }
 
 const assetVersion = versionHash.digest("hex").slice(0, 12);
-const indexSource = await readFile(join(repoRoot, "index.html"), "utf8");
+const indexSource = (await readNormalizedTextBytes(join(repoRoot, "index.html"))).toString("utf8");
 const versionedIndex = indexSource.replace(
   /(href|src)="((?:[A-Za-z0-9_-]+)\.(?:css|js))(?:\?v=[^"]*)?"/g,
   (match, attr, file) => versionedAssets.includes(file) ? `${attr}="${file}?v=${assetVersion}"` : match,
@@ -77,7 +82,7 @@ try {
     const metadata = await helperMetadata();
     const helperSha = sha256(helperBytes);
     const helperIcon = await readFile(join(helperDistDir, "CodexDockHelper.ico")).catch(() => null);
-    const helperReadme = await readFile(join(helperDistDir, "README.md")).catch(() => null);
+    const helperReadme = await readNormalizedTextBytes(join(helperDistDir, "README.md")).catch(() => null);
     const packageName = `CodexDockHelper-${metadata.version || "latest"}-portable.zip`;
     const releaseManifestName = "CodexDockHelper-release.json";
     const releaseFiles = [

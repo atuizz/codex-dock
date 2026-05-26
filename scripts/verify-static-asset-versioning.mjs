@@ -37,10 +37,15 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex").toUpperCase();
 }
 
+async function readNormalizedTextBytes(filePath) {
+  const text = await readFile(filePath, "utf8");
+  return Buffer.from(text.replace(/\r\n?/g, "\n"), "utf8");
+}
+
 async function expectedVersion() {
   const hash = createHash("sha256");
   for (const file of sourceAssets) {
-    const bytes = await readFile(join(repoRoot, file));
+    const bytes = await readNormalizedTextBytes(join(repoRoot, file));
     hash.update(file);
     hash.update("\0");
     hash.update(bytes);
@@ -66,7 +71,7 @@ assert.match(index, /id="settingsRepairTrayBtn"/, "settings page should expose t
 const entries = new Map((manifest.assets || []).map((entry) => [entry.file, entry]));
 for (const file of sourceAssets) {
   assert.ok(entries.has(file), `manifest should include ${file}`);
-  const sourceBytes = await readFile(join(repoRoot, file));
+  const sourceBytes = await readNormalizedTextBytes(join(repoRoot, file));
   assert.equal(entries.get(file).sha256, sha256(sourceBytes), `${file} manifest hash should match source`);
   if (file !== "index.html") {
     assert.equal(sha256(await readFile(join(publicDir, file))), entries.get(file).sha256, `${file} public hash should match manifest`);
@@ -101,7 +106,7 @@ assert.ok(zipNames.has("CodexDockHelper/CodexDockHelper-release.json"), "Helper 
 const distReleaseManifest = JSON.parse(await readFile(join(repoRoot, "dist", "CodexDockHelper", "CodexDockHelper-release.json"), "utf8"));
 assert.equal(distReleaseManifest.version, manifest.helper.version, "dist release manifest version should match asset manifest");
 assert.equal(distReleaseManifest.files.find((file) => file.file === "CodexDockHelper.exe")?.sha256, manifest.helper.sha256, "dist release manifest should match the committed Helper exe");
-assert.equal(distReleaseManifest.files.find((file) => file.file === "README.md")?.sha256, sha256(await readFile(join(repoRoot, "dist", "CodexDockHelper", "README.md"))), "dist release manifest should match bundled README");
+assert.equal(distReleaseManifest.files.find((file) => file.file === "README.md")?.sha256, sha256(await readNormalizedTextBytes(join(repoRoot, "dist", "CodexDockHelper", "README.md"))), "dist release manifest should match bundled README");
 assert.equal(basename(distReleaseManifest.package.file || ""), basename(manifest.helper.package.file), "dist release manifest package name should match asset manifest");
 assert.equal(distReleaseManifest.package.sha256, manifest.helper.package.sha256, "dist release manifest package hash should match asset manifest");
 
