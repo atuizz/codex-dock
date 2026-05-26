@@ -9,6 +9,8 @@ const helperSource = fs
   .sort()
   .map((name) => fs.readFileSync(path.join(repoRoot, "native-helper", name), "utf8"))
   .join("\n");
+const helperMainSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexPlusLocalHelper.cs"), "utf8");
+const runtimeStatusSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexRuntimeStatus.cs"), "utf8");
 const helperBuildScript = fs.readFileSync(path.join(repoRoot, "native-helper", "build-helper.ps1"), "utf8");
 
 function wait(ms) {
@@ -73,6 +75,11 @@ assert.match(helperSource, /internal sealed class AuthWriteResult/);
 assert.match(helperSource, /internal sealed class ProcessRecord/);
 assert.match(helperSource, /internal sealed class CodexRestoreTarget/);
 assert.match(helperSource, /internal sealed class ProtocolProbeResult/);
+assert.match(runtimeStatusSource, /internal sealed class CodexRuntimeStatus/);
+assert.match(runtimeStatusSource, /public static CodexRuntimeStatus FromProtocol/);
+assert.match(runtimeStatusSource, /public string ToJson\(\)/);
+assert.match(runtimeStatusSource, /private static string JsonEscape/);
+assert.doesNotMatch(helperMainSource, /private sealed class CodexRuntimeStatus/);
 assert.ok(helperSource.includes("\\\\bAuthorization\\\\s*:\\\\s*Bearer"));
 assert.match(helperSource, /cdh_\[REDACTED\]/);
 assert.match(helperBuildScript, /CodexDockHelper-release\.json/);
