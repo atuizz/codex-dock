@@ -69,6 +69,10 @@ assert.match(helperSource, /SetAutoSwitchStage\("failure-paused", "自动暂停"
 assert.match(helperSource, /AutoSwitchFailureStageLabel/);
 assert.match(helperSource, /internal sealed class AutoSwitchConfig/);
 assert.match(helperSource, /public AutoSwitchConfig Clamp\(\)/);
+assert.match(helperSource, /internal sealed class AuthWriteResult/);
+assert.match(helperSource, /internal sealed class ProcessRecord/);
+assert.match(helperSource, /internal sealed class CodexRestoreTarget/);
+assert.match(helperSource, /internal sealed class ProtocolProbeResult/);
 assert.ok(helperSource.includes("\\\\bAuthorization\\\\s*:\\\\s*Bearer"));
 assert.match(helperSource, /cdh_\[REDACTED\]/);
 assert.match(helperBuildScript, /CodexDockHelper-release\.json/);

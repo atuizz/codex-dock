@@ -6074,12 +6074,6 @@ namespace CodexPlusLocalHelper
             }
         }
 
-        private sealed class AuthWriteResult
-        {
-            public string Target;
-            public string Backup;
-        }
-
         private sealed class HelperUpdateInfo
         {
             public bool Ok;
@@ -6122,36 +6116,6 @@ namespace CodexPlusLocalHelper
                     + (string.IsNullOrWhiteSpace(Error) ? "" : ",\"error\":\"" + JsonEscape(Error) + "\"")
                     + "}";
             }
-        }
-
-        private sealed class ProcessRecord
-        {
-            public int Id;
-            public int ParentId;
-            public string Name;
-            public string CommandLine;
-        }
-
-        private sealed class CodexRestoreTarget
-        {
-            public string ThreadId = "";
-            public string Url = "";
-            public string Source = "";
-            public string Title = "";
-            public string Cwd = "";
-            public bool IsGoal;
-            public string Reason = "";
-        }
-
-        private sealed class ProtocolProbeResult
-        {
-            public bool Connected;
-            public string Error = "";
-            public string UserAgent = "";
-            public int LoadedThreadCount;
-            public int ActiveThreadCount;
-            public int WaitingThreadCount;
-            public int ThreadCount;
         }
 
         private sealed class CodexLogRuntimeMonitor

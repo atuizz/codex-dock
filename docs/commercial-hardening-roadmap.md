@@ -8,7 +8,7 @@
 
 - 线上控制台通过 Cloudflare Worker Static Assets 提供 `index.html`、`account-core.js`、`platform-clients.js`、`format-core.js`、`progress-ui.js`、`shell-ui.js`、`dialog-ui.js`、`settings-ui.js`、`account-list-ui.js`、`account-detail-ui.js`、`audit-core.js`、`admin-ui.js`、`panels-ui.js`、`import-core.js`、`import-ui.js`、`app.js`、`styles.css`。
 - 云端 API 在 `cloud-worker/worker.js`，数据真相源为 Cloudflare D1 `codex-cloud-console`。
-- 本地执行器为 `dist/CodexDockHelper/CodexDockHelper.exe`，源码位于 `native-helper/*.cs`，主窗口和 HTTP/API 编排仍在 `CodexPlusLocalHelper.cs`，自动切换配置模型已拆到 `AutoSwitchConfig.cs`；运行时只监听 `127.0.0.1`。
+- 本地执行器为 `dist/CodexDockHelper/CodexDockHelper.exe`，源码位于 `native-helper/*.cs`，主窗口和 HTTP/API 编排仍在 `CodexPlusLocalHelper.cs`，自动切换配置模型已拆到 `AutoSwitchConfig.cs`，通用数据模型已拆到 `HelperModels.cs`；运行时只监听 `127.0.0.1`。
 - token 明文不返回给账号列表；云端密文在 `account_secrets.encrypted_auth_json`，由 Worker secret `TOKEN_ENCRYPTION_KEY` 解密。
 
 ## 第一阶段：包袱清理与 UI 规范
@@ -86,7 +86,7 @@
 - 已将 Worker 自动切换设置抽离到 `cloud-worker/worker-settings.js`，将设备注册、Helper device token 验证、滑动保活、轮换下发、heartbeat、usage 上报、next 选号和 Helper 审计回调抽离到 `cloud-worker/worker-helper.js`；新增 `scripts/verify-worker-helper.mjs` 覆盖发 token、滑动保活、过期下线、轮换下发、硬触发无候选审计等通信链路。
 - 已将 Worker 审计读写抽离到 `cloud-worker/worker-audit.js`，将管理员统计、用户管理、设备/审计查询、密码重置和最后管理员保护抽离到 `cloud-worker/worker-admin.js`；新增 `scripts/verify-worker-admin-audit.mjs` 覆盖 requestId 审计串联、切换成功时间写回、非管理员拦截、最后管理员保护、禁用用户清 session 和重置密码审计。
 - 已将当前用户设置与改密码路由抽离到 `cloud-worker/worker-user.js`，新增 `scripts/verify-worker-user.mjs` 覆盖自动切换设置钳制/保存审计、弱密码拦截、旧密码校验、密码哈希更新和改密审计。
-- 已启动 Helper 源码模块化：`native-helper/build-helper.ps1` 不再只编译单个 `CodexPlusLocalHelper.cs`，而是收集 `native-helper/*.cs` 并排除代理源码；`AutoSwitchConfig` 已拆到 `native-helper/AutoSwitchConfig.cs`，为后续继续拆长任务状态机、更新通道和日志生命周期打下边界。
+- 已启动 Helper 源码模块化：`native-helper/build-helper.ps1` 不再只编译单个 `CodexPlusLocalHelper.cs`，而是收集 `native-helper/*.cs` 并排除代理源码；`AutoSwitchConfig` 已拆到 `native-helper/AutoSwitchConfig.cs`，`AuthWriteResult`、`ProcessRecord`、`CodexRestoreTarget` 和 `ProtocolProbeResult` 已拆到 `native-helper/HelperModels.cs`，为后续继续拆长任务状态机、更新通道和日志生命周期打下边界。
 
 ## 下一批重构入口
 
