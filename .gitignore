@@ -9,6 +9,7 @@ cloud-worker/node_modules/
 cloud-worker/public/
 cloud-worker/.wrangler-dry-run/
 artifacts/build/
+artifacts/verification/github-release-readiness-result.json
 dist/CodexDockHelper/CodexAppServerProxy.exe
 dist/CodexDockHelper/*.zip
 dist/CodexPlusLocalHelper/

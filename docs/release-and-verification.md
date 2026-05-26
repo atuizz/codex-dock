@@ -76,7 +76,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
   - `preview` builds and runs `wrangler deploy --dry-run`.
   - `production` is guarded to `master` or `main`, applies remote D1 migrations, runs `wrangler deploy`, then runs `npm run smoke:production`.
 - `scripts/verify-github-workflows.cjs` keeps the CI/CD shape under local preflight so deployments cannot silently lose Helper build validation, D1 migration, production smoke, or Cloudflare secret wiring.
-- `npm run release:github-readiness` is the live GitHub-side readiness gate. It uses `gh` read-only calls to verify active workflows, current-commit CI, a real push-triggered CI run, repository secret names, and external check-suite status, then writes `artifacts/verification/github-release-readiness-result.json` without exposing secret values. This check is intentionally not part of `preflight` because it depends on GitHub authentication and repository state.
+- `npm run release:github-readiness` is the live GitHub-side readiness gate. It uses `gh` read-only calls to verify active workflows, current-commit CI, a real push-triggered CI run, repository secret names, and external check-suite status, then writes the ignored local evidence file `artifacts/verification/github-release-readiness-result.json` without exposing secret values. This check is intentionally not part of `preflight` because it depends on GitHub authentication and repository state.
 
 ## Production Deploy Checklist
 
