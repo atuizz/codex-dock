@@ -22,6 +22,8 @@ assert.match(script, /CLOUDFLARE_API_TOKEN/);
 assert.match(script, /CLOUDFLARE_ACCOUNT_ID/);
 assert.match(script, /CHECKOUT_TOKEN/);
 assert.match(script, /current-sha-push-ci-green/);
+assert.match(script, /current-sha-push-event-observed/);
+assert.match(script, /PushEvent/);
 assert.match(script, /workflow_dispatch/);
 assert.match(script, /check-suites/);
 assert.doesNotMatch(script, /gh auth token|process\.env\.CLOUDFLARE_API_TOKEN/);

@@ -157,6 +157,28 @@ if (result.repository) {
 
   if (result.sha) {
     try {
+      const events = ghJson(["api", `repos/${owner}/${name}/events`]) || [];
+      const matchingPushEvents = events
+        .filter((event) => event.type === "PushEvent" && event.payload?.head === result.sha)
+        .map((event) => ({
+          actor: event.actor?.login || "",
+          created_at: event.created_at || "",
+          ref: event.payload?.ref || "",
+          before: event.payload?.before || "",
+          head: event.payload?.head || "",
+          push_id: event.payload?.push_id || null,
+        }));
+      result.evidence.push_events = matchingPushEvents;
+      addCheck(result, "current-sha-push-event-observed", matchingPushEvents.length > 0, "warning", "GitHub recorded a PushEvent for the current commit", {
+        push_events: matchingPushEvents,
+      }, "No GitHub PushEvent was observed for the current commit");
+    } catch (error) {
+      addCheck(result, "github-push-events", false, "warning", "Unable to inspect repository PushEvents", {
+        error: String(error.message || error),
+      });
+    }
+
+    try {
       const runs = ghJson([
         "run",
         "list",
@@ -173,8 +195,11 @@ if (result.repository) {
       const successfulCi = runs.find((run) => run.workflowName === "CI" && run.headSha === result.sha && run.status === "completed" && run.conclusion === "success");
       const successfulPushCi = runs.find((run) => run.workflowName === "CI" && run.headSha === result.sha && run.event === "push" && run.status === "completed" && run.conclusion === "success");
       const successfulManualCi = runs.find((run) => run.workflowName === "CI" && run.headSha === result.sha && run.event === "workflow_dispatch" && run.status === "completed" && run.conclusion === "success");
+      const pushEventObserved = (result.evidence.push_events || []).length > 0;
       addCheck(result, "current-sha-ci-green", Boolean(successfulCi), "error", "Current commit has a successful CI run", successfulCi || {}, "No successful CI run exists for the current commit");
-      addCheck(result, "current-sha-push-ci-green", Boolean(successfulPushCi), "error", "Current commit has a successful push-triggered CI run", successfulPushCi || {}, "No successful push-triggered CI run exists for the current commit");
+      addCheck(result, "current-sha-push-ci-green", Boolean(successfulPushCi), "error", "Current commit has a successful push-triggered CI run", successfulPushCi || {}, pushEventObserved
+        ? "GitHub recorded a PushEvent for the current commit but no successful push-triggered CI run exists"
+        : "No successful push-triggered CI run exists for the current commit");
       addCheck(result, "current-sha-manual-ci-green", Boolean(successfulManualCi), "warning", "Current commit has a successful manual CI run", successfulManualCi || {}, "No successful manual CI run exists for the current commit");
     } catch (error) {
       addCheck(result, "github-runs", false, "error", "Unable to inspect GitHub Actions runs for the current commit", {
