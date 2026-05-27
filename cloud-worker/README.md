@@ -2,11 +2,13 @@
 
 Cloudflare Worker + Static Assets + D1 backend for `https://codex.woai.pro`.
 
+For the product overview, start with [`../README.md`](../README.md). For private deployments, see [`../docs/self-hosting.md`](../docs/self-hosting.md). For data boundaries, see [`../docs/privacy-and-security.md`](../docs/privacy-and-security.md).
+
 ## Commands
 
 CI/CD entrypoints:
 
-- `../.github/workflows/ci.yml` runs all `scripts/verify-*` checks, builds assets, builds the Windows Helper, and uploads the Helper artifact.
+- `../.github/workflows/ci.yml` runs all `scripts/verify-*` checks, builds assets, builds the Windows Dock Agent, and uploads the Agent artifact.
 - `../.github/workflows/cloudflare-deploy.yml` is manual. `preview` runs a Wrangler dry run; `production` applies remote D1 migrations and deploys.
 
 Manual deploy:
@@ -59,7 +61,7 @@ Helper device tokens are bearer credentials with a sliding 60-day TTL. Active he
 Auto-switch payloads are only issued after the Helper reports a confirmed safe boundary, so quota exhaustion does not interrupt an active Codex turn that can still continue.
 `DELETE /api/me` requires the signed-in email and current password, removes user-owned accounts/devices/sessions by D1 foreign-key cascade, and preserves only an anonymous removal-count event in `account_deletion_events`; it does not retain email, user id, device key, or token material.
 
-## Added Commercial API Surface
+## Additional API Surface
 
 - `GET /api/settings/usage-refresh`
 - `PATCH /api/settings/usage-refresh`
