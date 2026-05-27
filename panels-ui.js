@@ -106,7 +106,7 @@
       const taskEvent = meaningfulText(codex.last_task_event) || meaningfulText(codex.detail) || meaningfulText(codex.label);
       const evidence = helperReady
         ? `${codex.safe_to_switch ? "安全门已打开" : codex.safe_to_switch === false ? "安全门关闭" : "安全门确认中"} · ${sourceLabel}${taskEvent ? ` · ${taskEvent}` : ""}`
-        : "Helper 未连接，暂无本机边界证据";
+        : "Agent 未连接，暂无本机边界证据";
       const trigger = pendingReason || lastReason || "暂无触发";
       const lastSeen = autoSwitch.last_check || autoSwitch.cloud_last_sync || autoSwitch.last_switch || "";
       const base = {
@@ -114,12 +114,12 @@
         key: "monitoring",
         eyebrow: "自动切换阶段",
         title: "持续监控",
-        summary: "Helper 会按阈值观察额度和任务状态，只有安全边界确认后才换号。",
+        summary: "Agent 按阈值观察额度和任务状态，只在安全边界换号。",
         trigger,
         evidence,
         result: resultText || "暂无执行结果",
         stage: stageLabel || stageKey || "监控中",
-        next: "保持 Helper 在线；触发后会先保护当前任务。",
+        next: "保持 Agent 在线；触发后会先保护当前任务。",
         lastSeen,
       };
 
@@ -128,11 +128,11 @@
           ...base,
           className: "bad",
           key: "offline",
-          title: "等待 Helper 在线",
-          summary: "本机 Helper 未连接，无法读取任务边界或执行自动切换。",
+          title: "等待 Agent 在线",
+          summary: "本机 Agent 未连接，无法读取任务边界或执行自动切换。",
           trigger: "未连接",
           result: "本机状态不可用",
-          next: "启动或安装最新版 Helper，再刷新状态。",
+          next: "启动或安装最新版 Agent，再刷新状态。",
         };
       }
       if (outdated) {
@@ -140,10 +140,10 @@
           ...base,
           className: "warn",
           key: "upgrade_required",
-          title: "等待 Helper 升级",
-          summary: `当前 Helper 版本 ${version || "未上报"} 低于最低支持版本 ${minimumHelperVersion}。`,
+          title: "等待 Agent 升级",
+          summary: `当前 Agent 版本 ${version || "未上报"} 低于最低支持版本 ${minimumHelperVersion}。`,
           result: resultText || "版本不满足自动切换要求",
-          next: "下载最新版 Helper 并重启本地助手。",
+          next: "下载最新版 Agent 并重启。",
         };
       }
       if (!helperAuthorized) {
@@ -152,10 +152,10 @@
           className: "warn",
           key: "unauthorized",
           title: "等待设备授权",
-          summary: userPresent ? "Helper 在线，但还不能接收当前云控制台下发的切换任务。" : "登录后才能把这台 Helper 授权给云控制台。",
+          summary: userPresent ? "Agent 在线，但还不能接收当前云控制台下发的切换任务。" : "登录后才能把这台 Agent 授权给云控制台。",
           trigger: "未授权",
           result: resultText || "自动切换未绑定当前控制台",
-          next: userPresent ? "点击“授权 Helper”，绑定当前设备。" : "先登录云账号，再授权 Helper。",
+          next: userPresent ? "点击“授权 Agent”，绑定当前设备。" : "先登录云账号，再授权 Agent。",
         };
       }
       if (autoSwitch.enabled === false) {
@@ -175,7 +175,7 @@
           className: "bad",
           key: "failure_paused",
           title: "自动切换已暂停",
-          summary: `连续失败${failureCount ? ` ${failureCount} 次` : ""}后，Helper 暂停本机自动切换，避免重复消耗账号和刷屏。`,
+          summary: `连续失败${failureCount ? ` ${failureCount} 次` : ""}后，Agent 暂停本机自动切换，避免重复消耗账号和刷屏。`,
           result: resultText || "等待处理失败原因",
           stage: stageLabel || "自动暂停",
           next: "处理候选账号、RT、设备授权或本机写入问题后，点击“恢复自动切换”。",
@@ -187,7 +187,7 @@
           className: "warn",
           key: "failure_backoff",
           title: "失败退避中",
-          summary: "上一轮自动切换未完成，Helper 已暂停重复触发，避免循环刷屏和审计噪音。",
+          summary: "上一轮自动切换未完成，Agent 已暂停重复触发。",
           result: resultText || "等待退避结束",
           stage: stageLabel || "失败退避",
           next: "等待退避结束；同时检查候选账号、RT 状态和额度刷新来源。",
@@ -199,10 +199,10 @@
           className: "warn",
           key: "pending_revalidation",
           title: "恢复待切计划",
-          summary: "Helper 重启后保留了尚未处理的触发原因，当前正在重新核验额度与任务边界。",
+          summary: "Agent 重启后保留了尚未处理的触发原因，正在重新核验。",
           result: resultText || "等待重新核验",
           stage: stageLabel || "恢复待切计划",
-          next: "核验完成前不会写入 auth 或重启 Codex；保持 Helper 在线即可。",
+          next: "核验完成前不会写入 auth 或重启 Codex；保持 Agent 在线即可。",
         };
       }
       if ((pendingReason && codex.safe_to_switch === false) || ["draining-active-turn", "waiting-boundary"].includes(normalizedStageKey)) {
@@ -224,7 +224,7 @@
           title: "安全边界已确认",
           summary: "触发条件仍存在，当前任务边界已经安全，正在确认安全切换时机。",
           result: resultText || "准备执行切换",
-          next: "Helper 将请求云端候选账号，随后写入 auth 并重启 Codex。",
+          next: "Agent 将请求云端候选账号，随后写入 auth 并重启 Codex。",
         };
       }
       if (normalizedStageKey === "candidate-selecting") {
@@ -233,9 +233,9 @@
           className: "ok",
           key: "candidate_selecting",
           title: "正在请求候选账号",
-          summary: "安全边界已确认，Helper 正在向云端请求可切换账号。",
+          summary: "安全边界已确认，Agent 正在请求可切换账号。",
           result: resultText || "等待云端候选选择",
-          next: "云端只会下发候选载荷；真正切换仍由本机 Helper 写入 auth。",
+          next: "云端只下发候选载荷；真正切换由本机 Agent 执行。",
         };
       }
       if (normalizedStageKey === "payload-issued") {
@@ -244,7 +244,7 @@
           className: "ok",
           key: "payload_issued",
           title: "已取得切换载荷",
-          summary: "云端已下发候选账号，Helper 准备在本机写入新的 auth。",
+          summary: "云端已下发候选账号，Agent 准备写入新的 auth。",
           result: resultText || "准备写入 auth",
           next: "进入 auth 写入阶段；写入完成后再重启并恢复 Codex。",
         };
@@ -255,7 +255,7 @@
           className: "warn",
           key: "writing_auth",
           title: "正在写入 auth",
-          summary: "Helper 正在备份并写入新的 auth.json，这是实际改变本机登录态的阶段。",
+          summary: "Agent 正在备份并写入新的 auth.json。",
           result: resultText || "正在写入 auth.json",
           next: "写入成功后会刷新本地授权状态，并按配置重启 Codex。",
         };
@@ -266,7 +266,7 @@
           className: "warn",
           key: "restarting_codex",
           title: "正在重启 Codex",
-          summary: "auth 已写入，Helper 正在关闭旧进程或启动新的 Codex 窗口。",
+          summary: "auth 已写入，Agent 正在重启 Codex。",
           result: resultText || "等待 Codex 重启",
           next: "等待 Codex 启动完成；如果有原窗口目标，下一步会尝试恢复。",
         };
@@ -277,7 +277,7 @@
           className: "warn",
           key: "restoring_window",
           title: "正在恢复窗口",
-          summary: "Codex 已重新启动，Helper 正在恢复切换前的会话或目标任务窗口。",
+          summary: "Codex 已重新启动，Agent 正在恢复目标窗口。",
           result: resultText || "等待窗口恢复",
           next: "恢复完成后会记录已切换；若窗口无法识别，Codex 仍会保持新授权状态。",
         };
@@ -288,7 +288,7 @@
           className: "warn",
           key: "switching",
           title: "正在执行切换",
-          summary: "任务边界已经确认，Helper 正在请求候选、写入 auth 并恢复 Codex。",
+          summary: "任务边界已确认，Agent 正在请求候选、写入 auth 并恢复 Codex。",
           next: "等待切换任务完成；如果长时间停留，导出诊断查看写入或启动阶段。",
         };
       }
@@ -328,7 +328,7 @@
           className: "warn",
           key: "held_by_cloud",
           title: "云端暂未放行",
-          summary: "Helper 已上报触发信息，但云端策略没有确认本轮必须切换。",
+          summary: "Agent 已上报触发信息，但云端策略暂未放行。",
           next: "继续观察额度和失败信号；如策略过严，可在设置中调整阈值。",
         };
       }
@@ -376,7 +376,7 @@
           <div class="auto-switch-stage-head">
             <span>${escapeHtml(stage.eyebrow || "自动切换阶段")}</span>
             <strong>${escapeHtml(stage.title || "状态确认中")}</strong>
-            <p>${escapeHtml(stage.summary || "正在根据 Helper 上报状态确认自动切换阶段。")}</p>
+            <p>${escapeHtml(stage.summary || "正在根据 Agent 上报状态确认自动切换阶段。")}</p>
           </div>
           <div class="auto-switch-stage-grid">
             ${rows.map(([label, value]) => `
@@ -405,16 +405,16 @@
         : "";
       const cardClass = helperReady && !currentUnsupported && !updateAvailable ? "ok" : "warn";
       const statusText = !helperReady
-        ? "未检测到本机 Helper，可先下载最新版。"
+        ? "未检测到本机 Agent，可先下载最新版。"
         : currentUnsupported
-          ? `当前 ${currentVersion} 低于最低支持版本 v${minimumHelperVersion}，建议升级后重启 Helper。`
+          ? `当前 ${currentVersion} 低于最低支持版本 v${minimumHelperVersion}，建议升级后重启 Agent。`
           : updateAvailable
             ? `当前 ${currentVersion} 可用，但已有 v${latestVersion} 发布，建议在空闲时升级。`
           : `当前 ${currentVersion} 可用；如需重新安装，可下载同版本发布包。`;
       return `
         <div class="helper-release-card ${escapeHtml(cardClass)}">
           <div class="helper-release-main">
-            <span>Helper 分发</span>
+            <span>Agent 版本</span>
             <strong>最新版 v${escapeHtml(latestVersion)}${latestBuild ? ` · ${escapeHtml(latestBuild)}` : ""}</strong>
             <small>${releaseKnown ? `EXE ${escapeHtml(formatBytes(helperRelease.bytes || 0))} · SHA-256 ${escapeHtml(shortSha(helperRelease.sha256))}${packageSummary}` : "发布包信息加载中。"}</small>
           </div>
@@ -423,10 +423,10 @@
             <strong>${escapeHtml(statusText)}</strong>
           </div>
           <div class="helper-release-actions">
-            <a class="button-link primary-link" href="${escapeHtml(helperDownloadUrl(helperRelease))}" download>下载最新版</a>
+            <a class="button-link primary-link" href="${escapeHtml(helperDownloadUrl(helperRelease))}" download>下载 Agent</a>
             ${packageUrl ? `<a class="button-link" href="${escapeHtml(packageUrl)}" download>下载 portable 包</a>` : ""}
-            <button type="button" data-helper-action="check-update" ${helperReady ? "" : "disabled"}>本机检查更新</button>
-            <button type="button" data-helper-action="copy-helper-sha" ${helperRelease.sha256 ? "" : "disabled"}>复制校验值</button>
+            <button type="button" data-helper-action="check-update" ${helperReady ? "" : "disabled"}>检查更新</button>
+            <button type="button" data-helper-action="copy-helper-sha" ${helperRelease.sha256 ? "" : "disabled"}>复制校验</button>
           </div>
         </div>
       `;
@@ -453,35 +453,35 @@
       if (!helperReady) {
         return {
           className: "bad",
-          title: "Helper 未连接",
-          reason: "没有探测到本机 Helper，本机 auth 写入、状态监控和自动切换都不可执行。",
-          action: "启动或下载最新版 Helper，然后点击“刷新状态”。",
+          title: "Agent 未连接",
+          reason: "未探测到本机代理，无法写入 auth、监测状态或自动切换。",
+          action: "启动或下载最新版 Agent，然后刷新状态。",
         };
       }
       if (outdated) {
         return {
           className: "warn",
-          title: "Helper 需要升级",
-          reason: `当前 Helper 版本 ${version || "未上报"} 低于最低支持版本 ${minimumHelperVersion}。`,
-          action: "下载最新版 Helper 并重启本地助手。",
+          title: "Agent 需要升级",
+          reason: `当前 Agent 版本 ${version || "未上报"} 低于最低支持版本 ${minimumHelperVersion}。`,
+          action: "下载最新版 Agent 并重启。",
         };
       }
       if (tray.last_error || tray.visible === false) {
         return {
           className: "warn",
           title: "托盘需要修复",
-          reason: tray.last_error || "Helper 服务在线，但托盘状态未确认可见。",
+          reason: tray.last_error || "Agent 在线，但托盘状态未确认可见。",
           action: "点击“修复托盘图标”，无需重启账号池。",
         };
       }
       if (!helperAuthorized) {
         return {
           className: "warn",
-          title: "需要授权 Helper",
+          title: "需要授权 Agent",
           reason: userPresent
-            ? "本机 Helper 在线，但还没有绑定当前云控制台的设备令牌。"
-            : "本机 Helper 在线；登录云账号后才能授权自动切换。",
-          action: userPresent ? "点击“授权 Helper”，让云端只向这台设备下发切换任务。" : "先登录云账号，再授权本机 Helper。",
+            ? "Agent 在线，但还没有绑定当前云控制台的设备令牌。"
+            : "Agent 在线；登录云账号后才能授权自动切换。",
+          action: userPresent ? "点击“授权 Agent”，让云端只向这台设备下发切换任务。" : "先登录云账号，再授权本机 Agent。",
         };
       }
       if (failurePauseUntil) {
@@ -497,7 +497,7 @@
           className: "warn",
           title: "恢复待切计划",
           reason: restoredPendingReason,
-          action: "Helper 正在重新核验额度和任务边界；核验前不会写入 auth。",
+          action: "Agent 正在重新核验额度和任务边界；核验前不会写入 auth。",
         };
       }
       const pendingSwitchReason = livePendingReason;
@@ -521,14 +521,14 @@
         return {
           className: "warn",
           title: "自动切换未开启",
-          reason: "Helper 已授权，但本机自动切换守护当前处于关闭状态。",
+          reason: "Agent 已授权，但本机自动切换守护当前处于关闭状态。",
           action: "在智能切换设置中开启后台自动切换。",
         };
       }
       return {
         className: "ok",
-        title: "Helper 可用",
-        reason: "本机 Helper 在线、已授权，Codex 当前处于可解释状态。",
+        title: "Agent 可用",
+        reason: "Agent 在线、已授权，Codex 当前处于可解释状态。",
         action: "可以手动切换、刷新额度或交给智能切换。",
       };
     }
@@ -597,7 +597,7 @@
         : "未连接";
       const rows = [
         ["连接", helperReady ? "在线" : "未连接"],
-        ["Helper 版本", helperReady ? (helper.version ? `v${helper.version}${helper.build_date ? ` · ${helper.build_date}` : ""}` : "旧版未上报") : "未连接"],
+        ["Agent 版本", helperReady ? (helper.version ? `v${helper.version}${helper.build_date ? ` · ${helper.build_date}` : ""}` : "旧版未上报") : "未连接"],
         ["地址", helperReady ? helperBase || "本机" : "未探测到"],
         ["端口", helper.port || "未识别"],
         ["设备授权", helperReady ? (helperAuthorized ? "已授权当前控制台" : "未授权或授权到其它控制台") : "未连接"],
@@ -615,10 +615,16 @@
         ["当前 auth", currentAuthChecking ? "正在确认" : (currentAuthMatched ? "已识别" : "未匹配账号池")],
         ["执行", "写入 auth 并重启 Codex"],
       ];
+      const runtimeSignals = [
+        ["连接", helperReady ? "在线" : "未连接", helperReady ? "ok" : "warn"],
+        ["授权", helperReady ? (helperAuthorized ? "已授权" : "待授权") : "未连接", helperReady && helperAuthorized ? "ok" : "warn"],
+        ["Codex", helperReady ? (codex.label || "确认中") : "未探测", helperReady && codex.safe_to_switch ? "ok" : "warn"],
+        ["安全门", helperReady ? switchSafety : "未连接", helperReady && codex.safe_to_switch ? "ok" : "warn"],
+      ];
       return `
         <div class="helper-diagnostic ${escapeHtml(diagnostic.className)}">
           <div>
-            <span>诊断结论</span>
+            <span>结论</span>
             <strong>${escapeHtml(diagnostic.title)}</strong>
           </div>
           <div>
@@ -630,25 +636,36 @@
             <strong>${escapeHtml(diagnostic.action)}</strong>
           </div>
         </div>
-        <div class="helper-action-row">
-          <button type="button" data-helper-action="refresh">刷新状态</button>
-          <button type="button" data-helper-action="authorize" ${helperReady && userPresent ? "" : "disabled"}>${helperAuthorized ? "重新授权 Helper" : "授权 Helper"}</button>
-          <button type="button" data-helper-action="repair-tray" ${helperReady ? "" : "disabled"}>修复托盘</button>
-          ${failurePauseUntil ? `<button type="button" data-helper-action="resume-auto-switch" ${helperReady ? "" : "disabled"}>恢复自动切换</button>` : ""}
-          <button type="button" data-helper-action="open-status" ${helperReady ? "" : "disabled"}>本机状态页</button>
-          <button type="button" data-helper-action="export-diagnostics" ${helperReady ? "" : "disabled"}>导出诊断</button>
-        </div>
-        ${renderAutoSwitchStage(stage)}
-        ${renderHelperRelease({ helperReady, helper, helperRelease, minimumHelperVersion })}
-        <div class="device-grid">
-          ${rows.map(([label, value]) => `
-            <div class="device-row">
+        <div class="helper-runtime-strip" aria-label="Agent 运行摘要">
+          ${runtimeSignals.map(([label, value, className]) => `
+            <div class="helper-runtime-signal ${escapeHtml(className)}">
               <span>${escapeHtml(label)}</span>
               <strong>${escapeHtml(value)}</strong>
             </div>
           `).join("")}
         </div>
-        <p class="muted-line">Helper 只读取本机任务日志中的事件类型，不展示或上传对话内容。</p>
+        <div class="helper-action-row">
+          <button type="button" data-helper-action="refresh">刷新</button>
+          <button type="button" data-helper-action="authorize" ${helperReady && userPresent ? "" : "disabled"}>${helperAuthorized ? "重新授权" : "授权 Agent"}</button>
+          <button type="button" data-helper-action="repair-tray" ${helperReady ? "" : "disabled"}>修复托盘</button>
+          ${failurePauseUntil ? `<button type="button" data-helper-action="resume-auto-switch" ${helperReady ? "" : "disabled"}>恢复自动切换</button>` : ""}
+          <button type="button" data-helper-action="open-status" ${helperReady ? "" : "disabled"}>状态页</button>
+          <button type="button" data-helper-action="export-diagnostics" ${helperReady ? "" : "disabled"}>导出诊断</button>
+        </div>
+        ${renderAutoSwitchStage(stage)}
+        ${renderHelperRelease({ helperReady, helper, helperRelease, minimumHelperVersion })}
+        <details class="helper-technical-details">
+          <summary>技术明细</summary>
+          <div class="device-grid">
+            ${rows.map(([label, value]) => `
+              <div class="device-row">
+                <span>${escapeHtml(label)}</span>
+                <strong>${escapeHtml(value)}</strong>
+              </div>
+            `).join("")}
+          </div>
+        </details>
+        <p class="muted-line">Agent 只读取本机任务事件，不展示或上传对话内容。</p>
       `;
     }
 

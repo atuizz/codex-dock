@@ -40,14 +40,16 @@ expectRule(".auto-switch-stage-grid", /grid-template-columns:\s*repeat\(4, minma
 expectRule(".drawer-panel", /max-height:\s*calc\(var\(--safe-vh\) - 48px\)/, "drawer should be viewport bounded");
 
 expectMedia(1180, ".shell", /grid-template-columns:\s*220px minmax\(0, 1fr\)/, "tablet shell should narrow sidebar");
-expectMedia(860, ".shell", /grid-template-columns:\s*56px minmax\(0, 1fr\)/, "small viewport shell should collapse navigation");
+expectMedia(860, ".shell", /grid-template-columns:\s*minmax\(0, 1fr\)/, "small viewport shell should hide desktop navigation");
+expectMedia(860, ".sidebar", /display:\s*none/, "small viewport should not reserve a sidebar rail");
+expectMedia(860, ".mobile-nav", /display:\s*flex/, "small viewport should expose compact mobile navigation");
 assert.match(styles, /@media \(max-width: 860px\) \{[\s\S]*?\.toolbar-controls,\s*\.primary-actions\s*\{[\s\S]*?overflow-x:\s*auto/, "small viewport toolbar should scroll internally");
-expectMedia(860, ".health-chip-row", /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/, "tablet health chips should form two columns");
+expectMedia(860, ".health-chip-row", /display:\s*flex[\s\S]*?overflow-x:\s*auto/, "small viewport health chips should scan horizontally");
 expectMedia(860, ".helper-release-card", /grid-template-columns:\s*minmax\(0, 1fr\)/, "Helper release card should collapse before mobile");
 expectMedia(860, ".auto-switch-stage-grid", /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/, "auto-switch stage should collapse to two columns");
 expectMedia(860, ".admin-table thead", /display:\s*none/, "admin tables should become card-like on small screens");
-expectMedia(460, ".primary-actions", /grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/, "phone primary actions should avoid squeezed inline buttons");
-expectMedia(460, ".health-chip-row", /grid-template-columns:\s*1fr/, "phone health chips should become single column");
+expectMedia(460, ".primary-actions", /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/, "phone primary actions should stay on one compact row");
+expectMedia(460, ".health-chip-row", /display:\s*flex/, "phone health chips should stay compact instead of pushing the list down");
 expectMedia(460, ".auto-switch-stage-grid", /grid-template-columns:\s*1fr/, "phone auto-switch stage should become single column");
 expectMedia(460, ".drawer-panel", /top:\s*auto[\s\S]*width:\s*100%[\s\S]*border-radius:\s*18px 18px 0 0/, "phone import drawer should become a bottom sheet");
 

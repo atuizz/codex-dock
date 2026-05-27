@@ -49,9 +49,9 @@ assertPublicSurfaceHasNoSecretMaterial("index", index.text);
 
 const manifest = await requestJson("/asset-manifest.json");
 assert.match(manifest.data.version || "", /^[a-f0-9]{12}$/i, "asset manifest should contain content version");
-assert.equal(manifest.data.helper?.version, "0.4.8", "production manifest should expose current Helper version");
+assert.equal(manifest.data.helper?.version, "0.4.9", "production manifest should expose current Agent version");
 assert.match(manifest.data.helper?.sha256 || "", /^[A-F0-9]{64}$/i, "production manifest should expose Helper SHA-256");
-assert.ok(manifest.data.helper?.package?.file?.includes("0.4.8"), "production manifest should expose current portable package");
+assert.ok(manifest.data.helper?.package?.file?.includes("0.4.9"), "production manifest should expose current portable package");
 assertPublicSurfaceHasNoSecretMaterial("asset manifest", manifest.text);
 
 const refs = versionedRefs(index.text);
@@ -87,7 +87,7 @@ const requiredAssets = {
   ],
   "settings-ui.js": [
     /usageRefreshMode/,
-    /本机 Helper（推荐）/,
+    /本机 Agent（推荐）/,
     /仅手动刷新/,
   ],
   "dialog-ui.js": [
@@ -95,9 +95,9 @@ const requiredAssets = {
     /任务仍在运行/,
   ],
   "admin-ui.js": [
-    /Helper 版本分布/,
+    /Agent 版本分布/,
     /失败趋势/,
-    /需重连 Helper/,
+    /需重连 Agent/,
     /24h 注销/,
   ],
   "oauth-core.js": [

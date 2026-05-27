@@ -19,7 +19,7 @@ const ui = createPanelsUi({
 
 assert.equal(ui.codexStatusSourceLabel({ source: "logs_2.sqlite" }), "任务日志");
 assert.equal(ui.codexStatusSourceLabel({ source: "process" }), "进程检测");
-assert.equal(ui.helperDiagnostic({ helperReady: false }).title, "Helper 未连接");
+assert.equal(ui.helperDiagnostic({ helperReady: false }).title, "Agent 未连接");
 assert.equal(ui.helperDiagnostic({
   helperReady: true,
   helper: { version: "0.4.2", auto_switch: { enabled: true } },
@@ -128,7 +128,7 @@ const restoredPendingStage = ui.autoSwitchStage({
   codex: { safe_to_switch: false, detail: "正在重新读取运行状态" },
 });
 assert.equal(restoredPendingStage.key, "pending_revalidation");
-assert.match(restoredPendingStage.summary, /重新核验额度与任务边界/);
+assert.match(restoredPendingStage.summary, /正在重新核验/);
 assert.match(restoredPendingStage.next, /不会写入 auth/);
 assert.equal(ui.helperDiagnostic({
   helperReady: true,
@@ -224,8 +224,8 @@ const deviceHtml = ui.renderDevice({
   },
   currentAuthMatched: true,
 });
-assert.match(deviceHtml, /诊断结论/);
-assert.match(deviceHtml, /Helper 可用/);
+assert.match(deviceHtml, /结论/);
+assert.match(deviceHtml, /Agent 可用/);
 assert.match(deviceHtml, /设备授权/);
 assert.match(deviceHtml, /最近心跳/);
 assert.match(deviceHtml, /最近切换/);
@@ -234,10 +234,10 @@ assert.match(deviceHtml, /令牌到期/);
 assert.match(deviceHtml, /托盘/);
 assert.match(deviceHtml, /data-helper-action="authorize"/);
 assert.match(deviceHtml, /data-helper-action="export-diagnostics"/);
-assert.match(deviceHtml, /Helper 分发/);
-assert.match(deviceHtml, /下载最新版/);
+assert.match(deviceHtml, /Agent 版本/);
+assert.match(deviceHtml, /下载 Agent/);
 assert.match(deviceHtml, /下载 portable 包/);
-assert.match(deviceHtml, /本机检查更新/);
+assert.match(deviceHtml, /检查更新/);
 assert.match(deviceHtml, /已有 v0\.4\.7 发布/);
 assert.match(deviceHtml, /data-helper-action="copy-helper-sha"/);
 assert.match(deviceHtml, /data-helper-action="check-update"/);
@@ -253,8 +253,8 @@ assert.match(deviceHtml, /42 秒/);
 assert.match(deviceHtml, /已识别/);
 
 const offlineDeviceHtml = ui.renderDevice({ helperReady: false });
-assert.match(offlineDeviceHtml, /Helper 未连接/);
-assert.match(offlineDeviceHtml, /等待 Helper 在线/);
+assert.match(offlineDeviceHtml, /Agent 未连接/);
+assert.match(offlineDeviceHtml, /等待 Agent 在线/);
 assert.match(offlineDeviceHtml, /disabled/);
 
 const protectingDeviceHtml = ui.renderDevice({

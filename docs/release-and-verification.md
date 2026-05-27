@@ -1,12 +1,12 @@
 # Codex Dock Release And Verification
 
-This document is the operational checklist for shipping the Cloudflare console and the Windows Codex Dock Helper as one commercial product.
+This document is the operational checklist for shipping the Cloudflare console and the Windows Codex Dock Agent as one commercial product.
 
 ## Release Surfaces
 
 - Cloud console: Cloudflare Worker `codex-cloud-console` with Static Assets from `cloud-worker/public`.
 - Cloud data: D1 database `codex-cloud-console`, managed by incremental files in `cloud-worker/migrations`.
-- Windows Helper release candidate: `dist/CodexDockHelper/CodexDockHelper.exe`, currently version `0.4.7` with build date `2026-05-27`.
+- Windows Dock Agent release candidate: `dist/CodexDockHelper/CodexDockHelper.exe`, currently version `0.4.9` with build date `2026-05-27`.
 - Public domain: `https://codex.woai.pro`.
 
 ## Required Secrets And Variables
@@ -120,7 +120,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 
 ## Current Verification Evidence
 
-- Helper `0.4.8` release candidate built on `2026-05-27`: automatic switching now exposes fine-grained execution stages for candidate selection, payload issue, auth write, Codex restart, and window restoration. Local `dist\CodexDockHelper\CodexDockHelper.exe` SHA-256 is `5EA9F01579051FAE260383AEA4EAB865FA0CA249C32DCA6088411D4D283BF421`, portable zip SHA-256 is `0125EBF6DF3BFAC3941737245B0295FB84DC120930D3659AAF1C9CD3B0157005`, and `npm run verify` passed 33 verifier scripts including the commercial release gate and release evidence report.
+- Agent `0.4.9` release candidate built on `2026-05-27`: client title, tray hint, local status page, update prompts, release manifest, default device name, and manual-switch risk copy now use Dock Agent; the switch progress popup is topmost and stays visible longer after success/failure. Local `dist\CodexDockHelper\CodexDockHelper.exe` SHA-256 is `E47EC88F9C55390DDCA0A3A0784217F8EBE7BF554EAA19312153FAAD16F11E04`, portable zip SHA-256 is `12CD684972B4492BEEF6042C528D90F7C5B4D27BD39FC31FEDC7F4BB7E30BB5B`, and the executable file name remains `CodexDockHelper.exe` for update-path compatibility.
 - Helper `0.4.7` release candidate verified on `2026-05-27`: pending auto-switch plans are persisted locally and surfaced as a revalidation-only state after Helper restart; the restored plan cannot write auth until a new live usage and safe-boundary check passes. The final downloadable EXE SHA-256 is `391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515`, portable zip SHA-256 is `87DCA57B1F815CD57FEA5215AC3A0C2462A0F186B6A8831E733C99D977D06B94`, the real `POST /api/lifecycle/self-test` result reported `log_found: true`, `log_view_fault_tested: true`, and `log_view_fault_recovered: true`, and the redacted restart recovery proof is recorded in `artifacts/verification/helper-pending-revalidation-local-result.json` and `artifacts/verification/helper-pending-revalidation-local.png`.
 - Latest production release verified on `2026-05-27`: D1 migration `0006_account_deletion_events.sql` was applied and `wrangler deploy` published Worker version `a876df41-a756-4094-b9ae-829297d1f77a` with static asset version `967b8412fa8a`; strict production smoke passed with online/local Helper hash parity and self-deleted its disposable user/device; historical synthetic smoke residue was removed with an anonymous aggregate event recording `53` users, `53` devices and `1` session; production surface smoke confirmed the commercial modules and no obvious public secret leakage. The online Helper distribution remains `0.4.7` with EXE SHA-256 `391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515` and portable zip SHA-256 `87DCA57B1F815CD57FEA5215AC3A0C2462A0F186B6A8831E733C99D977D06B94`.
 - Commercial release gate added on `2026-05-26` and extended on `2026-05-27`: `scripts/verify-commercial-release-gate.mjs` checks 18 named commercial gates and 28 tracked evidence artifacts, including account-deletion lifecycle and Helper restart revalidation evidence, and is auto-discovered by `scripts/run-local-verifiers.mjs` during `npm run verify` and `npm run preflight`.

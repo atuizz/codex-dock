@@ -1,39 +1,39 @@
 {
   "ok": true,
   "baseUrl": "https://codex.woai.pro",
-  "checked_at": "2026-05-26T17:59:01.938Z",
-  "asset_version": "967b8412fa8a",
-  "helper_version": "0.4.7",
-  "helper_sha256": "391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515",
+  "checked_at": "2026-05-26T20:43:47.606Z",
+  "asset_version": "e741b12ea5b8",
+  "helper_version": "0.4.9",
+  "helper_sha256": "E47EC88F9C55390DDCA0A3A0784217F8EBE7BF554EAA19312153FAAD16F11E04",
   "referenced_assets": 17,
   "fetched_assets": [
     {
       "file": "app.js",
-      "bytes": 162103
+      "bytes": 162436
     },
     {
       "file": "styles.css",
-      "bytes": 69997
+      "bytes": 78095
     },
     {
       "file": "shell-ui.js",
-      "bytes": 10696
+      "bytes": 10698
     },
     {
       "file": "panels-ui.js",
-      "bytes": 26589
+      "bytes": 29434
     },
     {
       "file": "settings-ui.js",
-      "bytes": 16706
+      "bytes": 16690
     },
     {
       "file": "dialog-ui.js",
-      "bytes": 6064
+      "bytes": 6061
     },
     {
       "file": "admin-ui.js",
-      "bytes": 10962
+      "bytes": 11009
     },
     {
       "file": "oauth-core.js",

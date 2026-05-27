@@ -1,13 +1,13 @@
 {
-  "product": "Codex Dock Helper",
+  "product": "Codex Dock Agent",
   "kind": "portable-windows-helper",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "build_date": "2026-05-27",
   "minimum_cloud_console": "https://codex.woai.pro",
   "install": {
     "mode": "portable",
     "steps": [
-      "关闭正在运行的 Codex Dock Helper。",
+      "关闭正在运行的 Codex Dock Agent。",
       "解压 CodexDockHelper portable 包到一个固定目录。",
       "运行 CodexDockHelper.exe，并在云控制台设备页完成授权。"
     ]
@@ -15,8 +15,8 @@
   "files": [
     {
       "file": "CodexDockHelper.exe",
-      "bytes": 182272,
-      "sha256": "5EA9F01579051FAE260383AEA4EAB865FA0CA249C32DCA6088411D4D283BF421"
+      "bytes": 182784,
+      "sha256": "E47EC88F9C55390DDCA0A3A0784217F8EBE7BF554EAA19312153FAAD16F11E04"
     },
     {
       "file": "CodexDockHelper.ico",
@@ -25,14 +25,14 @@
     },
     {
       "file": "README.md",
-      "bytes": 12159,
-      "sha256": "5D7E1F75ACD631880C4565805557BD59587F016B9DE29F23EF8A19C838F112ED"
+      "bytes": 12279,
+      "sha256": "5DD4C0002A89FD7032FE943CD66087FD983D860F09C7402BDA9C9EC485E9DBE9"
     }
   ],
   "package": {
-    "file": "downloads/CodexDockHelper-0.4.8-portable.zip",
+    "file": "downloads/CodexDockHelper-0.4.9-portable.zip",
     "format": "zip",
-    "bytes": 198638,
-    "sha256": "0125EBF6DF3BFAC3941737245B0295FB84DC120930D3659AAF1C9CD3B0157005"
+    "bytes": 199268,
+    "sha256": "12CD684972B4492BEEF6042C528D90F7C5B4D27BD39FC31FEDC7F4BB7E30BB5B"
   }
 }

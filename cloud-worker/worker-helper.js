@@ -120,7 +120,7 @@ export async function insertDeviceToken(env, userId, deviceKey, name, expiresAt,
     userId,
     deviceKey,
     await sha256(token),
-    String(name || "Dock Helper").slice(0, 120),
+    String(name || "Dock Agent").slice(0, 120),
     nowIso(),
     nowIso(),
     expiresAt,
@@ -182,7 +182,7 @@ export async function handleDeviceRoutes(request, env, user, path, options = {})
       crypto.randomUUID(),
       user.id,
       key,
-      String(body.name || "Dock Helper").slice(0, 120),
+      String(body.name || "Dock Agent").slice(0, 120),
       1,
       String(body.helperBase || "").slice(0, 200),
       String(body.helperVersion || "").slice(0, 32),
@@ -192,7 +192,7 @@ export async function handleDeviceRoutes(request, env, user, path, options = {})
     ).run();
     await env.DB.prepare("UPDATE device_tokens SET status = 'revoked', revoked_at = ? WHERE user_id = ? AND device_key = ? AND status IN ('active', 'retiring')")
       .bind(now, user.id, key).run();
-    const token = await insertDeviceToken(env, user.id, key, String(body.name || "Dock Helper").slice(0, 120), expiresAt);
+    const token = await insertDeviceToken(env, user.id, key, String(body.name || "Dock Agent").slice(0, 120), expiresAt);
     const settings = await readAutoSwitchSettings(env, user);
     if (writeAudit) {
       await writeAudit(env, user, {
@@ -294,7 +294,7 @@ export async function requireHelperDevice(request, env) {
     tokenCreatedAt: row.token_created_at || "",
     tokenLastSeenAt: now,
     tokenExpiresAt: nextExpiresAt,
-    name: row.device_name || "Dock Helper",
+    name: row.device_name || "Dock Agent",
   };
 }
 
@@ -302,7 +302,7 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
   if (!path.startsWith("/api/helper/auto-switch")) return null;
   const writeAudit = options.writeAudit || null;
   const helper = await requireHelperDevice(request, env);
-  if (!helper) return json({ ok: false, error: "Helper 授权已失效，请重新授权" }, 401);
+  if (!helper) return json({ ok: false, error: "Agent 授权已失效，请重新授权" }, 401);
   const user = withRequestContext(helper.user, requestContext);
   helper.user = user;
   const settings = await readAutoSwitchSettings(env, user);
@@ -411,7 +411,7 @@ export async function handleHelperAutoSwitch(request, env, path, requestContext,
       return json({
         ok: true,
         shouldSwitch: false,
-        reason: "等待 Helper 确认安全轮次边界",
+        reason: "等待 Agent 确认安全轮次边界",
         stage: "draining_active_turn",
         nextStage: "boundary_confirming",
       });

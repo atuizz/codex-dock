@@ -761,7 +761,7 @@ async function beginOauthAuthorization(options = {}) {
     return;
   }
   setOauthFlow({ phase: "waiting" });
-  toast(state.helperReady ? "授权页面已打开，本页正在等待回调。" : "授权页面已打开；Helper 未连接时可能需要手动粘贴回调。");
+  toast(state.helperReady ? "授权页面已打开，本页正在等待回调。" : "授权页面已打开；Agent 未连接时可能需要手动粘贴回调。");
 }
 
 async function handleAuthAcquireAction(action) {
@@ -1808,7 +1808,7 @@ function accountHealthGroups(accounts = state.accounts) {
     { key: "low-quota", label: "额度低", count: count("low-quota"), className: "warn", description: "避免优先使用" },
     { key: "cooldown", label: "冷却中", count: count("cooldown"), className: "neutral", description: "等待冷却结束" },
     { key: "current", label: "当前使用", count: count("current"), className: "neutral", description: "本机 auth 匹配" },
-    { key: "helper-blocked", label: "Helper 不可操作", count: count("helper-blocked"), className: state.helperReady ? "neutral" : "warn", description: "需启动 Helper" },
+    { key: "helper-blocked", label: "Agent 阻塞", count: count("helper-blocked"), className: state.helperReady ? "neutral" : "warn", description: state.helperReady ? "暂无阻塞" : "需启动 Agent" },
     { key: "attention", label: "需处理", count: count("attention"), className: "bad", description: "无法直接使用" },
   ];
 }
@@ -1885,7 +1885,7 @@ function switchView(view) {
   });
   const titles = {
     accounts: ["账号池", ""],
-    helper: ["Dock Helper", "安装后即可自动写入 auth 并重启 Codex。"],
+    helper: ["Dock Agent", "本机执行代理，负责写入 auth、观察任务边界并安全切换。"],
     admin: ["管理", "查看用户、设备和最近操作。"],
   };
   $("viewTitle").textContent = titles[view]?.[0] || "账号池";
@@ -1929,6 +1929,12 @@ function renderShell() {
   $("refreshAllUsageBtn").disabled = view.refreshAllUsageDisabled;
   $("importLocalAuthBtn").disabled = view.importLocalAuthDisabled;
   renderShellState();
+}
+
+function syncResponsiveFilterPanel() {
+  const panel = $("filterPanel");
+  if (!panel) return;
+  panel.open = !window.matchMedia("(max-width: 860px)").matches;
 }
 
 function renderMetrics() {
@@ -2276,7 +2282,7 @@ async function refreshHelperRuntimeStatus() {
 
 async function configureCodexProxy(action) {
   if (!state.helperReady || !state.helperBase) {
-    toast("Dock Helper 未连接。");
+    toast("Dock Agent 未连接。");
     return;
   }
   try {
@@ -2499,7 +2505,7 @@ async function noteUsageRefreshSource(source) {
 }
 
 async function configureHelperAutoSwitch(config) {
-  if (!state.helperReady) throw new Error("Dock Helper 未连接");
+  if (!state.helperReady) throw new Error("Dock Agent 未连接");
   const result = await helperClient().configureAutoSwitch(config);
   state.helperInfo = { ...(state.helperInfo || {}), auto_switch: result.auto_switch || result.autoSwitch || {} };
   state.autoSwitchStatus.helperAuthorized = helperAuthorizedForCurrentConsole(state.helperInfo);
@@ -2517,7 +2523,7 @@ async function authorizeAutoSwitchHelper() {
   if (!state.helperReady) {
     await checkHelper();
     if (!state.helperReady) {
-      toast("Dock Helper 未连接。");
+      toast("Dock Agent 未连接。");
       return;
     }
   }
@@ -2526,7 +2532,7 @@ async function authorizeAutoSwitchHelper() {
       method: "POST",
       body: {
         deviceKey: state.deviceKey,
-        name: "Dock Helper",
+        name: "Dock Agent",
         helperBase: state.helperBase,
         helperVersion: state.helperInfo?.version || "",
         helperBuildDate: state.helperInfo?.build_date || "",
@@ -2542,10 +2548,10 @@ async function authorizeAutoSwitchHelper() {
       settings,
     });
     await saveAutoSwitchSettings(settings);
-    toast("已授权本机 Helper，自动切换已开启。");
+    toast("已授权本机 Agent，自动切换已开启。");
     await checkHelper();
   } catch (error) {
-    toast(error.message || "授权 Helper 失败。");
+    toast(error.message || "授权 Agent 失败。");
   }
 }
 
@@ -2561,7 +2567,7 @@ async function revokeAutoSwitchHelper() {
     }
     state.autoSwitchStatus.helperAuthorized = false;
     await saveAutoSwitchSettings({ enabled: false });
-    toast("已解除本机 Helper 授权。");
+    toast("已解除本机 Agent 授权。");
   } catch (error) {
     toast(error.message || "解除授权失败。");
   }
@@ -2690,7 +2696,7 @@ function waitForManualSwitchBoundary() {
   };
   renderManualSwitchRisk();
   closeModal("manualSwitchRiskModal");
-  toast("已等待安全边界。Helper 确认当前轮结束后会自动切换。");
+  toast("已等待安全边界。Agent 确认当前轮结束后会自动切换。");
 }
 
 async function forceManualSwitchNow() {
@@ -2769,7 +2775,7 @@ async function waitForCodexRestartProgress(itemIndex, accepted) {
         return;
       }
     } catch (error) {
-      lastDetail = error.message || "等待 Helper 状态回传";
+      lastDetail = error.message || "等待 Agent 状态回传";
       updateProgressItem(itemIndex, "处理中", lastDetail);
     }
   }
@@ -2801,7 +2807,7 @@ async function applySelectedAccount(options = {}) {
   openProgress("正在切换账号", [
     { id: "payload", label: "获取账号授权" },
     { id: "target", label: "定位目标窗口" },
-    { id: "helper", label: "交给 Dock Helper" },
+    { id: "helper", label: "交给 Dock Agent" },
     { id: "restart", label: "重启并恢复目标" },
     { id: "audit", label: "同步云端记录" },
   ]);
@@ -2825,7 +2831,7 @@ async function applySelectedAccount(options = {}) {
       deviceKey: state.deviceKey,
       allowAtExperimental: Boolean(experimentalAtEnabled(state.smartSwitchSettings) && !hasUsableRefreshToken(account)),
     });
-    updateProgressItem(activeStep, "已完成", result.launch_mode || "Helper 已接管");
+    updateProgressItem(activeStep, "已完成", result.launch_mode || "Agent 已接管");
 
     activeStep = 3;
     updateProgressItem(activeStep, "处理中", result.accepted ? "等待 Codex 回到目标窗口" : "确认重启结果");
@@ -2889,7 +2895,7 @@ function cloudUsageRefreshAvailable(account) {
 function configuredUsageRefreshChannel(account) {
   const settings = state.usageRefreshSettings || defaultUsageRefreshSettings;
   if (settings.usageRefreshMode === "helper") {
-    if (!state.helperReady) throw new Error("本机 Helper 未连接，请启动 Helper 或更改额度刷新方式。");
+    if (!state.helperReady) throw new Error("本机 Agent 未连接，请启动 Agent 或更改额度刷新方式。");
     return { channel: "helper", source: "helper" };
   }
   if (settings.usageRefreshMode === "cloud") {
@@ -2901,11 +2907,11 @@ function configuredUsageRefreshChannel(account) {
     if (settings.helperFallbackToCloud && cloudUsageRefreshAvailable(account)) {
       return { channel: "cloud", source: "auto-cloud-fallback", autoFallback: true };
     }
-    throw new Error("自动刷新未找到可用通道：请启动 Helper，或开启云端回退。");
+    throw new Error("自动刷新未找到可用通道：请启动 Agent，或开启云端回退。");
   }
   if (state.helperReady) return { channel: "helper", source: "helper" };
   if (cloudUsageRefreshAvailable(account)) return { channel: "cloud", source: "cloud-worker" };
-  throw new Error("仅手动模式下仍需要在线 Helper，或已授权的云端刷新通道。");
+  throw new Error("仅手动模式下仍需要在线 Agent，或已授权的云端刷新通道。");
 }
 
 async function refreshUsageThroughHelper(account, route, options = {}) {
@@ -3385,7 +3391,7 @@ async function importCurrentLocalAuth(options = {}) {
   const silent = Boolean(options.silent);
   if (state.autoImportingLocalAuth) return false;
   if (!state.helperReady) {
-    if (!silent) toast("Helper 未连接，无法读取本机 auth。");
+    if (!silent) toast("Agent 未连接，无法读取本机 auth。");
     return false;
   }
   state.autoImportingLocalAuth = true;
@@ -3434,7 +3440,7 @@ function legacyCacheImportUrl() {
 async function migrateLegacyCache() {
   if (!state.helperReady) await checkHelper();
   if (!state.helperReady) {
-    toast("Helper 未连接，不能迁移旧缓存。");
+    toast("Agent 未连接，不能迁移旧缓存。");
     return;
   }
   const popup = window.open(legacyCacheImportUrl(), "codexLegacyCacheMigrator", "width=520,height=420");
@@ -3639,7 +3645,7 @@ function downloadText(filename, text) {
 
 function openLocalStatus() {
   if (!state.helperReady) {
-    toast("Helper 未连接。");
+    toast("Agent 未连接。");
     return;
   }
   window.open(state.helperBase, "_blank", "noopener,noreferrer");
@@ -3649,7 +3655,7 @@ async function repairHelperTray() {
   if (!state.helperReady || !state.helperBase) {
     await checkHelper();
     if (!state.helperReady || !state.helperBase) {
-      toast("Helper 未连接，无法修复托盘图标。");
+      toast("Agent 未连接，无法修复托盘图标。");
       return;
     }
   }
@@ -3658,7 +3664,7 @@ async function repairHelperTray() {
     if (result.tray) state.helperInfo = { ...(state.helperInfo || {}), tray: result.tray };
     renderDevice();
     renderSettings();
-    toast("已请求 Helper 重新注册托盘图标。");
+    toast("已请求 Agent 重新注册托盘图标。");
     window.setTimeout(checkHelper, 1200);
   } catch (error) {
     toast(error.message || "修复托盘图标失败。");
@@ -3667,21 +3673,21 @@ async function repairHelperTray() {
 
 async function exportHelperDiagnostics() {
   if (!state.helperReady || !state.helperBase) {
-    toast("Helper 未连接，无法导出诊断。");
+    toast("Agent 未连接，无法导出诊断。");
     return;
   }
   try {
     const result = await helperClient().diagnosticsExport();
     downloadText(`codex-dock-helper-diagnostics-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(result, null, 2));
-    toast("已导出 Helper 诊断文件。");
+    toast("已导出 Agent 诊断文件。");
   } catch (error) {
-    toast(error.message || "导出 Helper 诊断失败。");
+    toast(error.message || "导出 Agent 诊断失败。");
   }
 }
 
 async function checkHelperUpdate() {
   if (!state.helperReady || !state.helperBase) {
-    toast("Helper 未连接，请先启动本地助手。");
+    toast("Agent 未连接，请先启动本地代理。");
     return;
   }
   try {
@@ -3690,34 +3696,34 @@ async function checkHelperUpdate() {
     renderDevice();
     renderSettings();
     if (!result.ok) {
-      toast(result.error || "暂时无法检查 Helper 更新。");
+      toast(result.error || "暂时无法检查 Agent 更新。");
       return;
     }
     if (result.update_available) {
       const latest = result.latest_version || "新版";
-      const open = window.confirm(`发现 Helper ${latest}，是否让本机 Helper 打开官方下载页面？`);
+      const open = window.confirm(`发现 Agent ${latest}，是否让本机 Agent 打开官方下载页面？`);
       if (open) {
         try {
           await helperClient().openUpdateDownload();
-          toast("已请求 Helper 打开最新版下载页面。");
+          toast("已请求 Agent 打开最新版下载页面。");
         } catch {
           window.open(result.download_url || state.helperRelease?.downloadUrl || "/downloads/CodexDockHelper.exe", "_blank", "noopener,noreferrer");
-          toast("Helper 未能代开下载页，已在浏览器打开。");
+          toast("Agent 未能代开下载页，已在浏览器打开。");
         }
       } else {
-        toast(`发现 Helper ${latest}，可稍后下载升级。`);
+        toast(`发现 Agent ${latest}，可稍后下载升级。`);
       }
       return;
     }
-    toast(`Helper 已是最新版本 v${result.current_version || state.helperInfo.version || ""}。`);
+    toast(`Agent 已是最新版本 v${result.current_version || state.helperInfo.version || ""}。`);
   } catch (error) {
-    toast(error.message || "检查 Helper 更新失败。");
+    toast(error.message || "检查 Agent 更新失败。");
   }
 }
 
 async function resumeHelperAutoSwitch() {
   if (!state.helperReady || !state.helperBase) {
-    toast("Helper 未连接，无法恢复自动切换。");
+    toast("Agent 未连接，无法恢复自动切换。");
     return;
   }
   try {
@@ -3727,7 +3733,7 @@ async function resumeHelperAutoSwitch() {
     }
     renderDevice();
     renderSettings();
-    toast("已恢复 Helper 自动切换，下一轮会重新核验边界。");
+    toast("已恢复 Agent 自动切换，下一轮会重新核验边界。");
     window.setTimeout(checkHelper, 1200);
   } catch (error) {
     toast(error.message || "恢复自动切换失败。");
@@ -3737,7 +3743,7 @@ async function resumeHelperAutoSwitch() {
 async function copyHelperChecksum() {
   const sha = state.helperRelease?.sha256 || "";
   if (!sha) {
-    toast("Helper 校验值还在加载，请稍后重试。");
+    toast("Agent 校验值还在加载，请稍后重试。");
     return;
   }
   const packageSha = state.helperRelease?.package?.sha256 || "";
@@ -3747,7 +3753,7 @@ async function copyHelperChecksum() {
   const text = lines.join("\n");
   try {
     await navigator.clipboard.writeText(text);
-    toast("已复制 Helper SHA-256 校验值。");
+    toast("已复制 Agent SHA-256 校验值。");
   } catch {
     downloadText("CodexDockHelper.sha256.txt", `${text}\n`);
     toast("无法写入剪贴板，已下载校验文件。");
@@ -3889,7 +3895,7 @@ function cleanupAccountIssue(account) {
     return { reason: "冷却中，等待后可恢复", className: "neutral", recoverable: false };
   }
   if (codexUsable(account) && !state.helperReady) {
-    return { reason: "Helper 不可操作", className: "warn", recoverable: false };
+    return { reason: "Agent 未连接", className: "warn", recoverable: false };
   }
   return { reason: "看似可用", className: "neutral", recoverable: false };
 }
@@ -4058,6 +4064,7 @@ function bindEvents() {
   $("sidebarLoginBtn").addEventListener("click", () => state.user ? openModal("settingsModal") : openModal("authModal"));
   $("sidebarSettingsBtn").addEventListener("click", () => openModal("settingsModal"));
   $("openSettingsNav").addEventListener("click", () => openModal("settingsModal"));
+  $("mobileSettingsBtn").addEventListener("click", () => openModal("settingsModal"));
   $("settingsAccountState").addEventListener("click", (event) => {
     if (event.target.closest("#logoutInlineBtn")) logout();
     if (event.target.closest("#loginInlineBtn")) openModal("authModal");
@@ -4417,7 +4424,9 @@ function init() {
   loadLocalStore();
   window.addEventListener("message", handleLegacyCacheMessage);
   window.addEventListener("message", handleOauthCallbackMessage);
+  window.addEventListener("resize", syncResponsiveFilterPanel);
   bindEvents();
+  syncResponsiveFilterPanel();
   setAuthMode("login");
     $("authEmail").value = readMigratedLocalStorage(cachedEmailStorage, previousCachedEmailStorage);
   render();

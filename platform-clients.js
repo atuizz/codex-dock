@@ -45,7 +45,7 @@
   function createHelperClient(base, options = {}) {
     const fetchImpl = options.fetchImpl || fetch;
     const root = String(base || "").replace(/\/+$/, "");
-    if (!root) throw new Error("Dock Helper 未连接");
+    if (!root) throw new Error("Dock Agent 未连接");
 
     async function request(path, requestOptions = {}) {
       const { allowAppError, body, headers, ...rest } = requestOptions;
@@ -57,8 +57,8 @@
       if (body !== undefined) {
         init.body = typeof body === "string" ? body : JSON.stringify(body);
       }
-      const result = await readJsonResponse(await fetchImpl(`${root}${path}`, init), "Helper 请求失败");
-      if (result.ok === false && !allowAppError) throw new Error(result.error || "Helper 执行失败");
+      const result = await readJsonResponse(await fetchImpl(`${root}${path}`, init), "Agent 请求失败");
+      if (result.ok === false && !allowAppError) throw new Error(result.error || "Agent 执行失败");
       return result;
     }
 

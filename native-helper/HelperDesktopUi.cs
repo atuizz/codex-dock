@@ -589,7 +589,7 @@ namespace CodexPlusLocalHelper
 
         public OperationProgressForm()
         {
-            Text = "Codex Dock Helper";
+            Text = "Codex Dock Agent";
             Icon = HelperDesktopUi.CreateAppIcon();
             Width = 488;
             Height = 196;
@@ -597,6 +597,7 @@ namespace CodexPlusLocalHelper
             MaximumSize = new Size(548, 220);
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
+            TopMost = true;
             BackColor = Color.FromArgb(255, 255, 255);
             ForeColor = Color.FromArgb(24, 26, 27);
             Font = new Font("Microsoft YaHei UI", 9F);
@@ -624,7 +625,7 @@ namespace CodexPlusLocalHelper
             };
             topBar.Controls.Add(appMark);
 
-            var windowTitle = HelperDesktopUi.MakeLabel("Codex Dock Helper", 9F, FontStyle.Regular, Color.FromArgb(48, 55, 64));
+            var windowTitle = HelperDesktopUi.MakeLabel("Codex Dock Agent", 9F, FontStyle.Regular, Color.FromArgb(48, 55, 64));
             windowTitle.Location = new Point(38, 10);
             windowTitle.Size = new Size(180, 22);
             topBar.Controls.Add(windowTitle);

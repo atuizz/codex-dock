@@ -67,7 +67,7 @@ const cases = [
   {
     item: { action: "usage-refresh-settings", result: "helper", metadata: {} },
     title: "额度刷新方式已更新",
-    description: "执行通道：本机 Helper",
+    description: "执行通道：本机 Agent",
   },
   {
     item: { action: "usage-refresh-settings", result: "auto", metadata: {} },

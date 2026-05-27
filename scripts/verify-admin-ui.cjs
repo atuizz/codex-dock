@@ -35,14 +35,14 @@ assert.match(summaryHtml, /用户数/);
 assert.match(summaryHtml, /<strong>3<\/strong>/);
 assert.match(summaryHtml, /设备数/);
 assert.match(summaryHtml, /<strong>2<\/strong>/);
-assert.match(summaryHtml, /待升级 Helper/);
-assert.match(summaryHtml, /需重连 Helper/);
+assert.match(summaryHtml, /待升级 Agent/);
+assert.match(summaryHtml, /需重连 Agent/);
 assert.match(summaryHtml, /24h 注销/);
 assert.match(summaryHtml, /账号健康/);
 assert.match(summaryHtml, /7 \/ 9 RT 可用/);
 assert.match(summaryHtml, /失败趋势/);
 assert.match(summaryHtml, /2 \/ 12 次审计失败/);
-assert.match(summaryHtml, /Helper 版本分布/);
+assert.match(summaryHtml, /Agent 版本分布/);
 assert.match(summaryHtml, /0\.3\.1 · 0\/1 在线 · 1 台需重连/);
 
 const devicesHtml = ui.renderDevices([

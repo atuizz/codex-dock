@@ -32,21 +32,27 @@
 
         <nav class="nav-list">
           <button class="nav-item active" type="button" data-view="accounts">
-            <span class="nav-icon">⌾</span>
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 7h10"></path><path d="M7 12h10"></path><path d="M7 17h7"></path><circle cx="18" cy="17" r="2.2"></circle></svg>
+            </span>
             <span>账号池</span>
           </button>
           <button class="nav-item" type="button" data-view="helper">
             <span class="nav-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24"><path d="M5 6.5h14v9H5z"></path><path d="M9 19h6"></path><path d="M12 15.5V19"></path></svg>
+              <svg viewBox="0 0 24 24"><path d="M5 6.5h14v8.5H5z"></path><path d="M9 19h6"></path><path d="M12 15v4"></path><path d="M10 10.7h4"></path></svg>
             </span>
-            <span>Dock Helper</span>
+            <span>Dock Agent</span>
           </button>
           <button class="nav-item" type="button" id="openSettingsNav">
-            <span class="nav-icon">⚙</span>
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 7h14"></path><path d="M5 12h14"></path><path d="M5 17h14"></path><path d="M9 5v4"></path><path d="M15 10v4"></path><path d="M11 15v4"></path></svg>
+            </span>
             <span>设置</span>
           </button>
           <button class="nav-item admin-only" type="button" data-view="admin" hidden>
-            <span class="nav-icon">◇</span>
+            <span class="nav-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 7h4v4H7z"></path><path d="M13 7h4v4h-4z"></path><path d="M7 13h4v4H7z"></path><path d="M13 13h4v4h-4z"></path></svg>
+            </span>
             <span>管理</span>
           </button>
         </nav>
@@ -54,20 +60,24 @@
         <div class="sidebar-bottom">
           <div class="sync-card" id="sidebarSyncCard">
             <strong>快速切换</strong>
-            <span>安装 Helper 后可一键切换。</span>
+            <span>安装 Dock Agent 后可一键切换。</span>
             <button id="sidebarLoginBtn" type="button">登录以同步</button>
           </div>
           <div class="mini-status">
             <span id="sideCloudStatus">云端：未登录</span>
-            <span id="sideHelperStatus">助手：探测中</span>
+            <span id="sideHelperStatus">Agent：探测中</span>
           </div>
           <div class="sidebar-utility">
-            <a class="utility-button helper-download" href="/downloads/CodexDockHelper.exe" download title="下载 Dock Helper" aria-label="下载 Dock Helper">
-              <span class="nav-icon">↓</span>
-              <span>下载 Helper</span>
+            <a class="utility-button helper-download" href="/downloads/CodexDockHelper.exe" download title="下载 Dock Agent" aria-label="下载 Dock Agent">
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 5v10"></path><path d="M8 11l4 4 4-4"></path><path d="M6 19h12"></path></svg>
+              </span>
+              <span>下载 Agent</span>
             </a>
             <button class="utility-button" type="button" id="sidebarSettingsBtn" title="设置" aria-label="设置">
-              <span class="nav-icon">⚙</span>
+              <span class="nav-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M5 7h14"></path><path d="M5 12h14"></path><path d="M5 17h14"></path><path d="M9 5v4"></path><path d="M15 10v4"></path><path d="M11 15v4"></path></svg>
+              </span>
               <span>设置</span>
             </button>
           </div>
@@ -84,10 +94,16 @@
             <span class="status-pill" id="syncPill">本地</span>
             <span class="status-pill" id="autoSwitchPill">自动切换未开启</span>
             <span class="status-pill" id="codexPill">Codex 状态确认中</span>
-            <span class="status-pill" id="helperPill">助手探测中</span>
+            <span class="status-pill" id="helperPill">Agent 探测中</span>
             <button id="userMenuBtn" type="button">登录以同步</button>
           </div>
         </header>
+        <nav class="mobile-nav" aria-label="移动端导航">
+          <button class="nav-item mobile-nav-item active" type="button" data-view="accounts">账号</button>
+          <button class="nav-item mobile-nav-item" type="button" data-view="helper">Agent</button>
+          <button class="nav-item mobile-nav-item" type="button" id="mobileSettingsBtn">设置</button>
+          <button class="nav-item mobile-nav-item admin-only" type="button" data-view="admin" hidden>管理</button>
+        </nav>
 
         <main class="content">
           <section class="view active" id="accountsView">
@@ -100,7 +116,9 @@
               <div class="workbench-command">
                 <div class="command-shell" id="commandShell" role="search">
                   <div class="command-main-row">
-                    <button class="icon-button" id="openImportBtn" type="button" aria-label="导入账号" title="导入账号">+</button>
+                    <button class="icon-button" id="openImportBtn" type="button" aria-label="导入账号" title="导入账号">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+                    </button>
                     <input id="accountSearchInput" class="command-input" type="search" autocomplete="off" placeholder="搜索账号，或把 JSON 文件拖到这里" />
                   </div>
                   <div class="command-attachments" id="commandAttachments" hidden></div>
@@ -117,7 +135,7 @@
               <div class="account-toolbar">
                 <div>
                   <strong id="vaultTitle">本地账号池 · 0 个账号</strong>
-                  <span id="vaultCopy">安装 Dock Helper 后可一键切换；未安装时可下载 auth.json。</span>
+                  <span id="vaultCopy">安装 Dock Agent 后可一键切换；未安装时可下载 auth.json。</span>
                 </div>
                 <div class="toolbar-controls">
                   <div class="segmented" aria-label="账号筛选">
@@ -140,7 +158,8 @@
                 </div>
               </div>
 
-              <div class="filter-panel" id="filterPanel">
+              <details class="filter-panel" id="filterPanel" open>
+                <summary>高级筛选</summary>
                 <label>套餐
                   <select id="filterPlan">
                     <option value="all">全部</option>
@@ -179,7 +198,7 @@
                     <option value="attention">需处理</option>
                   </select>
                 </label>
-              </div>
+              </details>
 
               <div class="bulk-bar" id="bulkBar">
                 <span id="bulkCount">未选择账号</span>
@@ -207,11 +226,11 @@
               <section class="account-surface">
                 <div class="surface-head">
                   <div>
-                    <h2>Dock Helper</h2>
-                    <p>安装后即可自动写入 auth 并重启 Codex。</p>
+                    <h2>Dock Agent</h2>
+                    <p>本机执行代理，负责写入 auth、观察任务边界并安全切换。</p>
                   </div>
                   <div class="surface-actions">
-                    <a class="button-link primary-link" href="/downloads/CodexDockHelper.exe" download>下载 Dock Helper</a>
+                    <a class="button-link primary-link" href="/downloads/CodexDockHelper.exe" download>下载 Dock Agent</a>
                     <button id="refreshHelperBtn" type="button">重新探测</button>
                   </div>
                 </div>
@@ -221,8 +240,8 @@
               <section class="account-surface">
                 <div class="surface-head">
                   <div>
-                    <h2>设备连接</h2>
-                    <p>保持 Helper 在线，即可在网页中完成切换。</p>
+                    <h2>设备密钥</h2>
+                    <p>用于绑定当前浏览器和本机 Agent。</p>
                   </div>
                 </div>
                 <div class="pair-box">
@@ -282,8 +301,8 @@
               <section class="account-surface">
                 <div class="surface-head">
                   <div>
-                    <h2>设备与 Helper 版本</h2>
-                    <p>识别离线设备与需要升级的桌面助手。</p>
+                    <h2>设备与 Agent 版本</h2>
+                    <p>识别离线设备与需要升级的本机代理。</p>
                   </div>
                 </div>
                 <div id="adminDevices" class="admin-table-wrap"></div>
@@ -433,7 +452,7 @@
             <button class="active" type="button" data-settings-tab="account">账号</button>
             <button type="button" data-settings-tab="data">数据</button>
             <button type="button" data-settings-tab="smart">智能切换</button>
-            <button type="button" data-settings-tab="helper">Dock Helper</button>
+            <button type="button" data-settings-tab="helper">Dock Agent</button>
             <button type="button" data-settings-tab="appearance">外观</button>
             <button class="admin-only" type="button" data-settings-tab="admin" hidden>管理员</button>
           </nav>
@@ -489,13 +508,13 @@
             </section>
 
             <section class="settings-panel" data-panel="helper">
-              <h3>Dock Helper</h3>
+              <h3>Dock Agent</h3>
               <div id="settingsHelperState" class="setting-box"></div>
               <div class="setting-actions">
                 <button id="settingsRefreshHelperBtn" type="button">重新探测</button>
                 <button id="settingsOpenLocalStatusBtn" type="button">打开状态页</button>
                 <button id="settingsRepairTrayBtn" type="button">修复托盘图标</button>
-                <a class="button-link" href="/downloads/CodexDockHelper.exe" download>下载 Helper</a>
+                <a class="button-link" href="/downloads/CodexDockHelper.exe" download>下载 Agent</a>
               </div>
             </section>
 
@@ -533,9 +552,11 @@
         <div id="accountForm" class="import-form">
           <div class="import-source-grid primary-import-grid" role="tablist" aria-label="推荐导入方式">
             <button class="import-source-card primary-source active" type="button" data-import-mode="oauth">
-              <span class="source-icon">↻</span>
+              <span class="source-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M6.5 8.5A6.5 6.5 0 0 1 18 6.8"></path><path d="M18 4v3h-3"></path><path d="M17.5 15.5A6.5 6.5 0 0 1 6 17.2"></path><path d="M6 20v-3h3"></path></svg>
+              </span>
               <strong>登录导入 RT 账号</strong>
-              <small>推荐路径。Helper 在线时自动接收回调、换取 RT 并导入，可直接用于 Codex 切换。</small>
+              <small>推荐路径。Agent 在线时自动接收回调、换取 RT 并导入，可直接用于 Codex 切换。</small>
               <span class="method-tag">推荐</span>
             </button>
           </div>
@@ -546,18 +567,24 @@
             </summary>
             <div class="import-source-grid advanced-source-grid" role="tablist" aria-label="高级导入方式">
               <button class="import-source-card" type="button" data-import-mode="session">
-                <span class="source-icon">⌁</span>
+                <span class="source-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M8 7h8"></path><path d="M7 12h10"></path><path d="M8 17h8"></path><path d="M5 5v14"></path><path d="M19 5v14"></path></svg>
+                </span>
                 <strong>Session JSON（仅登记）</strong>
                 <small>多数只含 AT。导入后可识别账号，但不能用于 Codex 切换。</small>
                 <span class="method-tag warn">仅登记</span>
               </button>
               <button class="import-source-card" type="button" data-import-mode="device">
-                <span class="source-icon">↥</span>
+                <span class="source-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M6 7h12v9H6z"></path><path d="M10 19h4"></path><path d="M12 16v3"></path><path d="M12 13V8"></path><path d="M9.5 10.5 12 8l2.5 2.5"></path></svg>
+                </span>
                 <strong>当前设备账号</strong>
                 <small>只导入这台电脑当前 Codex 已登录账号，不用于修复其它账号。</small>
               </button>
               <button class="import-source-card" type="button" data-import-mode="file">
-                <span class="source-icon">↓</span>
+                <span class="source-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M7 4h7l3 3v13H7z"></path><path d="M14 4v4h4"></path><path d="M12 10v6"></path><path d="M9.5 13.5 12 16l2.5-2.5"></path></svg>
+                </span>
                 <strong>批量上传文件</strong>
                 <small>高级批量导入 auth / CPA / Sub JSON。</small>
               </button>
@@ -568,7 +595,7 @@
             <div class="auth-method-panel oauth-panel">
               <div>
                 <strong>登录导入 RT 账号</strong>
-                <span>普通用户只需要点下面的按钮完成网页登录。Helper 在线时会自动接收回调、换取 RT 并导入账号；手动链接只作为备用。</span>
+                <span>完成网页登录后，Agent 会自动接收回调、换取 RT 并导入账号；手动链接仅作备用。</span>
               </div>
               <div class="oauth-primary-action">
                 <button class="primary" id="openOauthAuthBtn" type="button">打开授权页面</button>

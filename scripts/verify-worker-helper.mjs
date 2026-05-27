@@ -320,7 +320,7 @@ assert.equal(settings.cooldownMinutes, 2);
 
 const issue = await handleDeviceRoutes(request("/api/devices/auto-switch-token", {
   deviceKey: "desktop-1",
-  name: "Dock Helper",
+  name: "Dock Agent",
   helperBase: "http://127.0.0.1:18766",
   helperVersion: "0.4.3",
   helperBuildDate: "2026-05-26",
@@ -367,7 +367,7 @@ const staleDevice = publicDevice({
   id: "device-stale",
   user_id: "user-1",
   device_key: "desktop-stale",
-  name: "Dock Helper",
+  name: "Dock Agent",
   helper_online: 1,
   helper_version: "0.4.4",
   last_seen_at: new Date(healthBaseMs - (HELPER_OFFLINE_AFTER_SECONDS + 5) * 1000).toISOString(),
@@ -442,7 +442,7 @@ const held = await handleHelperAutoSwitch(request("/api/helper/auto-switch/next"
   triggerReason: "额度耗尽，当前轮仍在执行",
 }, authHeaders(configBody.replacementDeviceToken)), env, "/api/helper/auto-switch/next", { requestId: "req-held" }, { writeAudit });
 const heldBody = await held.json();
-assert.equal(heldBody.reason, "等待 Helper 确认安全轮次边界");
+assert.equal(heldBody.reason, "等待 Agent 确认安全轮次边界");
 assert.equal(heldBody.stage, "draining_active_turn");
 assert.equal(heldBody.nextStage, "boundary_confirming");
 
@@ -578,15 +578,15 @@ const revokedHelper = await handleHelperAutoSwitch(new Request("https://codex.ex
   headers: authHeaders(configBody.replacementDeviceToken),
 }), env, "/api/helper/auto-switch/config", { requestId: "req-revoked" }, { writeAudit });
 assert.equal(revokedHelper.status, 401);
-assert.equal((await revokedHelper.json()).error, "Helper 授权已失效，请重新授权");
+assert.equal((await revokedHelper.json()).error, "Agent 授权已失效，请重新授权");
 assert.ok(env.DB.deviceTokens.filter((item) => item.device_key === "desktop-1").every((item) => item.status === "revoked" && item.revoked_at));
 
-const expiredToken = await insertDeviceToken(env, "user-1", "desktop-expired", "Dock Helper", new Date(Date.now() - 1000).toISOString());
+const expiredToken = await insertDeviceToken(env, "user-1", "desktop-expired", "Dock Agent", new Date(Date.now() - 1000).toISOString());
 env.DB.devices.push({
   id: "device-expired",
   user_id: "user-1",
   device_key: "desktop-expired",
-  name: "Dock Helper",
+  name: "Dock Agent",
   helper_online: 1,
   helper_base: "",
   created_at: "",

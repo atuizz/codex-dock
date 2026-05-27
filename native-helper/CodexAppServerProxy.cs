@@ -32,7 +32,7 @@ namespace CodexDockProxy
                     if (IsAppServerInvocation(args))
                     {
                         _monitoring = true;
-                        SetState("unknown", "代理未就绪", "未找到真实 Codex CLI。请在 Dock Helper 中重新安装精准监控。", "proxy/error");
+                        SetState("unknown", "代理未就绪", "未找到真实 Codex CLI。请在 Dock Agent 中重新安装精准监控。", "proxy/error");
                         WriteStatus();
                     }
                     Console.Error.WriteLine("Codex Dock proxy: real codex.exe not found.");

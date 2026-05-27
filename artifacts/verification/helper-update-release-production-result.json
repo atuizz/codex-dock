@@ -1,26 +1,26 @@
 {
   "ok": true,
-  "verified_at": "2026-05-26T17:59:01.938Z",
-  "asset_version": "967b8412fa8a",
+  "verified_at": "2026-05-26T20:43:47.606Z",
+  "asset_version": "e741b12ea5b8",
   "helper": {
     "file": "downloads/CodexDockHelper.exe",
-    "version": "0.4.7",
+    "version": "0.4.9",
     "build_date": "2026-05-27",
-    "bytes": 181248,
-    "sha256": "391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515",
+    "bytes": 182784,
+    "sha256": "E47EC88F9C55390DDCA0A3A0784217F8EBE7BF554EAA19312153FAAD16F11E04",
     "release_manifest": "downloads/CodexDockHelper-release.json",
     "package": {
-      "file": "downloads/CodexDockHelper-0.4.7-portable.zip",
+      "file": "downloads/CodexDockHelper-0.4.9-portable.zip",
       "format": "zip",
-      "bytes": 196978,
-      "sha256": "87DCA57B1F815CD57FEA5215AC3A0C2462A0F186B6A8831E733C99D977D06B94"
+      "bytes": 199268,
+      "sha256": "12CD684972B4492BEEF6042C528D90F7C5B4D27BD39FC31FEDC7F4BB7E30BB5B"
     }
   },
-  "release_version": "0.4.7",
+  "release_version": "0.4.9",
   "release_package": {
-    "file": "downloads/CodexDockHelper-0.4.7-portable.zip",
+    "file": "downloads/CodexDockHelper-0.4.9-portable.zip",
     "format": "zip",
-    "bytes": 196978,
-    "sha256": "87DCA57B1F815CD57FEA5215AC3A0C2462A0F186B6A8831E733C99D977D06B94"
+    "bytes": 199268,
+    "sha256": "12CD684972B4492BEEF6042C528D90F7C5B4D27BD39FC31FEDC7F4BB7E30BB5B"
   }
 }

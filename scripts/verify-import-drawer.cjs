@@ -8,7 +8,7 @@ const appJs = readFileSync(join(root, "app.js"), "utf8");
 
 assert.match(indexHtml, /class="import-source-card primary-source active"[^>]+data-import-mode="oauth"/);
 assert.match(indexHtml, /登录导入 RT 账号/);
-assert.match(indexHtml, /推荐路径。Helper 在线时自动接收回调、换取 RT 并导入/);
+assert.match(indexHtml, /推荐路径。Agent 在线时自动接收回调、换取 RT 并导入/);
 assert.match(indexHtml, /<details class="advanced-import-panel">/);
 assert.match(indexHtml, /Session JSON（仅登记）/);
 assert.match(indexHtml, /不能用于 Codex 切换/);

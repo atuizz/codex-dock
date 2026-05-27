@@ -91,7 +91,7 @@ try {
       ...(helperReadme ? [{ file: "README.md", bytes: helperReadme.length, sha256: sha256(helperReadme) }] : []),
     ];
     const releaseManifest = {
-      product: "Codex Dock Helper",
+      product: "Codex Dock Agent",
       kind: "portable-windows-helper",
       version: metadata.version,
       build_date: metadata.build_date,
@@ -99,7 +99,7 @@ try {
       install: {
         mode: "portable",
         steps: [
-          "关闭正在运行的 Codex Dock Helper。",
+          "关闭正在运行的 Codex Dock Agent。",
           "解压 CodexDockHelper portable 包到一个固定目录。",
           "运行 CodexDockHelper.exe，并在云控制台设备页完成授权。",
         ],

@@ -94,7 +94,7 @@ export async function ensureCloudRefreshAllowance(env, user) {
   ).bind(user.id, startOfUtcDay()).first();
   const used = Number(row?.total || 0);
   if (used >= limit) {
-    throw new ApiError(`今日云端刷新次数已达上限（${limit} 次），请改用本机 Helper。`, 429, "cloud_usage_daily_limit");
+    throw new ApiError(`今日云端刷新次数已达上限（${limit} 次），请改用本机 Agent。`, 429, "cloud_usage_daily_limit");
   }
   return { used, limit, remaining: limit - used };
 }

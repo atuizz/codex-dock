@@ -30,8 +30,8 @@ class FakeD1 {
     const recentSeenAt = new Date().toISOString();
     const staleSeenAt = new Date(Date.now() - 10 * 60 * 1000).toISOString();
     this.devices = [
-      { id: "dev-1", user_id: "user-1", device_key: "desktop", name: "Dock Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.3", helper_build_date: "2026-05-26", created_at: "", last_seen_at: recentSeenAt },
-      { id: "dev-stale", user_id: "user-1", device_key: "desktop-stale", name: "Stale Helper", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.3", helper_build_date: "2026-05-26", created_at: "", last_seen_at: staleSeenAt },
+      { id: "dev-1", user_id: "user-1", device_key: "desktop", name: "Dock Agent", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.3", helper_build_date: "2026-05-26", created_at: "", last_seen_at: recentSeenAt },
+      { id: "dev-stale", user_id: "user-1", device_key: "desktop-stale", name: "Stale Agent", helper_online: 1, helper_base: "http://127.0.0.1:18766", helper_version: "0.4.3", helper_build_date: "2026-05-26", created_at: "", last_seen_at: staleSeenAt },
     ];
     this.auditLogs = [];
     this.deletionEvents = [{ id: "deletion-1", created_at: new Date().toISOString() }];

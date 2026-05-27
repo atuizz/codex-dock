@@ -98,7 +98,7 @@
           <div class="health-center empty">
             <div class="health-center-head">
               <strong>账号健康</strong>
-              <span>导入账号后，这里会按可用性、额度和 Helper 状态自动分组。</span>
+              <span>导入账号后，这里会按可用性、额度和 Agent 状态自动分组。</span>
             </div>
           </div>
         `;
@@ -129,7 +129,7 @@
       const accounts = Array.isArray(state.accounts) ? state.accounts : [];
       const total = accounts.length;
       const cloudText = state.user ? `${state.user.email}${cloudBackupEnabled() ? " · 已同步" : ""}` : "未登录";
-      const helperText = state.helperReady ? "Helper 在线" : "Helper 未连接";
+      const helperText = state.helperReady ? "Agent 在线" : "Agent 未连接";
       const codexStatus = state.codexStatus || {};
       const codexLabel = state.helperReady
         ? (codexStatus.label || "状态确认中")
@@ -141,7 +141,7 @@
             : "warn";
       const subtitles = {
         accounts: "",
-        helper: "安装后即可自动写入 auth 并重启 Codex。",
+        helper: "本机执行代理，负责写入 auth、观察任务边界并安全切换。",
         admin: "查看用户、设备和最近操作。",
       };
       const autoEnabled = Boolean(state.autoSwitchSettings?.enabled);
@@ -156,13 +156,13 @@
       const autoLabel = !state.user
         ? "自动切换需登录"
         : !autoEnabled ? "自动切换未开启"
-          : !state.helperReady ? "自动切换待 Helper"
+          : !state.helperReady ? "自动切换待 Agent"
             : !autoAuthorized ? "自动切换待授权"
               : autoRuntimeLabel;
       const autoClass = autoEnabled && autoAuthorized && state.helperReady && codexStatus.state === "idle"
         ? "ready"
         : autoEnabled ? "warn" : "";
-      const helperLabel = state.currentAuthChecking ? "确认 auth" : (state.helperReady ? "Helper 在线" : "Helper 离线");
+      const helperLabel = state.currentAuthChecking ? "确认 auth" : (state.helperReady ? "Agent 在线" : "Agent 离线");
       const cloudSynced = Boolean(state.user && cloudBackupEnabled());
       const commandState = commandShellState({ files: state.commandFiles || [], accounts });
       const usageSettings = state.usageRefreshSettings || {};
@@ -199,7 +199,7 @@
         sidebarSyncTitle: state.user ? "已登录" : "快速切换",
         sidebarSyncText: state.user
           ? (cloudBackupEnabled() ? "账号池会自动同步。" : "可在设置里开启同步。")
-          : "安装 Helper 后可一键切换。",
+          : "安装 Dock Agent 后可一键切换。",
         adminOnlyHidden: state.user?.role !== "admin",
         sidebarCollapsed: Boolean(state.sidebarCollapsed),
         sidebarExpanded: String(!state.sidebarCollapsed),

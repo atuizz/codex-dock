@@ -1,6 +1,6 @@
 # Codex Dock
 
-账号池管理、额度查看、智能切换和 Dock Helper 一键执行。
+账号池管理、额度查看、智能切换和 Dock Agent 一键执行。
 
 商业化打磨路线图见 `docs/commercial-hardening-roadmap.md`，发布与验收清单见 `docs/release-and-verification.md`。
 
@@ -16,8 +16,8 @@ https://codex.woai.pro
 - 云端 API：`cloud-worker/worker.js` 聚合 `worker-auth.js`、`worker-accounts.js`、`worker-usage.js`、`worker-settings.js`、`worker-helper.js`、`worker-audit.js`、`worker-admin.js` 和 `worker-user.js`，处理注册、登录、账号导入、额度快照、刷新通道、切换 payload、设备、审计记录和管理员接口。
 - 云端数据库：Cloudflare D1，数据库名 `codex-cloud-console`。
 - token 存储：`account_secrets.encrypted_auth_json`，使用 Worker secret `TOKEN_ENCRYPTION_KEY` 加密落库。
-- Dock Helper：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.8`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
-- Helper 源码：`native-helper/build-helper.ps1` 编译 `native-helper/*.cs`，其中 `CodexPlusLocalHelper.cs` 保留主窗口/API 编排，`HelperDesktopUi.cs` 承载托盘菜单、软按钮、日志框和任务进度弹窗等桌面控件，`AutoSwitchConfig.cs` 承载自动切换配置模型，`HelperModels.cs` 承载通用数据模型，`CodexRuntimeStatus.cs` 承载 Codex 运行态与安全切换状态模型。
+- Dock Agent：`dist/CodexDockHelper/CodexDockHelper.exe`，当前版本 `0.4.9`，只监听 `127.0.0.1`，负责写入 `%USERPROFILE%\.codex\auth.json`、重启 Codex、上报安全切换边界，并提供持久诊断日志。
+- Agent 源码：`native-helper/build-helper.ps1` 编译 `native-helper/*.cs`，其中 `CodexPlusLocalHelper.cs` 保留主窗口/API 编排，`HelperDesktopUi.cs` 承载托盘菜单、软按钮、日志框和任务进度弹窗等桌面控件，`AutoSwitchConfig.cs` 承载自动切换配置模型，`HelperModels.cs` 承载通用数据模型，`CodexRuntimeStatus.cs` 承载 Codex 运行态与安全切换状态模型。
 
 ## 使用模型
 
@@ -25,7 +25,7 @@ https://codex.woai.pro
 - 登录只用于云同步：登录后会弹出同步确认，可选择合并并同步、只使用本地，或拉取云端覆盖本地。
 - 第一个注册用户自动成为管理员；管理员只能管理云控制台用户和统计，不能查看其他用户 token 明文。
 
-## Dock Helper
+## Dock Agent
 
 构建：
 
@@ -45,22 +45,22 @@ https://codex.woai.pro
 http://127.0.0.1:18766/
 ```
 
-Dock Helper 不托管账号管理页，`/console/` 会返回 404。关闭窗口不会退出，只会驻留系统托盘；托盘菜单可以显示窗口、打开 Codex Dock、重启服务或退出。
+Dock Agent 不托管账号管理页，`/console/` 会返回 404。关闭窗口不会退出，只会驻留系统托盘；托盘菜单可以显示窗口、打开 Codex Dock、重启服务或退出。
 
-Helper 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Helper 0.4.2 起会无论窗口是否可见都低频重新注册托盘图标，并提供本地托盘修复接口，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。Helper 0.4.3 起会在同类自动切换失败连续出现 3 次后暂停 30 分钟，并允许控制台一键恢复。Helper 0.4.4 起内置更新检查、状态页更新入口和安全下载动作；Helper 0.4.5 起提供本地生命周期自检接口，用于验证日志持久化、日志视图恢复调度和托盘修复链路；Helper 0.4.6 起生命周期自检会主动模拟 RichTextBox 渲染故障并确认日志视图可从事实源恢复；Helper 0.4.7 起会持久保存待切计划，并在重启后先重新核验额度和安全边界，核验前不写入 auth；Helper 0.4.8 起会把自动切换执行拆成候选选择、payload 下发、写入 auth、重启 Codex 和恢复窗口等阶段。控制台会显示 Helper 版本并提示低于最新发布或最低支持版本的设备升级，Helper 页会展示最新版、构建日期、EXE 下载、portable 包下载和 SHA-256 校验值。
+Agent 主窗口日志先写入 `%APPDATA%\CodexDock\helper.log` 和内存缓冲，再渲染到窗口；窗口关闭、恢复和 RichTextBox 渲染异常不会丢失日志。Agent 0.4.2 起会无论窗口是否可见都低频重新注册托盘图标，并提供本地托盘修复接口，防止 Windows 静默丢失 NotifyIcon 后出现“进程仍在但托盘不见”的状态。Agent 0.4.3 起会在同类自动切换失败连续出现 3 次后暂停 30 分钟，并允许控制台一键恢复。Agent 0.4.4 起内置更新检查、状态页更新入口和安全下载动作；Agent 0.4.5 起提供本地生命周期自检接口，用于验证日志持久化、日志视图恢复调度和托盘修复链路；Agent 0.4.6 起生命周期自检会主动模拟 RichTextBox 渲染故障并确认日志视图可从事实源恢复；Agent 0.4.7 起会持久保存待切计划，并在重启后先重新核验额度和安全边界，核验前不写入 auth；Agent 0.4.8 起会把自动切换执行拆成候选选择、payload 下发、写入 auth、重启 Codex 和恢复窗口等阶段；Agent 0.4.9 起客户端标题、托盘提示、状态页和更新提示统一改为 Dock Agent，并让切换进度弹窗置顶停留更久。控制台会显示 Agent 版本并提示低于最新发布或最低支持版本的设备升级，Agent 页会展示最新版、构建日期、EXE 下载、portable 包下载和 SHA-256 校验值。
 
 ## 额度刷新与智能切换
 
-- 额度刷新通道支持本机 Helper、云端 Worker、自动选择和仅手动刷新，默认推荐本机网络通道。
+- 额度刷新通道支持本机 Agent、云端 Worker、自动选择和仅手动刷新，默认推荐本机网络通道。
 - 云端 Worker 刷新受 `CLOUD_USAGE_REFRESH_DAILY_LIMIT` 限速，批量刷新会聚合审计，避免把每个账号刷新写成噪音。
-- 自动切换必须满足 Helper 上报的 `safe_to_switch` 和 `boundaryConfirmed`，不会在当前 Codex 任务仍可继续执行时抢切账号。
+- 自动切换必须满足 Agent 上报的 `safe_to_switch` 和 `boundaryConfirmed`，不会在当前 Codex 任务仍可继续执行时抢切账号。
 - 账号详情、设备诊断和审计会解释“能否使用、为何不能、下一步做什么”，技术 payload 不在列表或审计里暴露。
 
 ## 旧本地缓存迁移
 
 旧版账号池如果存过浏览器 `localStorage`，云端页面不能直接读取，因为 `https://codex.woai.pro` 和 `http://127.0.0.1:18766` 是不同 Origin。
 
-在设置里的“数据”页点击 `从旧本地缓存迁移`。页面会打开 Dock Helper 的 `/migrate-cache` 迁移页，由它读取旧 Origin 下的 `codex-account-switcher-store-v3`，再通过 `postMessage` 导入当前浏览器本地账号池；若用户已选择“合并并同步”，会继续上传云端。
+在设置里的“数据”页点击 `从旧本地缓存迁移`。页面会打开 Dock Agent 的 `/migrate-cache` 迁移页，由它读取旧 Origin 下的 `codex-account-switcher-store-v3`，再通过 `postMessage` 导入当前浏览器本地账号池；若用户已选择“合并并同步”，会继续上传云端。
 
 ## 云端部署
 
@@ -91,7 +91,7 @@ npm run release:github-ci
 npm run release:github-readiness
 ```
 
-`preflight` 会把 Helper 验证构建输出到 `artifacts/build/CodexDockHelper`，避免本机正在运行的 `dist\CodexDockHelper\CodexDockHelper.exe` 锁住发布包时导致验证失败。正式更新发布包仍使用 `npm run helper:build` 或 `.\native-helper\build-helper.ps1`。Helper 构建会生成 `CodexDockHelper-release.json` 和 `CodexDockHelper-<version>-portable.zip`；静态资源构建会把 EXE、portable 包和 release manifest 发布到 `/downloads/`，并在 `asset-manifest.json` 写入 Helper 版本、构建日期、大小和 SHA-256。`release:report` 验证部署候选的本地包、清单、生命周期与证据链，允许候选版本领先线上；部署完成后运行 `npm run release:report:production`，才严格要求线上 EXE/portable 包与候选哈希一致。商业发布门 `scripts/verify-commercial-release-gate.mjs` 也会随 `verify/preflight` 自动运行，防止登录、RT 导入、额度刷新、自动切换、Helper、管理员、生产 smoke、CI/CD 和截图证据从发布链里脱落。
+`preflight` 会把 Agent 验证构建输出到 `artifacts/build/CodexDockHelper`，避免本机正在运行的 `dist\CodexDockHelper\CodexDockHelper.exe` 锁住发布包时导致验证失败。正式更新发布包仍使用 `npm run helper:build` 或 `.\native-helper\build-helper.ps1`。Agent 构建会生成 `CodexDockHelper-release.json` 和 `CodexDockHelper-<version>-portable.zip`；静态资源构建会把 EXE、portable 包和 release manifest 发布到 `/downloads/`，并在 `asset-manifest.json` 写入 Agent 版本、构建日期、大小和 SHA-256。`release:report` 验证部署候选的本地包、清单、生命周期与证据链，允许候选版本领先线上；部署完成后运行 `npm run release:report:production`，才严格要求线上 EXE/portable 包与候选哈希一致。商业发布门 `scripts/verify-commercial-release-gate.mjs` 也会随 `verify/preflight` 自动运行，防止登录、RT 导入、额度刷新、自动切换、Agent、管理员、生产 smoke、CI/CD 和截图证据从发布链里脱落。
 
 `release:github-readiness` 会调用 `gh` 检查当前提交的 CI 是否真的通过、GitHub 是否记录了 PushEvent、push 触发是否实际生成运行记录、GitHub Cloudflare Deploy 所需 secret 名称是否存在，以及外部 check suite 是否卡住；它只输出 secret 名称是否存在，不读取或打印 secret 值，并把结果写到被忽略的本地证据文件 `artifacts/verification/github-release-readiness-result.json`。缺少 `CLOUDFLARE_API_TOKEN` 或没有观察到当前提交的 push-triggered CI 时，该命令会以非零状态退出，用于选择 GitHub 托管 CD 时的操作提醒；它不阻断本机 `preflight`、具备本地 Cloudflare 权限时的直接部署，也不计入当前产品完成度评分。
 
@@ -133,7 +133,7 @@ npm run smoke:production
 2. 若账号有本地 token，浏览器先确认是否带可用 RT；AT-only 默认不可用于 Codex。
 3. 若账号只有云端密文，登录后由云端裁判账号状态，默认只为 `rt_ready` 返回项目二格式 payload。
 4. 浏览器把 payload 发给 `127.0.0.1:18766/api/apply-auth`。
-5. Dock Helper 关闭 Codex、写入 auth、通过 Windows Shell AppID 启动 Codex。
+5. Dock Agent 关闭 Codex、写入 auth、通过 Windows Shell AppID 启动 Codex。
 6. 已登录时云端记录审计；离线本地切换不强制写云审计。
 
 ## API 摘要

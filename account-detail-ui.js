@@ -42,7 +42,7 @@
         <div class="auth-acquire-panel compact rt-update-panel">
           <div>
             <strong>通过 OAuth 登录补 RT</strong>
-            <span>这个账号当前只有 AT，不能用于 Codex。请用这个邮箱打开 OAuth 网页登录，Helper 会自动接收回调并导入 RT；不要用当前本机 auth 覆盖它。</span>
+            <span>这个账号当前只有 AT，不能用于 Codex。请用这个邮箱打开 OAuth 网页登录，Agent 会自动接收回调并导入 RT；不要用当前本机 auth 覆盖它。</span>
           </div>
           <div class="auth-acquire-actions">
             <button type="button" data-auth-action="open-import-oauth-login">补 RT</button>
@@ -100,7 +100,7 @@
           className: "bad",
           title: "暂不可用",
           reason: token.detail || token.label || "账号当前不满足切换条件。",
-          action: "检查授权、额度和 Helper 状态后再切换。",
+          action: "检查授权、额度和 Agent 状态后再切换。",
         };
       }
       if (current) {
@@ -114,9 +114,9 @@
       if (!helperReady) {
         return {
           className: "warn",
-          title: "可用，Helper 未连接",
+          title: "可用，Agent 未连接",
           reason: "账号授权可用，但当前不能一键写入 Codex。",
-          action: "启动 Dock Helper 后可一键切换；也可以下载 auth.json 手动使用。",
+          action: "启动 Dock Agent 后可一键切换；也可以下载 auth.json 手动使用。",
         };
       }
       return {

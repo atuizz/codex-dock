@@ -139,7 +139,7 @@ const smartHtml = ui.renderSmartSwitchSettings({
     cooldownMinutes: 5,
   },
 });
-assert.match(smartHtml, /本机 Helper 已授权/);
+assert.match(smartHtml, /本机 Agent 已授权/);
 assert.match(smartHtml, /任务连续性保护/);
 assert.match(smartHtml, /强制开启/);
 assert.match(smartHtml, /value="3" selected>3 分钟/);
@@ -171,8 +171,8 @@ const foreignHelperHtml = ui.renderSmartSwitchSettings({
   smartSettings: {},
   defaultAutoSwitchSettings: {},
 });
-assert.match(foreignHelperHtml, /需要授权本机 Helper/);
-assert.doesNotMatch(foreignHelperHtml, /本机 Helper 已授权/);
+assert.match(foreignHelperHtml, /需要授权本机 Agent/);
+assert.doesNotMatch(foreignHelperHtml, /本机 Agent 已授权/);
 
 const indexHtml = readFileSync("index.html", "utf8");
 const appSource = readFileSync("app.js", "utf8");

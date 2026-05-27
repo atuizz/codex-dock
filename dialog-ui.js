@@ -117,10 +117,10 @@
       const runtimeState = codex.label || codex.state || "状态确认中";
       const pendingReason = codex.pending_switch_reason || pending.reason || "当前 Codex 轮次仍在运行";
       const taskEvent = codex.last_task_event || codex.lastTaskEvent || "";
-      const source = codex.boundary_source || codex.boundarySource || codex.runtime_source || "Helper 运行状态";
+      const source = codex.boundary_source || codex.boundarySource || codex.runtime_source || "Agent 运行状态";
       const waitQueued = Boolean(pending.waitForBoundary);
       const summaryText = waitQueued
-        ? "已加入等待队列。Helper 确认安全边界后才会写入 auth 并重启 Codex。"
+        ? "已加入等待队列。Agent 确认安全边界后才会写入 auth 并重启 Codex。"
         : "当前任务仍在运行，立即切换可能中断本轮并浪费剩余额度。";
       const statsHtml = [
         ["目标账号", accountLabel],
@@ -147,7 +147,7 @@
         riskHtml: `
           <div class="cleanup-risk warn switch-risk-copy">
             <strong>保护当前任务</strong>
-            <span>Dock Helper 报告安全门未打开。本次默认不会抢切账号；强制切换会记录为用户动作。</span>
+            <span>Dock Agent 报告安全门未打开。本次默认不会抢切账号；强制切换会记录为用户动作。</span>
           </div>
           <div class="switch-risk-detail">${detailRows}</div>
         `,

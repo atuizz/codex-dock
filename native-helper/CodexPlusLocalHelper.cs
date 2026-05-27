@@ -59,8 +59,9 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.8";
+        private const string HelperVersion = "0.4.9";
         private const string HelperBuildDate = "2026-05-27";
+        private const string ProductFullName = "Codex Dock Agent";
         private const string HelperDownloadDefaultFile = "downloads/CodexDockHelper.exe";
         private const int HelperLogMaxBytes = 1024 * 1024;
         private const int HelperLogBackups = 5;
@@ -201,7 +202,7 @@ namespace CodexPlusLocalHelper
             _logRegularFont = new Font("Consolas", 9.5F, FontStyle.Regular);
             _logBoldFont = new Font("Consolas", 9.5F, FontStyle.Bold);
 
-            Text = "Codex Dock Helper";
+            Text = ProductFullName;
             Icon = _appIcon;
             Width = 1180;
             Height = 800;
@@ -232,7 +233,7 @@ namespace CodexPlusLocalHelper
             };
             root.Controls.Add(header, 0, 0);
 
-            var title = MakeLabel("Codex Dock Helper", 24F, FontStyle.Bold, Color.FromArgb(0, 0, 0));
+            var title = MakeLabel(ProductFullName, 24F, FontStyle.Bold, Color.FromArgb(0, 0, 0));
             title.Location = new Point(0, 26);
             title.Size = new Size(390, 42);
             header.Controls.Add(title);
@@ -243,7 +244,7 @@ namespace CodexPlusLocalHelper
             header.Controls.Add(version);
             version.BringToFront();
 
-            var subtitle = MakeLabel("安装后自动注入授权并重启 Codex。", 10F, FontStyle.Regular, Color.FromArgb(48, 55, 64));
+            var subtitle = MakeLabel("本机执行代理，负责写入 auth、观察任务边界并安全切换。", 10F, FontStyle.Regular, Color.FromArgb(48, 55, 64));
             subtitle.Location = new Point(0, 72);
             subtitle.Size = new Size(660, 26);
             header.Controls.Add(subtitle);
@@ -333,7 +334,7 @@ namespace CodexPlusLocalHelper
                 _serviceBadgeLabel.Top = 20;
             };
 
-            var serviceCopy = MakeLabel("监听端口与本地授权写入服务。", 9.5F, FontStyle.Regular, Color.FromArgb(40, 48, 58));
+            var serviceCopy = MakeLabel("监听本地端口并执行授权写入。", 9.5F, FontStyle.Regular, Color.FromArgb(40, 48, 58));
             serviceCopy.Dock = DockStyle.Fill;
             serviceLayout.Controls.Add(serviceCopy, 0, 1);
             serviceLayout.SetColumnSpan(serviceCopy, 3);
@@ -490,7 +491,7 @@ namespace CodexPlusLocalHelper
             _autoSwitchLabel.Size = new Size(240, 22);
             autoPanel.Controls.Add(_autoSwitchLabel);
 
-            _autoSwitchDetailLabel = MakeLabel("在控制台开启后，助手会按云端策略保护额度。", 9F, FontStyle.Regular, Color.FromArgb(95, 101, 105));
+            _autoSwitchDetailLabel = MakeLabel("在控制台开启后，Agent 会按云端策略保护额度。", 9F, FontStyle.Regular, Color.FromArgb(95, 101, 105));
             _autoSwitchDetailLabel.Location = new Point(0, 24);
             _autoSwitchDetailLabel.Size = new Size(520, 21);
             _autoSwitchDetailLabel.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Right;
@@ -589,7 +590,7 @@ namespace CodexPlusLocalHelper
             _trayIcon = new NotifyIcon
             {
                 Icon = _appIcon,
-                Text = "Codex Dock Helper 正在准备",
+                Text = ProductFullName + " 正在准备",
                 Visible = true,
                 ContextMenuStrip = _trayMenu
             };
@@ -735,7 +736,7 @@ namespace CodexPlusLocalHelper
                 StartServer();
             });
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("退出助手", null, delegate { ExitApplication(); });
+            menu.Items.Add("退出 Agent", null, delegate { ExitApplication(); });
             foreach (ToolStripItem item in menu.Items)
             {
                 if (!(item is ToolStripSeparator)) item.Padding = new Padding(12, 7, 22, 7);
@@ -822,7 +823,7 @@ namespace CodexPlusLocalHelper
             {
                 try
                 {
-                    _trayIcon.ShowBalloonTip(2500, "Codex Dock Helper", "助手已收起到托盘。右键图标可打开控制台、重启服务或退出。", ToolTipIcon.Info);
+                    _trayIcon.ShowBalloonTip(2500, ProductFullName, "Agent 已收起到托盘。右键图标可打开控制台、重启服务或退出。", ToolTipIcon.Info);
                 }
                 catch (Exception ex)
                 {
@@ -912,7 +913,7 @@ namespace CodexPlusLocalHelper
             }
 
             _uptimeLabel.Text = "运行时间 " + FormatDuration(DateTime.UtcNow - _startedAtUtc);
-            _statusLabel.Text = _running ? "● 助手在线" : "● 服务未启动";
+            _statusLabel.Text = _running ? "● Agent 在线" : "● 服务未启动";
             _statusLabel.ForeColor = _running ? Color.FromArgb(5, 130, 96) : Color.FromArgb(137, 91, 0);
             _serviceBadgeLabel.Text = _running ? "在线" : "离线";
             _serviceBadgeLabel.ForeColor = _running ? Color.FromArgb(16, 126, 84) : Color.FromArgb(137, 91, 0);
@@ -956,7 +957,7 @@ namespace CodexPlusLocalHelper
             var autoDetail = _lastAutoSwitchResult;
             if (string.IsNullOrWhiteSpace(autoDetail))
             {
-                autoDetail = auto.Enabled ? "等待云端策略和 Helper token。" : "在控制台开启后，助手会按云端策略保护额度。";
+                autoDetail = auto.Enabled ? "等待云端策略和 Agent token。" : "在控制台开启后，Agent 会按云端策略保护额度。";
             }
             _autoSwitchDetailLabel.Text = ShortNonEmpty(autoDetail, 110);
             RefreshTrayMenu();
@@ -1007,7 +1008,7 @@ namespace CodexPlusLocalHelper
 
         private void ExitApplication()
         {
-            WriteLifecycleLog("托盘请求退出助手");
+            WriteLifecycleLog("托盘请求退出 Agent");
             _applicationClosing = true;
             _allowExit = true;
             Close();
@@ -1020,7 +1021,7 @@ namespace CodexPlusLocalHelper
                 _updateButton.Enabled = false;
                 _updateButton.Text = "检查中";
             }
-            Log("正在检查 Helper 更新...");
+            Log("正在检查 Agent 更新...");
             ThreadPool.QueueUserWorkItem(delegate
             {
                 HelperUpdateInfo info;
@@ -1050,28 +1051,28 @@ namespace CodexPlusLocalHelper
             if (info == null || !info.Ok)
             {
                 var error = info == null ? "无法读取更新信息" : info.Error;
-                Log("检查 Helper 更新失败：" + error);
+                Log("检查 Agent 更新失败：" + error);
                 MessageBox.Show(this, "暂时无法检查更新。\r\n\r\n" + error, "检查更新失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             if (info.UpdateAvailable)
             {
-                var message = "发现 Helper 新版本 v" + info.LatestVersion + "。\r\n\r\n"
+                var message = "发现 Agent 新版本 v" + info.LatestVersion + "。\r\n\r\n"
                     + "当前版本：v" + HelperVersion + "\r\n"
                     + "发布包大小：" + FormatBytes(info.Bytes) + "\r\n"
                     + "SHA-256：" + ShortNonEmpty(info.Sha256, 24) + "\r\n\r\n"
-                    + "是否打开官方下载页面？请关闭当前 Helper 后再运行新版。";
-                Log("发现 Helper 新版本：v" + info.LatestVersion + "，等待用户打开下载页。");
-                if (MessageBox.Show(this, message, "Helper 更新可用", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                    + "是否打开官方下载页面？请关闭当前 Agent 后再运行新版。";
+                Log("发现 Agent 新版本：v" + info.LatestVersion + "，等待用户打开下载页。");
+                if (MessageBox.Show(this, message, "Agent 更新可用", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
                 {
                     OpenHelperDownloadPage(info.DownloadUrl);
                 }
                 return;
             }
 
-            Log("Helper 已是最新版本：v" + HelperVersion);
-            MessageBox.Show(this, "当前 Helper 已是最新版本 v" + HelperVersion + "。", "已是最新版本", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Log("Agent 已是最新版本：v" + HelperVersion);
+            MessageBox.Show(this, "当前 Agent 已是最新版本 v" + HelperVersion + "。", "已是最新版本", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void StartServer()
@@ -1112,7 +1113,7 @@ namespace CodexPlusLocalHelper
                 _serverThread.Start();
                 StartOauthCallbackServer();
                 SetStatus("运行中：" + BaseUrl);
-                Log("服务已启动：" + BaseUrl + " · Helper " + HelperVersion + " (" + HelperBuildDate + ")");
+                Log("服务已启动：" + BaseUrl + " · Agent " + HelperVersion + " (" + HelperBuildDate + ")");
                 RefreshAuthStatus();
                 _startButton.Enabled = true;
                 _stopButton.Enabled = true;
@@ -3565,7 +3566,7 @@ namespace CodexPlusLocalHelper
 
                 if (!string.IsNullOrEmpty(replacementToken))
                 {
-                    Log("自动切换：云端已轮换 Helper token，新的授权已保存。");
+                    Log("自动切换：云端已轮换 Agent token，新的授权已保存。");
                 }
             }
             catch (Exception ex)
@@ -3989,7 +3990,7 @@ namespace CodexPlusLocalHelper
             _lastAutoSwitchReason = _autoSwitchConfig.PendingSwitchReason;
             _lastAutoSwitchStage = "pending-revalidation";
             _lastAutoSwitchStageLabel = "恢复待切计划";
-            _lastAutoSwitchResult = "Helper 重启后已恢复待切原因，正在重新核验额度与任务边界：" + ShortText(_autoSwitchConfig.PendingSwitchReason, 90);
+            _lastAutoSwitchResult = "Agent 重启后已恢复待切原因，正在重新核验额度与任务边界：" + ShortText(_autoSwitchConfig.PendingSwitchReason, 90);
         }
 
         private void PersistAutoSwitchPending(string reason, string triggerType, string source, string authFingerprint, DateTime observedAtUtc)
@@ -4346,12 +4347,12 @@ namespace CodexPlusLocalHelper
             var helper = ExtractJsonObject(manifest, "helper");
             if (string.IsNullOrWhiteSpace(helper) || helper == "null")
             {
-                throw new InvalidOperationException("发布清单缺少 Helper 信息。");
+                throw new InvalidOperationException("发布清单缺少 Agent 信息。");
             }
             var latestVersion = MatchJsonString(helper, "version");
             if (string.IsNullOrWhiteSpace(latestVersion))
             {
-                throw new InvalidOperationException("发布清单缺少 Helper 版本。");
+                throw new InvalidOperationException("发布清单缺少 Agent 版本。");
             }
             var file = MatchJsonString(helper, "file");
             var result = new HelperUpdateInfo
@@ -4433,7 +4434,7 @@ namespace CodexPlusLocalHelper
         {
             var target = string.IsNullOrWhiteSpace(url) ? LatestHelperDownloadUrl("") : url;
             Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
-            Log("已打开 Helper 最新版下载页：" + target);
+            Log("已打开 Agent 最新版下载页：" + target);
         }
 
         private static int CompareVersion(string current, string latest)
@@ -4871,14 +4872,14 @@ namespace CodexPlusLocalHelper
             var auto = GetAutoSwitchConfig();
             var codex = CurrentCodexStatus();
             return "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-                + "<title>Codex Dock Helper</title>"
+                + "<title>" + HtmlEscape(ProductFullName) + "</title>"
                 + "<style>body{font-family:Segoe UI,Microsoft YaHei UI,sans-serif;margin:0;background:#0c0f0b;color:#f3f1e8}main{max-width:760px;margin:8vh auto;padding:0 24px}h1{font-size:28px;margin:0 0 12px}.card{border:1px solid #3d4638;background:#191e16;padding:22px;margin-top:18px}.muted{color:#a9b09e}.row{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}a{color:#12150e;background:#e5ff6a;text-decoration:none;padding:10px 14px;font-weight:700}code{background:#090c08;padding:3px 6px}</style>"
-                + "</head><body><main><h1>Codex Dock Helper 正在运行</h1>"
-                + "<p class=\"muted\">Helper 已就绪，可以在 Codex Dock 中一键切换账号。</p>"
+                + "</head><body><main><h1>" + HtmlEscape(ProductFullName) + " 正在运行</h1>"
+                + "<p class=\"muted\">Agent 已就绪，可以在 Codex Dock 中一键切换账号。</p>"
                 + "<div class=\"card\"><strong>本地 API</strong><p><code>" + HtmlEscape(BaseUrl) + "</code></p><p class=\"muted\">" + HtmlEscape(auth) + "</p></div>"
                 + "<div class=\"card\"><strong>Codex 状态</strong><p>" + HtmlEscape(codex.Label) + "</p><p class=\"muted\">" + HtmlEscape(codex.Detail) + "</p></div>"
                 + "<div class=\"card\"><strong>自动切换</strong><p>" + HtmlEscape(auto.Enabled && !string.IsNullOrEmpty(auto.DeviceToken) ? "已开启" : "未开启") + "</p><p class=\"muted\">" + HtmlEscape(_lastAutoSwitchResult) + "</p></div>"
-                + "<div class=\"card\"><strong>版本更新</strong><p>当前 Helper v" + HtmlEscape(HelperVersion) + " · " + HtmlEscape(HelperBuildDate) + "</p><p class=\"muted\">可先检查发布清单，再下载安装最新版。Helper 不会静默覆盖当前运行文件。</p></div>"
+                + "<div class=\"card\"><strong>版本更新</strong><p>当前 Agent v" + HtmlEscape(HelperVersion) + " · " + HtmlEscape(HelperBuildDate) + "</p><p class=\"muted\">可先检查发布清单，再下载安装最新版。Agent 不会静默覆盖当前运行文件。</p></div>"
                 + "<div class=\"row\"><a href=\"" + HtmlEscape(CloudConsoleUrl) + "\">打开 Codex Dock</a><a href=\"/api/health\">查看状态</a><a href=\"/api/update/check\">检查更新</a><a href=\"" + HtmlEscape(LatestHelperDownloadUrl("")) + "\">下载最新版</a></div>"
                 + "</main></body></html>";
         }
@@ -5051,13 +5052,13 @@ namespace CodexPlusLocalHelper
             }
             _statusLabel.Text = ContainsIgnoreCase(text, "失败")
                 ? "● 服务异常"
-                : (_running ? "● 助手在线" : "● 服务未启动");
+                : (_running ? "● Agent 在线" : "● 服务未启动");
             _statusLabel.ForeColor = ContainsIgnoreCase(text, "失败")
                 ? Color.FromArgb(180, 45, 45)
                 : (_running ? Color.FromArgb(5, 130, 96) : Color.FromArgb(137, 91, 0));
             if (_trayIcon != null)
             {
-                var tip = "Codex Dock Helper - " + text;
+                var tip = ProductFullName + " - " + text;
                 _trayIcon.Text = tip.Length > 63 ? tip.Substring(0, 63) : tip;
             }
             RefreshTrayMenu();
@@ -5378,6 +5379,8 @@ namespace CodexPlusLocalHelper
                             _operationProgressForm.Show();
                         }
                     }
+                    _operationProgressForm.TopMost = true;
+                    _operationProgressForm.BringToFront();
                     _operationProgressForm.Activate();
                 }
             });
@@ -5408,7 +5411,7 @@ namespace CodexPlusLocalHelper
                 }
 
                 var timer = new System.Windows.Forms.Timer();
-                timer.Interval = success ? 900 : 2600;
+                timer.Interval = success ? 1800 : 3200;
                 timer.Tick += delegate
                 {
                     timer.Stop();

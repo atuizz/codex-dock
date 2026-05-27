@@ -136,7 +136,7 @@ const localShell = ui.shellViewModel({
   currentView: "helper",
   sidebarCollapsed: true,
 });
-assert.equal(localShell.viewSubtitle, "安装后即可自动写入 auth 并重启 Codex。");
+assert.equal(localShell.viewSubtitle, "本机执行代理，负责写入 auth、观察任务边界并安全切换。");
 assert.equal(localShell.vaultTitle, "本地账号池 · 0 个账号");
 assert.equal(localShell.adminOnlyHidden, true);
 assert.equal(localShell.sidebarToggleLabel, "展开侧边栏");

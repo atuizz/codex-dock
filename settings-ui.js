@@ -83,10 +83,10 @@
       const pendingMessage = livePendingReason
         || (restoredPendingReason ? `已恢复待切计划，核验前不会写入 auth：${restoredPendingReason}` : "");
       return `
-        <strong>${helperReady ? `Helper 在线${version ? ` · v${escapeHtml(version)}` : ""}` : "Helper 离线"}</strong>
+        <strong>${helperReady ? `Agent 在线${version ? ` · v${escapeHtml(version)}` : ""}` : "Agent 离线"}</strong>
         <span>${escapeHtml(helperReady ? `Codex：${status.label || "状态确认中"}` : "未安装时可下载 auth.json 手动替换。")}</span>
         <span>最新发布：v${escapeHtml(latest)}${buildDate ? ` · ${escapeHtml(buildDate)}` : ""}${escapeHtml(checksum)}</span>
-        ${outdated ? `<span class="warning-text">Helper 版本过旧，请升级至 v${escapeHtml(minimumHelperVersion)} 或更高版本。</span>` : ""}
+        ${outdated ? `<span class="warning-text">Agent 版本过旧，请升级至 v${escapeHtml(minimumHelperVersion)} 或更高版本。</span>` : ""}
         ${helperReady && status.detail ? `<span>${escapeHtml(status.detail)}</span>` : ""}
         ${helperReady && pendingMessage ? `<span>${escapeHtml(pendingMessage)}</span>` : ""}
       `;
@@ -115,9 +115,9 @@
       };
       const cloudDisabled = user ? "" : "disabled";
       const sourceLabels = {
-        helper: "本机 Helper",
+        helper: "本机 Agent",
         "cloud-worker": "云端 Worker",
-        "auto-helper": "自动选择 / 本机 Helper",
+        "auto-helper": "自动选择 / 本机 Agent",
         "auto-cloud-fallback": "自动选择 / 云端回退",
         mixed: "混合通道（查看各账号结果）",
       };
@@ -134,7 +134,7 @@
         <label class="setting-line">
           <span><strong>执行通道</strong><small>推荐使用本机网络；云端刷新需要主动授权。</small></span>
           <select data-usage-refresh-setting="usageRefreshMode">
-            <option value="helper" ${selectedText("helper", settings.usageRefreshMode)}>本机 Helper（推荐）</option>
+            <option value="helper" ${selectedText("helper", settings.usageRefreshMode)}>本机 Agent（推荐）</option>
             <option value="cloud" ${selectedText("cloud", settings.usageRefreshMode)} ${cloudDisabled}>云端 Worker</option>
             <option value="auto" ${selectedText("auto", settings.usageRefreshMode)} ${cloudDisabled}>自动选择</option>
             <option value="manual" ${selectedText("manual", settings.usageRefreshMode)}>仅手动刷新</option>
@@ -143,7 +143,7 @@
         <div class="setting-box compact usage-refresh-status">
           <strong>最近实际通道：${escapeHtml(lastSource)}</strong>
           <span>${settings.lastUsageRefreshAt ? `最近刷新于 ${escapeHtml(settings.lastUsageRefreshAt)}` : "刷新完成后会显示本次实际通过哪条网络通道执行。"}</span>
-          <span>${helperReady ? "本机 Helper 当前在线。" : "本机 Helper 当前离线；只有已授权云端刷新时才能从网页继续检查额度。"}</span>
+          <span>${helperReady ? "本机 Agent 当前在线。" : "本机 Agent 当前离线；只有已授权云端刷新时才能从网页继续检查额度。"}</span>
         </div>
         <div class="setting-box compact usage-refresh-status">
           <strong>定时补刷新：${escapeHtml(schedulerState)}</strong>
@@ -151,11 +151,11 @@
           <span>${scheduler.lastRunAt ? `最近调度于 ${escapeHtml(scheduler.lastRunAt)}${scheduler.lastSummary ? ` · ${escapeHtml(scheduler.lastSummary)}` : ""}` : "页面保持打开时会低频补刷过期额度，不写入逐账号审计噪音。"}</span>
         </div>
         <label class="setting-toggle">
-          <span><strong>允许云端 Worker 刷新</strong><small>Worker 将在受限额度内解密该账号授权并请求用量接口；适用于无 Helper 场景。</small></span>
+          <span><strong>允许云端 Worker 刷新</strong><small>Worker 将在受限额度内解密该账号授权并请求用量接口；适用于无 Agent 场景。</small></span>
           <input type="checkbox" data-usage-refresh-setting="cloudUsageRefreshEnabled" ${checkedWhen(settings.cloudUsageRefreshEnabled)} ${cloudDisabled} />
         </label>
         <label class="setting-toggle">
-          <span><strong>Helper 失败后回退云端</strong><small>仅自动选择模式生效，且必须已允许云端刷新。</small></span>
+          <span><strong>Agent 失败后回退云端</strong><small>仅自动选择模式生效，且必须已允许云端刷新。</small></span>
           <input type="checkbox" data-usage-refresh-setting="helperFallbackToCloud" ${checkedWhen(settings.helperFallbackToCloud)} ${cloudDisabled} />
         </label>
         <label class="setting-line">
@@ -194,9 +194,9 @@
       const authorized = Boolean(autoSwitchStatus?.helperAuthorized);
       const autoStateText = !user
         ? "登录后可开启。"
-        : !helperReady ? "等待 Dock Helper 在线。"
-          : authorized ? "本机 Helper 已授权。"
-            : "需要授权本机 Helper。";
+        : !helperReady ? "等待 Dock Agent 在线。"
+          : authorized ? "本机 Agent 已授权。"
+            : "需要授权本机 Agent。";
       const autoDisabled = disabledWhen(Boolean(user));
       const autoCooldownOptions = [
         { value: 0, label: "不限制" },
@@ -224,14 +224,14 @@
       return `
         <div class="settings-section-title">自动切换</div>
         <label class="setting-toggle">
-          <span><strong>后台自动切换</strong><small>账号触发切换条件后，Helper 会先保护当前任务，只在安全轮次边界换号。</small></span>
+          <span><strong>后台自动切换</strong><small>账号触发切换条件后，Agent 会先保护当前任务，只在安全轮次边界换号。</small></span>
           <input type="checkbox" data-auto-switch-setting="enabled" ${checkedWhen(auto.enabled)} ${autoDisabled} />
         </label>
         <div class="setting-box compact">
           <strong>${escapeHtml(autoStateText)}</strong>
           <span>触发阈值：5H ≤ ${Number(auto.fiveHourThreshold || 5)}%，7D ≤ ${Number(auto.oneWeekThreshold || 5)}%。额度检查约 ${Number(helperInfo?.auto_switch?.effective_poll_seconds || auto.pollSeconds || 15)} 秒一次。</span>
           <div class="setting-actions inline">
-            <button id="authorizeAutoSwitchBtn" type="button" ${user && helperReady ? "" : "disabled"}>${authorized ? "重新授权 Helper" : "授权本机 Helper"}</button>
+            <button id="authorizeAutoSwitchBtn" type="button" ${user && helperReady ? "" : "disabled"}>${authorized ? "重新授权 Agent" : "授权本机 Agent"}</button>
             <button id="revokeAutoSwitchBtn" type="button" ${user && authorized ? "" : "disabled"}>解除授权</button>
           </div>
         </div>

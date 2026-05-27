@@ -168,7 +168,7 @@ foreach ($name in @("CodexDockHelper.exe", "CodexDockHelper.ico", "README.md", "
   }
 }
 $manifestObject = [ordered]@{
-  product = "Codex Dock Helper"
+  product = "Codex Dock Agent"
   kind = "portable-windows-helper"
   version = $metadata.Version
   build_date = $metadata.BuildDate
@@ -176,7 +176,7 @@ $manifestObject = [ordered]@{
   install = [ordered]@{
     mode = "portable"
     steps = @(
-      "Close any running Codex Dock Helper.",
+      "Close any running Codex Dock Agent.",
       "Extract the CodexDockHelper portable package to a stable folder.",
       "Run CodexDockHelper.exe and authorize the device from the cloud console."
     )

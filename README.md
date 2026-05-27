@@ -139,6 +139,15 @@ http://127.0.0.1:18766/
 
 部署细节见 [自部署指南](docs/self-hosting.md)，发布验收见 [Release And Verification](docs/release-and-verification.md)。
 
+选择 GitHub 托管发布链路时，可以额外运行：
+
+```powershell
+npm run release:github-ci
+npm run release:github-readiness
+```
+
+`release:github-ci` 会为当前分支触发一次可控 CI，`release:github-readiness` 会检查当前提交的 CI、PushEvent、Cloudflare deploy secret 名称和外部 check suite 状态；它只报告 secret 名称是否存在，不读取 secret 值。
+
 ## Cloud API
 
 Worker 通过 `/api/*` 提供注册登录、账号 CRUD、额度刷新、智能切换 payload、设备注册、Agent 心跳、用户设置、审计和管理员视图。`GET /api/accounts` 只返回元数据和额度快照；auth 材料会加密保存，只有授权的切换 payload 请求才会解密。

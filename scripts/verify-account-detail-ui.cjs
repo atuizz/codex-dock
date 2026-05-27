@@ -82,8 +82,8 @@ const helperOffline = ui.renderSelectedAccount({
   helperReady: false,
   operationActive: false,
 });
-assert.equal(helperOffline.selectedState, "primary@example.com · 可用，Helper 未连接 · Plus");
-assert.match(helperOffline.panelHtml, /启动 Dock Helper 后可一键切换/);
+assert.equal(helperOffline.selectedState, "primary@example.com · 可用，Agent 未连接 · Plus");
+assert.match(helperOffline.panelHtml, /启动 Dock Agent 后可一键切换/);
 assert.match(helperOffline.panelHtml, /下载 auth\.json/);
 
 const blocked = ui.renderSelectedAccount({

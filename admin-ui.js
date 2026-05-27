@@ -98,15 +98,14 @@
         ["启用用户", summary.activeUsers],
         ["账号数", summary.accounts],
         ["设备数", summary.deviceHealth?.total ?? devices.length],
-        ["待升级 Helper", outdatedHelpers],
-        ["需重连 Helper", staleHelpers],
+        ["待升级 Agent", outdatedHelpers],
+        ["需重连 Agent", staleHelpers],
         ["在线 session", summary.onlineSessions],
         ["24h 导入", summary.imports24h],
         ["24h 切换", summary.switches24h],
         ["24h 注销", summary.deletions24h],
       ].map(([label, value]) => metric(label, value)).join("");
       return `
-        <div class="admin-summary-metrics">${basic}</div>
         <div class="admin-ops-grid">
           <div class="ops-card">
             <span>账号健康</span>
@@ -120,12 +119,14 @@
             <p>24h 额度刷新失败 ${Number(failureTotals.usageRefreshFailures24h || 0)} 次</p>
           </div>
           <div class="ops-card">
-            <span>Helper 版本分布</span>
+            <span>Agent 版本分布</span>
             <strong>${outdatedHelpers} 台待升级 · ${staleHelpers} 台需重连</strong>
             ${renderVersionList(versions, minVersion)}
             <p>最低支持版本 v${escapeHtml(minVersion)}</p>
           </div>
         </div>
+        <div class="admin-metrics-label">详细指标</div>
+        <div class="admin-summary-metrics">${basic}</div>
       `;
     }
 
@@ -194,7 +195,7 @@
       if (!devices.length) return '<div class="empty small">暂无设备记录。</div>';
       return `
         <table class="admin-table">
-          <thead><tr><th>设备</th><th>用户</th><th>连接</th><th>Helper 版本</th><th>最近活跃</th></tr></thead>
+          <thead><tr><th>设备</th><th>用户</th><th>连接</th><th>Agent 版本</th><th>最近活跃</th></tr></thead>
           <tbody>
             ${devices.map((device) => {
               const version = device.helperVersion || "未上报";
@@ -247,4 +248,3 @@
     createAdminUi,
   });
 });
-

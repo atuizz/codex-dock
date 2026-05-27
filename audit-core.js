@@ -48,9 +48,9 @@
     if (trigger) return `触发：${trigger}`;
     if (item?.action === "usage-refresh") {
       const sources = {
-        helper: "本机 Helper",
+        helper: "本机 Agent",
         "cloud-worker": "云端 Worker",
-        "auto-helper": "自动选择 / 本机 Helper",
+        "auto-helper": "自动选择 / 本机 Agent",
         "auto-cloud-fallback": "自动选择 / 云端回退",
       };
       const source = sources[metadata.source] || metadata.source || "";
@@ -84,7 +84,7 @@
     if (normalized === "cloud") return "云端 Worker";
     if (normalized === "auto") return "自动选择";
     if (normalized === "manual") return "仅手动刷新";
-    return "本机 Helper";
+    return "本机 Agent";
   }
 
   function formatCandidateDiagnostics(candidates) {

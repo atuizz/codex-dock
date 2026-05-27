@@ -231,7 +231,7 @@ const report = {
   },
   docs: {
     release_doc_has_quality_gates: /## Commercial Quality Gates/.test(releaseDoc),
-    release_doc_mentions_helper: new RegExp(`Helper \`${helperRelease?.version || "0.0.0"}\``).test(releaseDoc),
+    release_doc_mentions_helper: new RegExp(`(?:Helper|Agent) \`${helperRelease?.version || "0.0.0"}\``).test(releaseDoc),
     package_has_release_report: Boolean(packageJson?.scripts?.["release:report"]),
     package_has_github_ci_dispatch: Boolean(packageJson?.scripts?.["release:github-ci"]),
     package_has_github_readiness: Boolean(packageJson?.scripts?.["release:github-readiness"]),
