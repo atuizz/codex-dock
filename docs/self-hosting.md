@@ -123,6 +123,7 @@ http://127.0.0.1:18766/
 | `CODEX_PLUS_CLOUD_CONSOLE_URL` | 覆盖 Agent 使用的控制台地址，适合自部署或预览域名 |
 | `CODEX_PLUS_ALLOWED_ORIGIN` | 额外允许调用本地 Agent API 的浏览器 Origin |
 | `CODEX_PLUS_APP_ID` | 覆盖用于重启 Codex 的 Windows Shell AppID |
+| `CODEX_DOCK_RESTORE_THREAD_PROTOCOL` | 旧版兼容开关。仅在旧 Codex 仍支持 `codex://threads/...` 深链时设为 `1`；新版应保持未设置 |
 
 历史 `CODEX_PLUS_*` 命名保留是为了兼容已发布的本地 Agent 构建。
 

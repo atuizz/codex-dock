@@ -13,7 +13,7 @@ const helperMainSource = fs.readFileSync(path.join(repoRoot, "native-helper", "C
 const runtimeStatusSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexRuntimeStatus.cs"), "utf8");
 const desktopUiSource = fs.readFileSync(path.join(repoRoot, "native-helper", "HelperDesktopUi.cs"), "utf8");
 const helperBuildScript = fs.readFileSync(path.join(repoRoot, "native-helper", "build-helper.ps1"), "utf8");
-const expectedHelperVersion = "0.4.9";
+const expectedHelperVersion = "0.4.10";
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -88,6 +88,9 @@ assert.match(helperSource, /SetAutoSwitchStage\("payload-issued", "已取得切�
 assert.match(helperSource, /SetAutoSwitchStage\("writing-auth", "写入 auth"\)/);
 assert.match(helperSource, /SetAutoSwitchStage\("restarting-codex", "重启 Codex"\)/);
 assert.match(helperSource, /SetAutoSwitchStage\("restoring-window", "恢复窗口"\)/);
+assert.match(helperSource, /CODEX_DOCK_RESTORE_THREAD_PROTOCOL/);
+assert.match(helperSource, /已跳过旧版 codex:\/\/ 窗口深链，由 Codex 自动恢复上次窗口/);
+assert.doesNotMatch(helperSource, /var attempts = target\.IsGoal \? 4 : 3/);
 assert.match(helperSource, /RunSwitchJob\(nextAuth, true, true, true\)/);
 assert.match(helperSource, /internal sealed class AutoSwitchConfig/);
 assert.match(helperSource, /public AutoSwitchConfig Clamp\(\)/);

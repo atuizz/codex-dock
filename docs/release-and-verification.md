@@ -6,7 +6,7 @@ This document is the operational checklist for shipping the Cloudflare console a
 
 - Cloud console: Cloudflare Worker `codex-cloud-console` with Static Assets from `cloud-worker/public`.
 - Cloud data: D1 database `codex-cloud-console`, managed by incremental files in `cloud-worker/migrations`.
-- Windows Dock Agent release candidate: `dist/CodexDockHelper/CodexDockHelper.exe`, currently version `0.4.9` with build date `2026-05-27`.
+- Windows Dock Agent release candidate: `dist/CodexDockHelper/CodexDockHelper.exe`, currently version `0.4.10` with build date `2026-06-02`.
 - Public domain: `https://codex.woai.pro`.
 
 ## Required Secrets And Variables
@@ -23,6 +23,7 @@ This document is the operational checklist for shipping the Cloudflare console a
   - `CODEX_PLUS_CLOUD_CONSOLE_URL`: override cloud console URL for local or preview testing.
   - `CODEX_PLUS_ALLOWED_ORIGIN`: extra browser origin allowed to call the local Helper API.
   - `CODEX_PLUS_APP_ID`: override Windows Shell AppID used to restart Codex.
+  - `CODEX_DOCK_RESTORE_THREAD_PROTOCOL`: legacy compatibility opt-in for old Codex builds that still accept `codex://threads/...`; leave unset for current Codex builds.
 
 Never commit real tokens, auth payloads, Worker secrets, device bearer tokens, or copied `%USERPROFILE%\.codex\auth.json` content.
 
@@ -120,6 +121,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 
 ## Current Verification Evidence
 
+- Agent `0.4.10` release candidate built on `2026-06-02`: after a Codex upgrade, account switching launches Codex once and lets the current app restore its prior window natively. The old `codex://threads/...` protocol restore is disabled by default because current Codex builds can misinterpret its thread id as an Electron app path; it remains available as an explicit legacy compatibility opt-in and is never retried in a loop. Local `dist\CodexDockHelper\CodexDockHelper.exe` SHA-256 is `A68F1D12383B9626C0B95C82938E9FA8CC377AB0EAA5F9F568DD304C0E8E934B`, final portable zip SHA-256 is `EFAFB0E356E3AF2832D8EB5F01F392D20313B72B808AAB146B0611074CBE5870`.
 - Agent `0.4.9` release candidate built on `2026-05-27`: client title, tray hint, local status page, update prompts, release manifest, default device name, and manual-switch risk copy now use Dock Agent; the switch progress popup is topmost and stays visible longer after success/failure. Local `dist\CodexDockHelper\CodexDockHelper.exe` SHA-256 is `E47EC88F9C55390DDCA0A3A0784217F8EBE7BF554EAA19312153FAAD16F11E04`, portable zip SHA-256 is `12CD684972B4492BEEF6042C528D90F7C5B4D27BD39FC31FEDC7F4BB7E30BB5B`, and the executable file name remains `CodexDockHelper.exe` for update-path compatibility.
 - Helper `0.4.7` release candidate verified on `2026-05-27`: pending auto-switch plans are persisted locally and surfaced as a revalidation-only state after Helper restart; the restored plan cannot write auth until a new live usage and safe-boundary check passes. The final downloadable EXE SHA-256 is `391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515`, portable zip SHA-256 is `87DCA57B1F815CD57FEA5215AC3A0C2462A0F186B6A8831E733C99D977D06B94`, the real `POST /api/lifecycle/self-test` result reported `log_found: true`, `log_view_fault_tested: true`, and `log_view_fault_recovered: true`, and the redacted restart recovery proof is recorded in `artifacts/verification/helper-pending-revalidation-local-result.json` and `artifacts/verification/helper-pending-revalidation-local.png`.
 - Latest production release verified on `2026-05-27`: D1 migration `0006_account_deletion_events.sql` was applied and `wrangler deploy` published Worker version `a876df41-a756-4094-b9ae-829297d1f77a` with static asset version `967b8412fa8a`; strict production smoke passed with online/local Helper hash parity and self-deleted its disposable user/device; historical synthetic smoke residue was removed with an anonymous aggregate event recording `53` users, `53` devices and `1` session; production surface smoke confirmed the commercial modules and no obvious public secret leakage. The online Helper distribution remains `0.4.7` with EXE SHA-256 `391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515` and portable zip SHA-256 `87DCA57B1F815CD57FEA5215AC3A0C2462A0F186B6A8831E733C99D977D06B94`.

@@ -184,3 +184,9 @@
 - 本地 `/api/health` 与 `/api/update/check` 已验证当前和最新版本均为 `0.4.7`，生命周期自检仍返回 `log_found: true`、`log_view_fault_tested: true` 与 `log_view_fault_recovered: true`；线上 EXE SHA-256 为 `391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515`。
 - Helper `0.4.8` 已增加自动切换细阶段：候选选择、payload 下发、写入 auth、重启 Codex 和恢复窗口会分别上报到设备页阶段卡；本地 `/api/health`、生命周期自检、商业发布门和 release evidence report 已通过，候选 EXE SHA-256 为 `5EA9F01579051FAE260383AEA4EAB865FA0CA249C32DCA6088411D4D283BF421`。
 
+## 2026-06-02 升级兼容修复
+
+- Helper `0.4.10` 默认停止调用旧版 `codex://threads/...` 窗口恢复深链。新版 Codex 仍会由 Windows Shell 启动一次，并由应用自身恢复上次窗口。
+- 旧深链仅在显式设置 `CODEX_DOCK_RESTORE_THREAD_PROTOCOL=1` 时调用一次，不再按会话类型重复调用 3 次或 4 次。这样可以避免 Codex 升级后把 thread id 误当成 Electron 应用目录并连续弹出错误窗口。
+- 目标任务的 app-server 状态恢复保持不变，不依赖旧版窗口深链。
+

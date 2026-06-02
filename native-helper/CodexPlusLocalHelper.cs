@@ -59,8 +59,8 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.9";
-        private const string HelperBuildDate = "2026-05-27";
+        private const string HelperVersion = "0.4.10";
+        private const string HelperBuildDate = "2026-06-02";
         private const string ProductFullName = "Codex Dock Agent";
         private const string HelperDownloadDefaultFile = "downloads/CodexDockHelper.exe";
         private const int HelperLogMaxBytes = 1024 * 1024;
@@ -1978,7 +1978,7 @@ namespace CodexPlusLocalHelper
                             SetAutoSwitchStage("restoring-window", "恢复窗口");
                             SetAutoSwitchResult("Codex 已启动，正在恢复切换前窗口：" + subject, "restoring-window:" + jobId);
                         }
-                        UpdateOperationProgress(88, "正在恢复切换前的 Codex 窗口。");
+                        UpdateOperationProgress(88, "正在等待 Codex 恢复切换前窗口。");
                         restoreResult = RestoreCodexWindow(restoreTarget);
                         Log("切换任务 " + jobId + " " + restoreResult);
                         UpdateOperationProgress(94, "正在恢复目标状态。");
@@ -1986,7 +1986,7 @@ namespace CodexPlusLocalHelper
                         if (!string.IsNullOrEmpty(goalResult)) Log("切换任务 " + jobId + " " + goalResult);
                     }
                 }
-                Log("切换任务 " + jobId + " 成功：目标 " + subject + "，已写入 auth" + (launch ? "，已请求启动 Codex" : "") + (restoreTarget != null ? "，已请求恢复窗口" : "") + "。");
+                Log("切换任务 " + jobId + " 成功：目标 " + subject + "，已写入 auth" + (launch ? "，已请求启动 Codex" : "") + (restoreTarget != null ? "，已处理窗口恢复" : "") + "。");
                 CompleteOperationProgress(true, "切换完成：" + subject);
                 return true;
             }
@@ -4695,21 +4695,28 @@ namespace CodexPlusLocalHelper
 
         private static string RestoreCodexWindow(CodexRestoreTarget target)
         {
-            if (target == null || string.IsNullOrWhiteSpace(target.Url)) return "未找到可恢复会话。";
+            if (target == null || string.IsNullOrWhiteSpace(target.ThreadId)) return "未找到可恢复会话。";
+            if (!LegacyThreadProtocolRestoreEnabled())
+            {
+                return "已跳过旧版 codex:// 窗口深链，由 Codex 自动恢复上次窗口：" + ShortText(target.ThreadId, 12);
+            }
+            if (string.IsNullOrWhiteSpace(target.Url)) return "未找到可恢复会话深链。";
             try
             {
-                var attempts = target.IsGoal ? 4 : 3;
-                for (var i = 0; i < attempts; i++)
-                {
-                    Process.Start(new ProcessStartInfo(target.Url) { UseShellExecute = true });
-                    if (i < attempts - 1) Thread.Sleep(1400);
-                }
-                return "已请求恢复" + (target.IsGoal ? "目标任务" : "会话") + "窗口：" + ShortText(target.ThreadId, 12);
+                Process.Start(new ProcessStartInfo(target.Url) { UseShellExecute = true });
+                return "已通过兼容深链请求恢复" + (target.IsGoal ? "目标任务" : "会话") + "窗口：" + ShortText(target.ThreadId, 12);
             }
             catch (Exception ex)
             {
                 return "恢复会话窗口失败：" + ex.Message;
             }
+        }
+
+        private static bool LegacyThreadProtocolRestoreEnabled()
+        {
+            var enabled = Environment.GetEnvironmentVariable("CODEX_DOCK_RESTORE_THREAD_PROTOCOL");
+            return string.Equals(enabled, "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(enabled, "true", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string RestoreCodexGoalIfNeeded(CodexRestoreTarget target)
