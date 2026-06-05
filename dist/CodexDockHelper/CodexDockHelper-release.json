@@ -1,8 +1,8 @@
 {
   "product": "Codex Dock Agent",
   "kind": "portable-windows-helper",
-  "version": "0.4.10",
-  "build_date": "2026-06-02",
+  "version": "0.4.11",
+  "build_date": "2026-06-06",
   "minimum_cloud_console": "https://codex.woai.pro",
   "install": {
     "mode": "portable",
@@ -15,8 +15,8 @@
   "files": [
     {
       "file": "CodexDockHelper.exe",
-      "bytes": 182784,
-      "sha256": "A68F1D12383B9626C0B95C82938E9FA8CC377AB0EAA5F9F568DD304C0E8E934B"
+      "bytes": 184320,
+      "sha256": "A1BE6C939789970826A9A83E87AAC5673B2B61DF9D01F7121C44965AE665D11F"
     },
     {
       "file": "CodexDockHelper.ico",
@@ -30,9 +30,9 @@
     }
   ],
   "package": {
-    "file": "downloads/CodexDockHelper-0.4.10-portable.zip",
+    "file": "downloads/CodexDockHelper-0.4.11-portable.zip",
     "format": "zip",
-    "bytes": 195976,
-    "sha256": "EFAFB0E356E3AF2832D8EB5F01F392D20313B72B808AAB146B0611074CBE5870"
+    "bytes": 197512,
+    "sha256": "F6987EB709ABF0E8207FEF7185904D794DB890CD7EFB86783100C6F7C3F63935"
   }
 }

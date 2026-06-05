@@ -135,7 +135,7 @@ const releaseGates = [
       { label: "failure backoff", pattern: /AutoSwitchFailureBackoff/ },
       { label: "failure pause", pattern: /AutoSwitchFailurePauseThreshold/ },
       { label: "update check", pattern: /\/api\/update\/check/ },
-      { label: "current Agent version", pattern: /0\.4\.10/ },
+      { label: "current Agent version", pattern: /0\.4\.11/ },
       { label: "fine-grained Helper switch stages", pattern: /candidate-selecting[\s\S]*payload-issued[\s\S]*writing-auth[\s\S]*restarting-codex[\s\S]*restoring-window/ },
       { label: "portable release package", pattern: /Compress-Archive|CodexDockHelper-release\\\.json|portable\\\.zip/i },
     ],

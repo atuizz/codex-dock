@@ -190,3 +190,9 @@
 - 旧深链仅在显式设置 `CODEX_DOCK_RESTORE_THREAD_PROTOCOL=1` 时调用一次，不再按会话类型重复调用 3 次或 4 次。这样可以避免 Codex 升级后把 thread id 误当成 Electron 应用目录并连续弹出错误窗口。
 - 目标任务的 app-server 状态恢复保持不变，不依赖旧版窗口深链。
 
+## 2026-06-06 窗口恢复方案
+
+- Helper `0.4.11` 将恢复动作拆成两段：先等待新版 Codex 主窗口出现，并通过 `ShowWindowAsync` 与 `SetForegroundWindow` 恢复前台窗口；再延迟调用一次 `codex://threads/...`，让已经就绪的 single-instance deep-link 队列导航到原会话。
+- 之前旧方案可用，是因为旧版 Codex 在冷启动时更早接受 `codex://threads/...`；新版 Windows packaged Electron 在启动早期可能先把 URL path 交给默认 Electron app 解析，导致 UUID 被当成应用目录。新的时序避免在这段危险窗口内调用协议。
+- 若后续 Codex 再调整 deep-link 行为，可设置 `CODEX_DOCK_RESTORE_THREAD_PROTOCOL=0` 关闭会话深链，只保留主窗口前置恢复。
+

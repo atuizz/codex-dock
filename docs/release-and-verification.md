@@ -6,7 +6,7 @@ This document is the operational checklist for shipping the Cloudflare console a
 
 - Cloud console: Cloudflare Worker `codex-cloud-console` with Static Assets from `cloud-worker/public`.
 - Cloud data: D1 database `codex-cloud-console`, managed by incremental files in `cloud-worker/migrations`.
-- Windows Dock Agent release candidate: `dist/CodexDockHelper/CodexDockHelper.exe`, currently version `0.4.10` with build date `2026-06-02`.
+- Windows Dock Agent release candidate: `dist/CodexDockHelper/CodexDockHelper.exe`, currently version `0.4.11` with build date `2026-06-06`.
 - Public domain: `https://codex.woai.pro`.
 
 ## Required Secrets And Variables
@@ -23,7 +23,7 @@ This document is the operational checklist for shipping the Cloudflare console a
   - `CODEX_PLUS_CLOUD_CONSOLE_URL`: override cloud console URL for local or preview testing.
   - `CODEX_PLUS_ALLOWED_ORIGIN`: extra browser origin allowed to call the local Helper API.
   - `CODEX_PLUS_APP_ID`: override Windows Shell AppID used to restart Codex.
-  - `CODEX_DOCK_RESTORE_THREAD_PROTOCOL`: legacy compatibility opt-in for old Codex builds that still accept `codex://threads/...`; leave unset for current Codex builds.
+  - `CODEX_DOCK_RESTORE_THREAD_PROTOCOL`: optional switch for thread deep-link restore. By default the Agent waits for the Codex main window, then calls `codex://threads/...` once; set to `0`, `false`, or `off` to disable the deep link.
 
 Never commit real tokens, auth payloads, Worker secrets, device bearer tokens, or copied `%USERPROFILE%\.codex\auth.json` content.
 
@@ -121,6 +121,7 @@ Then verify register/login, settings persistence, Helper diagnostics, auto-switc
 
 ## Current Verification Evidence
 
+- Agent `0.4.11` release candidate built on `2026-06-06`: window restore is now staged for the upgraded Codex desktop app. The Agent launches Codex through the Windows AppID, waits for the packaged Codex main window, restores and foregrounds it with Win32 APIs, then sends a single delayed `codex://threads/...` request to navigate back to the captured local conversation. This preserves thread-level recovery without the previous cold-start protocol loop that produced Electron app-path errors. Local `dist\CodexDockHelper\CodexDockHelper.exe` SHA-256 is `A1BE6C939789970826A9A83E87AAC5673B2B61DF9D01F7121C44965AE665D11F`, final portable zip SHA-256 is `F6987EB709ABF0E8207FEF7185904D794DB890CD7EFB86783100C6F7C3F63935`.
 - Agent `0.4.10` release candidate built on `2026-06-02`: after a Codex upgrade, account switching launches Codex once and lets the current app restore its prior window natively. The old `codex://threads/...` protocol restore is disabled by default because current Codex builds can misinterpret its thread id as an Electron app path; it remains available as an explicit legacy compatibility opt-in and is never retried in a loop. Local `dist\CodexDockHelper\CodexDockHelper.exe` SHA-256 is `A68F1D12383B9626C0B95C82938E9FA8CC377AB0EAA5F9F568DD304C0E8E934B`, final portable zip SHA-256 is `EFAFB0E356E3AF2832D8EB5F01F392D20313B72B808AAB146B0611074CBE5870`.
 - Agent `0.4.9` release candidate built on `2026-05-27`: client title, tray hint, local status page, update prompts, release manifest, default device name, and manual-switch risk copy now use Dock Agent; the switch progress popup is topmost and stays visible longer after success/failure. Local `dist\CodexDockHelper\CodexDockHelper.exe` SHA-256 is `E47EC88F9C55390DDCA0A3A0784217F8EBE7BF554EAA19312153FAAD16F11E04`, portable zip SHA-256 is `12CD684972B4492BEEF6042C528D90F7C5B4D27BD39FC31FEDC7F4BB7E30BB5B`, and the executable file name remains `CodexDockHelper.exe` for update-path compatibility.
 - Helper `0.4.7` release candidate verified on `2026-05-27`: pending auto-switch plans are persisted locally and surfaced as a revalidation-only state after Helper restart; the restored plan cannot write auth until a new live usage and safe-boundary check passes. The final downloadable EXE SHA-256 is `391F8841D88F1434EAEB144A5435ACF5050AE6CCC4D7F3E5462EF90F74FAC515`, portable zip SHA-256 is `87DCA57B1F815CD57FEA5215AC3A0C2462A0F186B6A8831E733C99D977D06B94`, the real `POST /api/lifecycle/self-test` result reported `log_found: true`, `log_view_fault_tested: true`, and `log_view_fault_recovered: true`, and the redacted restart recovery proof is recorded in `artifacts/verification/helper-pending-revalidation-local-result.json` and `artifacts/verification/helper-pending-revalidation-local.png`.

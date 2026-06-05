@@ -59,8 +59,8 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.10";
-        private const string HelperBuildDate = "2026-06-02";
+        private const string HelperVersion = "0.4.11";
+        private const string HelperBuildDate = "2026-06-06";
         private const string ProductFullName = "Codex Dock Agent";
         private const string HelperDownloadDefaultFile = "downloads/CodexDockHelper.exe";
         private const int HelperLogMaxBytes = 1024 * 1024;
@@ -187,10 +187,21 @@ namespace CodexPlusLocalHelper
         [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
         private static extern int RegisterWindowMessage(string lpString);
 
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
+
         private static readonly IntPtr HWND_BROADCAST = new IntPtr(0xffff);
         private static readonly int TaskbarCreatedMessage = RegisterWindowMessage("TaskbarCreated");
         private const int WM_SETTINGCHANGE = 0x001A;
         private const int SMTO_ABORTIFHUNG = 0x0002;
+        private const int SW_RESTORE = 9;
+        private const int SW_SHOW = 5;
 
         public MainForm()
         {
@@ -4696,27 +4707,98 @@ namespace CodexPlusLocalHelper
         private static string RestoreCodexWindow(CodexRestoreTarget target)
         {
             if (target == null || string.IsNullOrWhiteSpace(target.ThreadId)) return "未找到可恢复会话。";
-            if (!LegacyThreadProtocolRestoreEnabled())
+            var focusBefore = FocusCodexMainWindow(15000);
+            if (focusBefore.StartsWith("未找到", StringComparison.OrdinalIgnoreCase))
             {
-                return "已跳过旧版 codex:// 窗口深链，由 Codex 自动恢复上次窗口：" + ShortText(target.ThreadId, 12);
+                return focusBefore + "；已跳过会话深链，避免在 Codex 冷启动阶段触发协议错误：" + ShortText(target.ThreadId, 12);
+            }
+            if (ThreadProtocolRestoreDisabled())
+            {
+                return focusBefore + "；已按配置跳过 codex:// 会话深链：" + ShortText(target.ThreadId, 12);
             }
             if (string.IsNullOrWhiteSpace(target.Url)) return "未找到可恢复会话深链。";
             try
             {
+                Thread.Sleep(1600);
                 Process.Start(new ProcessStartInfo(target.Url) { UseShellExecute = true });
-                return "已通过兼容深链请求恢复" + (target.IsGoal ? "目标任务" : "会话") + "窗口：" + ShortText(target.ThreadId, 12);
+                Thread.Sleep(1200);
+                var focusAfter = FocusCodexMainWindow(6000);
+                return focusBefore + "；已延迟请求恢复" + (target.IsGoal ? "目标任务" : "会话") + "窗口：" + ShortText(target.ThreadId, 12) + "；" + focusAfter;
             }
             catch (Exception ex)
             {
-                return "恢复会话窗口失败：" + ex.Message;
+                return focusBefore + "；恢复会话深链失败：" + ex.Message;
             }
         }
 
-        private static bool LegacyThreadProtocolRestoreEnabled()
+        private static bool ThreadProtocolRestoreDisabled()
         {
-            var enabled = Environment.GetEnvironmentVariable("CODEX_DOCK_RESTORE_THREAD_PROTOCOL");
-            return string.Equals(enabled, "1", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(enabled, "true", StringComparison.OrdinalIgnoreCase);
+            var disabled = Environment.GetEnvironmentVariable("CODEX_DOCK_RESTORE_THREAD_PROTOCOL");
+            return string.Equals(disabled, "0", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(disabled, "false", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(disabled, "off", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string FocusCodexMainWindow(int timeoutMs)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(Math.Max(0, timeoutMs));
+            IntPtr handle = IntPtr.Zero;
+            do
+            {
+                handle = FindCodexMainWindowHandle();
+                if (handle != IntPtr.Zero) break;
+                Thread.Sleep(350);
+            }
+            while (DateTime.UtcNow < deadline);
+
+            if (handle == IntPtr.Zero) return "未找到 Codex 主窗口";
+            try
+            {
+                if (IsIconic(handle)) ShowWindowAsync(handle, SW_RESTORE);
+                else ShowWindowAsync(handle, SW_SHOW);
+                SetForegroundWindow(handle);
+                return "已前置 Codex 主窗口";
+            }
+            catch (Exception ex)
+            {
+                return "前置 Codex 主窗口失败：" + ex.Message;
+            }
+        }
+
+        private static IntPtr FindCodexMainWindowHandle()
+        {
+            try
+            {
+                var bestStartedAt = DateTime.MinValue;
+                var best = IntPtr.Zero;
+                foreach (var process in Process.GetProcessesByName("Codex"))
+                {
+                    using (process)
+                    {
+                        try
+                        {
+                            var handle = process.MainWindowHandle;
+                            if (handle == IntPtr.Zero) continue;
+                            var path = "";
+                            try { path = process.MainModule == null ? "" : process.MainModule.FileName; } catch { }
+                            if (!ContainsIgnoreCase(path, "\\WindowsApps\\OpenAI.Codex_")) continue;
+                            var startedAt = DateTime.MinValue;
+                            try { startedAt = process.StartTime; } catch { }
+                            if (best == IntPtr.Zero || startedAt > bestStartedAt)
+                            {
+                                best = handle;
+                                bestStartedAt = startedAt;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                return best;
+            }
+            catch
+            {
+                return IntPtr.Zero;
+            }
         }
 
         private static string RestoreCodexGoalIfNeeded(CodexRestoreTarget target)
