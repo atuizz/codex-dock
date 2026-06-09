@@ -274,6 +274,7 @@
       plan_type: pickAny([source, sessionProfile, subscription], ["plan_type", "planType", "plan"]) || pick(subscription, ["type"]),
       chatgpt_plan_type: pickAny([source, sessionProfile, subscription], ["chatgpt_plan_type", "chatgptPlanType", "name"]),
       expires: pickAny([source, session], ["expires", "expires_at", "expiresAt", "expired_at", "expiredAt"]),
+      account_scope_id: identityScopeFromSources([source, tokens, auth, sessionTokens, session, user, subscription]),
       usage: source.usage_snapshot || source.usage || null,
     };
   }
@@ -287,7 +288,7 @@
     const idPayload = decodeJwtPayload(idToken) || {};
     const authPayload = accessPayload["https://api.openai.com/auth"] || idPayload["https://api.openai.com/auth"] || {};
     const profilePayload = accessPayload["https://api.openai.com/profile"] || idPayload["https://api.openai.com/profile"] || {};
-    const accountScopeId = identityScopeFromSources([source, tokens, auth, sessionTokens, user, subscription, authPayload, profilePayload]);
+    const accountScopeId = extracted.account_scope_id || identityScopeFromSources([source, authPayload, profilePayload]);
     const accountId = extracted.account_id
       || authPayload.chatgpt_account_id
       || authPayload.chatgpt_account_user_id
