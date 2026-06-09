@@ -1546,6 +1546,13 @@ function accountById(id) {
 function usageIssue(account) {
   const usage = normalizeUsage(account?.usage, accountPlan(account));
   if (!usage.error) return null;
+  const text = String(usage.error || "").toLowerCase();
+  if (hasUsableRefreshToken(account) && usageAccessAuthExpiredText(text)) {
+    return {
+      label: "额度刷新授权过期，可切换",
+      className: "warn",
+    };
+  }
   const label = explainError(usage.error);
   return {
     label,
@@ -1553,15 +1560,19 @@ function usageIssue(account) {
   };
 }
 
-function usageAuthFailure(account) {
-  const usage = normalizeUsage(account?.usage, accountPlan(account));
-  const text = String(usage.error || "").toLowerCase();
+function usageAccessAuthExpiredText(text) {
   return /\b401\b/.test(text)
     || text.includes("unauthorized")
     || text.includes("authentication token has been invalidated")
-    || text.includes("token has been invalidated")
-    || text.includes("invalid_grant")
-    || text.includes("refresh token was already used");
+    || text.includes("token has been invalidated");
+}
+
+function usageAuthFailure(account) {
+  const usage = normalizeUsage(account?.usage, accountPlan(account));
+  const text = String(usage.error || "").toLowerCase();
+  if (refreshTokenInvalidText(text)) return true;
+  if (hasUsableRefreshToken(account) && usageAccessAuthExpiredText(text)) return false;
+  return usageAccessAuthExpiredText(text);
 }
 
 function debounce(fn, delay = 200) {
