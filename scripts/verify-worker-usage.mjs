@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   DEFAULT_USAGE_REFRESH_SETTINGS,
   ensureCloudRefreshAllowance,
+  fetchCloudUsage,
   handleUsageRoutes,
   mapCloudUsagePayload,
   normalizeUsageRefreshSettings,
@@ -178,6 +179,38 @@ assert.equal(env.DB.snapshots[0].refresh_kind, "background");
 assert.match(upstreamAuthorization, /^Bearer /);
 assert.equal(audits.filter((item) => item.action === "usage-refresh").length, 0);
 
+const unknownStatusDb = new FakeD1(env.DB.account);
+env.DB = unknownStatusDb;
+const unknownStatusUsage = await fetchCloudUsage(env, user, "account-1", {
+  fetchImpl: async () => new Response(JSON.stringify({ team: { pooled_limits: true } }), { status: 403 }),
+});
+assert.equal(unknownStatusUsage.status, "额度待重试");
+assert.equal(unknownStatusUsage.error, "");
+assert.equal(unknownStatusUsage.five_hour, null);
+
+const invalidJsonDb = new FakeD1(env.DB.account);
+env.DB = invalidJsonDb;
+const invalidJsonUsage = await fetchCloudUsage(env, user, "account-1", {
+  fetchImpl: async () => new Response("team quota html", { status: 200 }),
+});
+assert.equal(invalidJsonUsage.status, "额度待重试");
+assert.equal(invalidJsonUsage.error, "");
+
+const unauthorizedDb = new FakeD1(env.DB.account);
+env.DB = unauthorizedDb;
+await assert.rejects(
+  () => fetchCloudUsage(env, user, "account-1", {
+    fetchImpl: async () => new Response("unauthorized", { status: 401 }),
+  }),
+  (error) => error instanceof ApiError && error.code === "cloud_usage_unauthorized",
+);
+
+env.DB = new FakeD1(env.DB.account);
+env.DB.snapshots.push({
+  user_id: "user-1",
+  refresh_source: "cloud-worker",
+  created_at: new Date().toISOString(),
+});
 env.DB.snapshots.push({
   user_id: "user-1",
   refresh_source: "cloud-worker",

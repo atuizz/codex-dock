@@ -42,7 +42,7 @@
       if (!window) {
         return `
           <div class="quota-mini empty ${issue?.className || ""}" ${issue ? `title="${escapeHtml(issue.label)}"` : ""}>
-            <div class="quota-mini-head"><span>${escapeHtml(label)}</span><strong>${escapeHtml(issue ? "不可用" : "未刷新")}</strong></div>
+            <div class="quota-mini-head"><span>${escapeHtml(label)}</span><strong>${escapeHtml(issue ? "待重试" : "未刷新")}</strong></div>
             <div class="mini-bar"><i style="width:0%"></i></div>
           </div>
         `;

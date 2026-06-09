@@ -1553,6 +1553,17 @@ function usageIssue(account) {
   };
 }
 
+function usageAuthFailure(account) {
+  const usage = normalizeUsage(account?.usage, accountPlan(account));
+  const text = String(usage.error || "").toLowerCase();
+  return /\b401\b/.test(text)
+    || text.includes("unauthorized")
+    || text.includes("authentication token has been invalidated")
+    || text.includes("token has been invalidated")
+    || text.includes("invalid_grant")
+    || text.includes("refresh token was already used");
+}
+
 function debounce(fn, delay = 200) {
   let timer = null;
   return (...args) => {
@@ -1743,7 +1754,7 @@ function accountCooldownActive(account) {
 function isInvalidAccount(account) {
   if (!hasAccountSecret(account) || codexBlockReason(account)) return true;
   if (isExpiredWithoutRt(account)) return true;
-  if (usageIssue(account)) return true;
+  if (usageAuthFailure(account)) return true;
   return false;
 }
 
@@ -1771,7 +1782,7 @@ function accountActionMode(account) {
   const block = codexBlockReason(account);
   if (block === "at_unsupported") return "update-rt";
   if (!canUseAccount(account)) return "unavailable";
-  if (isExpiredWithoutRt(account) || usageIssue(account)) return "unavailable";
+  if (isExpiredWithoutRt(account) || usageAuthFailure(account)) return "unavailable";
   return state.helperReady ? "direct-switch" : "download-auth";
 }
 
@@ -1789,7 +1800,7 @@ function accountMatchesHealthFilter(account, key = state.accountHealthFilter) {
   const block = codexBlockReason(account);
   const hasRt = hasUsableRefreshToken(account);
   const tokenFilter = tokenFilterValue(account);
-  if (key === "ready-rt") return codexUsable(account) && hasRt && !usageIssue(account) && !accountLowQuota(account) && !accountCooldownActive(account);
+  if (key === "ready-rt") return codexUsable(account) && hasRt && !usageAuthFailure(account) && !accountLowQuota(account) && !accountCooldownActive(account);
   if (key === "missing-rt") return block === "at_unsupported" || (hasAccountSecret(account) && !hasRt && tokenFilter !== "expired");
   if (key === "rt-invalid") return block === "rt_invalid" || tokenFilter === "expired" || refreshTokenInvalidText(normalizeUsage(account?.usage, accountPlan(account)).error);
   if (key === "low-quota") return accountLowQuota(account);

@@ -174,6 +174,17 @@ export function mapCloudUsagePayload(payload, fallbackPlan = "", source = "cloud
   }, fallbackPlan);
 }
 
+function unknownUsage(fallbackPlan = "", source = "cloud-worker", status = "额度待重试") {
+  return normalizeUsage({
+    fetched_at: Math.floor(Date.now() / 1000),
+    refreshed_at: nowIso(),
+    plan_type: fallbackPlan,
+    refresh_source: source,
+    status,
+    error: "",
+  }, fallbackPlan);
+}
+
 async function readCloudAccountSecret(env, user, accountId) {
   const row = await env.DB.prepare(
     `SELECT a.id, a.plan_type, s.encrypted_auth_json
@@ -217,14 +228,19 @@ export async function fetchCloudUsage(env, user, accountId, options = {}) {
     clearTimeout(timeout);
   }
   if (!upstream.ok) {
-    throw new ApiError(`ChatGPT 用量接口返回 ${upstream.status}`, 502, "cloud_usage_upstream_error");
+    if (upstream.status === 401) {
+      throw new ApiError("ChatGPT 用量接口返回 401", 401, "cloud_usage_unauthorized");
+    }
+    return unknownUsage(row.plan_type || "", source);
   }
   let payload;
   try {
     payload = await boundedResponseJson(upstream);
   } catch (error) {
-    if (error instanceof ApiError) throw error;
-    throw new ApiError("ChatGPT 用量响应无法解析", 502, "cloud_usage_invalid_response");
+    if (error instanceof ApiError && error.code === "usage_response_too_large") {
+      return unknownUsage(row.plan_type || "", source);
+    }
+    return unknownUsage(row.plan_type || "", source);
   }
   return mapCloudUsagePayload(payload, row.plan_type || "", source);
 }

@@ -182,7 +182,7 @@
       if (!window) {
         return `
           <div class="quota-cell empty-quota ${issueClass}" ${issue ? `title="${escapeHtml(issue)}"` : ""}>
-            <strong>${escapeHtml(issue ? "不可用" : "未刷新")}</strong>
+            <strong>${escapeHtml(issue ? "待重试" : "未刷新")}</strong>
             <span>${escapeHtml(label)}</span>
             <div class="quota-bar"><i style="width:0%"></i></div>
           </div>
