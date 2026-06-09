@@ -216,9 +216,12 @@
   }
 
   function accountIdentityKeyFromParts(parts = {}) {
+    const accountUserId = String(parts.accountUserId || parts.account_user_id || parts.chatgptAccountUserId || parts.chatgpt_account_user_id || "").trim().toLowerCase();
     const accountId = String(parts.accountId || parts.account_id || "").trim().toLowerCase();
     const email = String(parts.email || "").trim().toLowerCase();
     const scope = String(parts.scopeId || parts.scope_id || parts.teamId || parts.team_id || parts.organizationId || parts.organization_id || parts.workspaceId || parts.workspace_id || "").trim().toLowerCase();
+    if (accountUserId && scope && scope !== accountUserId) return `account:${accountUserId}|scope:${scope}`;
+    if (accountUserId) return `account:${accountUserId}`;
     if (accountId && scope && scope !== accountId) return `account:${accountId}|scope:${scope}`;
     if (accountId) return `account:${accountId}`;
     if (email && scope) return `email:${email}|scope:${scope}`;
@@ -275,6 +278,8 @@
       chatgpt_plan_type: pickAny([source, sessionProfile, subscription], ["chatgpt_plan_type", "chatgptPlanType", "name"]),
       expires: pickAny([source, session], ["expires", "expires_at", "expiresAt", "expired_at", "expiredAt"]),
       account_scope_id: identityScopeFromSources([source, tokens, auth, sessionTokens, session, user, subscription]),
+      account_identity_key: pickAny([source, tokens, auth, sessionTokens, session, user], ["account_identity_key", "accountIdentityKey"]),
+      account_user_id: pickAny([source, tokens, auth, sessionTokens, session, user], ["account_user_id", "accountUserId", "chatgpt_account_user_id", "chatgptAccountUserId"]),
       usage: source.usage_snapshot || source.usage || null,
     };
   }
@@ -289,6 +294,7 @@
     const authPayload = accessPayload["https://api.openai.com/auth"] || idPayload["https://api.openai.com/auth"] || {};
     const profilePayload = accessPayload["https://api.openai.com/profile"] || idPayload["https://api.openai.com/profile"] || {};
     const accountScopeId = extracted.account_scope_id || identityScopeFromSources([source, authPayload, profilePayload]);
+    const accountUserId = extracted.account_user_id || authPayload.chatgpt_account_user_id || authPayload.user_id || "";
     const accountId = extracted.account_id
       || authPayload.chatgpt_account_id
       || authPayload.chatgpt_account_user_id
@@ -310,7 +316,8 @@
         expires,
         profile: { plan },
         accountScopeId,
-        accountIdentityKey: accountIdentityKeyFromParts({ accountId, email, scopeId: accountScopeId }),
+        accountUserId,
+        accountIdentityKey: extracted.account_identity_key || accountIdentityKeyFromParts({ accountUserId, accountId, email, scopeId: accountScopeId }),
         usage,
         tokens: {
           id_token: idToken || accessToken,
@@ -416,6 +423,7 @@
     const profilePayload = accessPayload["https://api.openai.com/profile"] || idPayload["https://api.openai.com/profile"] || {};
     const accountScopeId = account.accountScopeId || account.account_scope_id || session?.accountScopeId || identityScopeFromSources([account, session, tokens, authPayload, profilePayload]);
     const accountId = account.accountId || account.account_id || tokens.account_id || authPayload.chatgpt_account_id || "";
+    const accountUserId = account.accountUserId || account.account_user_id || session?.accountUserId || authPayload.chatgpt_account_user_id || authPayload.user_id || "";
     const email = account.email || session?.email || profilePayload.email || "";
     const plan = bestPlan(account.planType, account.plan_type, account.usage?.plan_type, session?.profile?.plan, authPayload.chatgpt_plan_type);
     const expiresAt = account.expiresAt || account.expires_at || session?.expires || (accessPayload.exp ? new Date(accessPayload.exp * 1000).toISOString() : "");
@@ -431,7 +439,8 @@
       expiryNote: account.expiryNote || account.expiry_note || "",
       accountId,
       accountScopeId,
-      accountIdentityKey: account.accountIdentityKey || account.account_identity_key || session?.accountIdentityKey || accountIdentityKeyFromParts({ accountId, email, scopeId: accountScopeId }),
+      accountUserId,
+      accountIdentityKey: account.accountIdentityKey || account.account_identity_key || session?.accountIdentityKey || accountIdentityKeyFromParts({ accountUserId, accountId, email, scopeId: accountScopeId }),
       expiresAt,
       hasRefreshToken: account.hasRefreshToken ?? account.has_refresh_token ?? hasUsableRefreshToken({ session }),
       planType: plan,

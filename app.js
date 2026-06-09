@@ -2631,6 +2631,9 @@ function normalizeAuthPayload(session, options = {}) {
       refresh_token: refreshToken,
       account_id: tokens.account_id || "",
     },
+    email: session.email || "",
+    account_scope_id: session.accountScopeId || "",
+    account_identity_key: session.accountIdentityKey || "",
     last_refresh: new Date().toISOString(),
   };
 }

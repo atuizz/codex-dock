@@ -57,9 +57,12 @@ function identityScopeFromSources(sources) {
 }
 
 export function accountIdentityKeyFromParts(parts = {}) {
+  const accountUserId = String(parts.accountUserId || parts.account_user_id || parts.chatgptAccountUserId || parts.chatgpt_account_user_id || "").trim().toLowerCase();
   const accountId = String(parts.accountId || parts.account_id || "").trim().toLowerCase();
   const email = String(parts.email || "").trim().toLowerCase();
   const scope = String(parts.scopeId || parts.scope_id || parts.teamId || parts.team_id || parts.organizationId || parts.organization_id || parts.workspaceId || parts.workspace_id || "").trim().toLowerCase();
+  if (accountUserId && scope && scope !== accountUserId) return `account:${accountUserId}|scope:${scope}`;
+  if (accountUserId) return `account:${accountUserId}`;
   if (accountId && scope && scope !== accountId) return `account:${accountId}|scope:${scope}`;
   if (accountId) return `account:${accountId}`;
   if (email && scope) return `email:${email}|scope:${scope}`;
@@ -206,6 +209,11 @@ export function normalizeSession(source) {
     || authPayload.chatgpt_account_id
     || authPayload.chatgpt_account_user_id
     || "";
+  const accountUserId = pickAny([source, tokens, auth, session, user], ["account_user_id", "accountUserId", "chatgpt_account_user_id", "chatgptAccountUserId"])
+    || authPayload.chatgpt_account_user_id
+    || authPayload.user_id
+    || "";
+  const accountIdentityKey = pickAny([source, tokens, auth, session, user], ["account_identity_key", "accountIdentityKey"]);
   const email = pickAny([source, user, profile], ["email", "mail"]) || profilePayload.email || "";
   const planType = bestPlan(
     pickAny([source, profile], ["plan_type", "planType", "chatgpt_plan_type", "chatgptPlanType", "plan"]),
@@ -219,7 +227,8 @@ export function normalizeSession(source) {
     expires: expiresAt,
     profile: { plan: planType },
     accountScopeId,
-    accountIdentityKey: accountIdentityKeyFromParts({ accountId, email, scopeId: accountScopeId }),
+    accountUserId,
+    accountIdentityKey: accountIdentityKey || accountIdentityKeyFromParts({ accountUserId, accountId, email, scopeId: accountScopeId }),
     usage: source.usage || source.usage_snapshot || null,
     tokens: {
       id_token: idToken,
@@ -247,6 +256,9 @@ export function normalizeAuthPayload(session) {
       refresh_token: refreshToken,
       account_id: tokens.account_id || "",
     },
+    email: session.email || "",
+    account_scope_id: session.accountScopeId || "",
+    account_identity_key: session.accountIdentityKey || "",
     last_refresh: nowIso(),
   };
 }
@@ -694,6 +706,7 @@ export async function upsertAccount(env, user, item) {
   const accountId = tokens.account_id || "";
   const accountScopeId = item.accountScopeId || item.account_scope_id || session.accountScopeId || "";
   const accountIdentityKey = item.accountIdentityKey || item.account_identity_key || session.accountIdentityKey || accountIdentityKeyFromParts({
+    accountUserId: session.accountUserId || "",
     accountId,
     email: item.email || session.email || "",
     scopeId: accountScopeId,

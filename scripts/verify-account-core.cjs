@@ -20,6 +20,7 @@ vm.runInContext(readFileSync("account-core.js", "utf8"), context);
 const accessToken = jwt({
   exp: Math.floor(Date.now() / 1000) + 3600,
   "https://api.openai.com/auth": {
+    chatgpt_account_id: "acct-team-shared",
     chatgpt_account_user_id: "user-team-shared",
     chatgpt_plan_type: "team",
   },
@@ -43,6 +44,27 @@ assert.equal(parsed.length, 1);
 assert.equal(parsed[0].ok, true);
 assert.equal(parsed[0].session.tokens.account_id, "acct-team-a");
 assert.equal(parsed[0].session.email, "team@example.com");
-assert.equal(parsed[0].session.accountIdentityKey, "account:acct-team-a");
+assert.equal(parsed[0].session.accountUserId, "user-team-shared");
+assert.equal(parsed[0].session.accountScopeId, "acct-team-shared");
+assert.equal(parsed[0].session.accountIdentityKey, "account:user-team-shared|scope:acct-team-shared");
+
+const secondAccessToken = jwt({
+  exp: Math.floor(Date.now() / 1000) + 3600,
+  "https://api.openai.com/auth": {
+    chatgpt_account_id: "acct-team-shared",
+    chatgpt_account_user_id: "user-team-other",
+    chatgpt_plan_type: "team",
+  },
+  "https://api.openai.com/profile": {
+    email: "other-team@example.com",
+  },
+});
+const teamEntries = context.CodexAccountCore.parseImportEntries({
+  accounts: [
+    { tokens: { access_token: accessToken, refresh_token: "rt-a", account_id: "acct-team-shared" } },
+    { tokens: { access_token: secondAccessToken, refresh_token: "rt-b", account_id: "acct-team-shared" } },
+  ],
+});
+assert.equal(new Set(teamEntries.map((entry) => entry.session.accountIdentityKey)).size, 2);
 
 console.log("account-core verification passed");

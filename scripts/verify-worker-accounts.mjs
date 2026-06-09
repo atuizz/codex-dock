@@ -51,6 +51,41 @@ assert.equal(session.profile.plan, "plus");
 assert.equal(session.tokens.account_id, "acct-cloud-1");
 assert.equal(session.tokens.refresh_token, "rt-live");
 
+const sharedTeamA = normalizeSession({
+  tokens: {
+    access_token: jwt({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: "acct-team-shared",
+        chatgpt_account_user_id: "user-team-a",
+        chatgpt_plan_type: "team",
+      },
+      "https://api.openai.com/profile": { email: "team-a@example.com" },
+    }),
+    refresh_token: "rt-team-a",
+    account_id: "acct-team-shared",
+  },
+});
+const sharedTeamB = normalizeSession({
+  tokens: {
+    access_token: jwt({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      "https://api.openai.com/auth": {
+        chatgpt_account_id: "acct-team-shared",
+        chatgpt_account_user_id: "user-team-b",
+        chatgpt_plan_type: "team",
+      },
+      "https://api.openai.com/profile": { email: "team-b@example.com" },
+    }),
+    refresh_token: "rt-team-b",
+    account_id: "acct-team-shared",
+  },
+});
+assert.equal(sharedTeamA.tokens.account_id, "acct-team-shared");
+assert.equal(sharedTeamA.accountScopeId, "acct-team-shared");
+assert.notEqual(sharedTeamA.accountIdentityKey, sharedTeamB.accountIdentityKey);
+assert.match(sharedTeamA.accountIdentityKey, /^account:user-team-a\|scope:acct-team-shared$/);
+
 assert.throws(
   () => normalizeSession({ tokens: { refresh_token: "rt-only" } }),
   /missing access_token/,

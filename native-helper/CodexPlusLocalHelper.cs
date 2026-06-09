@@ -1708,6 +1708,9 @@ namespace CodexPlusLocalHelper
                 accountId = AccountIdFromJwt(accessToken);
             }
             var refreshToken = MatchJsonString(authJson, "refresh_token");
+            var email = EmailFromAuthJson(authJson);
+            var accountScopeId = AccountScopeIdFromAuthJson(authJson);
+            var accountIdentityKey = AccountIdentityKeyFromAuthJson(authJson);
             var hasRefreshToken = !string.IsNullOrEmpty(refreshToken)
                 && refreshToken != accessToken
                 && !string.Equals(refreshToken, "rt_mock_token", StringComparison.OrdinalIgnoreCase);
@@ -1729,6 +1732,9 @@ namespace CodexPlusLocalHelper
                 + "    \"refresh_token\": \"" + JsonEscape(refreshToken) + "\",\n"
                 + "    \"account_id\": \"" + JsonEscape(accountId) + "\"\n"
                 + "  },\n"
+                + "  \"email\": \"" + JsonEscape(email) + "\",\n"
+                + "  \"account_scope_id\": \"" + JsonEscape(accountScopeId) + "\",\n"
+                + "  \"account_identity_key\": \"" + JsonEscape(accountIdentityKey) + "\",\n"
                 + "  \"last_refresh\": \"" + JsonEscape(DateTime.UtcNow.ToString("o")) + "\"\n"
                 + "}";
         }
@@ -1883,6 +1889,14 @@ namespace CodexPlusLocalHelper
             return MatchJsonString(payload, "chatgpt_account_user_id");
         }
 
+        private static string AccountUserIdFromJwt(string accessToken)
+        {
+            var payload = JwtPayloadJson(accessToken);
+            var accountUserId = MatchJsonString(payload, "chatgpt_account_user_id");
+            if (!string.IsNullOrEmpty(accountUserId)) return accountUserId;
+            return MatchJsonString(payload, "user_id");
+        }
+
         private static string AccountScopeIdFromAuthJson(string authJson)
         {
             var direct = MatchJsonString(authJson, "accountScopeId");
@@ -1911,10 +1925,14 @@ namespace CodexPlusLocalHelper
             if (string.IsNullOrEmpty(direct)) direct = MatchJsonString(authJson, "account_identity_key");
             if (!string.IsNullOrEmpty(direct)) return direct.ToLowerInvariant();
             var email = EmailFromAuthJson(authJson).ToLowerInvariant();
+            var accessToken = MatchJsonString(authJson, "access_token");
+            var accountUserId = AccountUserIdFromJwt(accessToken).ToLowerInvariant();
             var accountId = MatchJsonString(authJson, "account_id");
-            if (string.IsNullOrEmpty(accountId)) accountId = AccountIdFromJwt(MatchJsonString(authJson, "access_token"));
+            if (string.IsNullOrEmpty(accountId)) accountId = AccountIdFromJwt(accessToken);
             accountId = (accountId ?? "").ToLowerInvariant();
             var scopeId = (AccountScopeIdFromAuthJson(authJson) ?? "").ToLowerInvariant();
+            if (!string.IsNullOrEmpty(accountUserId) && !string.IsNullOrEmpty(scopeId) && accountUserId != scopeId) return "account:" + accountUserId + "|scope:" + scopeId;
+            if (!string.IsNullOrEmpty(accountUserId)) return "account:" + accountUserId;
             if (!string.IsNullOrEmpty(accountId) && !string.IsNullOrEmpty(scopeId) && accountId != scopeId) return "account:" + accountId + "|scope:" + scopeId;
             if (!string.IsNullOrEmpty(accountId)) return "account:" + accountId;
             if (!string.IsNullOrEmpty(email) && !string.IsNullOrEmpty(scopeId)) return "email:" + email + "|scope:" + scopeId;
