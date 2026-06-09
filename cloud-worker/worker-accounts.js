@@ -143,12 +143,34 @@ function usageErrorText(usage, extra = "") {
 
 export function isHardAccountFailure(usage, extra = "") {
   const text = usageErrorText(usage, extra);
-  return /(?:\b(?:deactivated|suspended|banned)\b|封禁|封号|停用)/i.test(text);
+  return /(?:\b(?:deactivated|suspended|banned|disabled)\b|account (?:disabled|deactivated|suspended)|organization_deactivated|封禁|封号|停用|账号异常|账号已被禁用)/i.test(text);
 }
 
 export function isRefreshTokenInvalidFailure(usage, extra = "") {
   const text = usageErrorText(usage, extra);
-  return /(?:invalid_grant|refresh token was already used|access token could not be refreshed|could not be refreshed|rt 已失效|refresh_token 已失效)/i.test(text);
+  return /(?:invalid_grant|invalid refresh token|refresh token (?:was already used|expired|revoked|invalid)|access token could not be refreshed|could not be refreshed|rt 已失效|refresh_token 已失效|刷新令牌已失效|刷新凭据已失效)/i.test(text);
+}
+
+export function isUsageAccessAuthExpiredFailure(usage, extra = "") {
+  const text = usageErrorText(usage, extra);
+  return /\b401\b/.test(text)
+    || text.includes("unauthorized")
+    || text.includes("authentication token has been invalidated")
+    || text.includes("token has been invalidated")
+    || text.includes("token 已失效")
+    || text.includes("授权已失效")
+    || text.includes("登录状态已失效");
+}
+
+function quotaAuthFailureCanStillSwitch(account) {
+  return ["team", "enterprise"].includes(canonicalPlan(account?.planType || account?.plan_type || account?.usage?.plan_type));
+}
+
+function strongCurrentIdentityKey(identityKey, scopeId = "") {
+  const key = String(identityKey || "").trim().toLowerCase();
+  if (!key) return "";
+  if (String(scopeId || "").trim()) return key;
+  return key.includes("|scope:") ? key : "";
 }
 
 export function isSwitchTriggerUsage(usage, error, settings) {
@@ -324,11 +346,12 @@ export function accountMatchesCurrent(account, body) {
   const currentId = String(body.currentAccountId || body.accountId || body.chatgptAccountId || "").trim();
   const currentEmail = String(body.currentEmail || body.email || "").trim().toLowerCase();
   const currentScopeId = String(body.currentAccountScopeId || body.accountScopeId || body.account_scope_id || body.currentScopeId || "").trim();
-  const currentIdentityKey = String(body.currentAccountIdentityKey || body.accountIdentityKey || body.account_identity_key || accountIdentityKeyFromParts({
+  const rawCurrentIdentityKey = body.currentAccountIdentityKey || body.accountIdentityKey || body.account_identity_key || "";
+  const currentIdentityKey = strongCurrentIdentityKey(rawCurrentIdentityKey || accountIdentityKeyFromParts({
     accountId: currentId,
     email: currentEmail,
     scopeId: currentScopeId,
-  })).trim().toLowerCase();
+  }), currentScopeId);
   const currentCloudId = String(body.currentCloudAccountId || body.cloudAccountId || "").trim();
   const accountIdentityKeys = new Set([
     String(account.accountIdentityKey || account.account_identity_key || "").trim().toLowerCase(),
@@ -340,8 +363,7 @@ export function accountMatchesCurrent(account, body) {
   ].filter(Boolean));
   if (currentCloudId && account.id === currentCloudId) return true;
   if (currentIdentityKey && accountIdentityKeys.has(currentIdentityKey)) return true;
-  if (currentId && account.accountId && account.accountId === currentId && (!currentIdentityKey || !accountIdentityKeys.size)) return true;
-  if (!currentId && !currentIdentityKey && currentEmail && account.email && account.email.toLowerCase() === currentEmail) return true;
+  if (currentId && account.accountId && account.accountId === currentId && !currentIdentityKey && !rawCurrentIdentityKey) return true;
   return false;
 }
 
@@ -372,7 +394,11 @@ export function accountCodexStatus(account, options = {}) {
     return { credentialKind, codexUsable: false, codexBlockReason: "missing_secret" };
   }
   if (credentialKind === "rt") {
-    if (isRefreshTokenInvalidFailure(usage)) {
+    if (isHardAccountFailure(usage)) {
+      return { credentialKind, codexUsable: false, codexBlockReason: "account_disabled" };
+    }
+    if (isRefreshTokenInvalidFailure(usage)
+      || (isUsageAccessAuthExpiredFailure(usage) && !quotaAuthFailureCanStillSwitch(account))) {
       return { credentialKind, codexUsable: false, codexBlockReason: "rt_invalid" };
     }
     return { credentialKind, codexUsable: true, codexBlockReason: "" };
@@ -389,6 +415,7 @@ export function accountCodexStatus(account, options = {}) {
 export function codexBlockMessage(reason) {
   if (reason === "at_unsupported") return "AT 账号当前不支持 Codex 使用";
   if (reason === "rt_invalid") return "RT 已失效";
+  if (reason === "account_disabled") return "账号不可用或已失效";
   if (reason === "token_expired") return "Token 已过期且无 RT";
   if (reason === "missing_secret") return "账号密钥不存在";
   return "";
@@ -534,6 +561,8 @@ export async function syncCurrentAuthSecret(env, user, authJson, metadata = {}) 
   const email = session.email || "";
   const accountScopeId = session.accountScopeId || "";
   const accountIdentityKey = session.accountIdentityKey || accountIdentityKeyFromParts({ accountId, email, scopeId: accountScopeId });
+  const matchIdentityKey = strongCurrentIdentityKey(accountIdentityKey, accountScopeId);
+  const allowAccountIdFallback = !session.accountIdentityKey;
   const hasRefreshToken = hasUsableSessionRefresh(session);
   const existing = await env.DB.prepare(
     `SELECT a.id, a.plan_type, a.last_switch_at, s.encrypted_auth_json
@@ -541,20 +570,16 @@ export async function syncCurrentAuthSecret(env, user, authJson, metadata = {}) 
      LEFT JOIN account_secrets s ON s.account_id = a.id AND s.user_id = a.user_id
      WHERE a.user_id = ? AND (
        (? != '' AND a.account_identity_key = ?)
-       OR (? != '' AND a.account_identity_key = '' AND a.chatgpt_account_id = ?)
-       OR (? = '' AND ? = '' AND ? != '' AND lower(a.email) = ?)
+       OR (? != '' AND ? = 1 AND a.account_identity_key = '' AND a.chatgpt_account_id = ?)
      )
      LIMIT 1`,
   ).bind(
     user.id,
-    accountIdentityKey,
-    accountIdentityKey,
+    matchIdentityKey,
+    matchIdentityKey,
     accountId,
+    allowAccountIdFallback ? 1 : 0,
     accountId,
-    accountIdentityKey,
-    accountId,
-    email,
-    email.toLowerCase(),
   ).first();
   if (!existing) {
     return { matched: false, synced: false, accountId: "", reason: "未匹配账号" };
@@ -622,18 +647,18 @@ export async function findCurrentAccount(env, user, body) {
   const currentId = String(body.currentAccountId || body.accountId || body.chatgptAccountId || "").trim();
   const currentEmail = String(body.currentEmail || body.email || "").trim().toLowerCase();
   const currentScopeId = String(body.currentAccountScopeId || body.accountScopeId || body.account_scope_id || body.currentScopeId || "").trim();
-  const currentIdentityKey = String(body.currentAccountIdentityKey || body.accountIdentityKey || body.account_identity_key || accountIdentityKeyFromParts({
+  const rawCurrentIdentityKey = body.currentAccountIdentityKey || body.accountIdentityKey || body.account_identity_key || "";
+  const currentIdentityKey = strongCurrentIdentityKey(rawCurrentIdentityKey || accountIdentityKeyFromParts({
     accountId: currentId,
     email: currentEmail,
     scopeId: currentScopeId,
-  })).trim().toLowerCase();
+  }), currentScopeId);
   if (!currentId && !currentEmail && !currentIdentityKey) return null;
   return env.DB.prepare(
     `SELECT * FROM accounts
      WHERE user_id = ? AND (
        (? != '' AND account_identity_key = ?)
-       OR (? != '' AND account_identity_key = '' AND chatgpt_account_id = ?)
-       OR (? = '' AND ? = '' AND ? != '' AND lower(email) = ?)
+       OR (? != '' AND ? = 1 AND account_identity_key = '' AND chatgpt_account_id = ?)
      )
      LIMIT 1`,
   ).bind(
@@ -641,11 +666,8 @@ export async function findCurrentAccount(env, user, body) {
     currentIdentityKey,
     currentIdentityKey,
     currentId,
+    rawCurrentIdentityKey ? 0 : 1,
     currentId,
-    currentIdentityKey,
-    currentId,
-    currentEmail,
-    currentEmail,
   ).first();
 }
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   accountSummary,
+  accountMatchesCurrent,
   assertSwitchableSession,
   candidateDecision,
   candidateDiagnostic,
@@ -129,6 +130,8 @@ const staleLow = { ...viable, id: "stale-low", accountId: "acct-stale-low", usag
 const expiredAtOnly = { ...viable, id: "expired", accountId: "acct-expired", hasRefreshToken: false, expiresAt: new Date(Date.now() - 1000).toISOString() };
 const switchedRt = { ...viable, id: "switched-rt", accountId: "acct-switched", secretUpdatedAt: new Date(Date.now() - 1_200_000).toISOString(), lastSwitchAt: new Date(Date.now() - 900_000).toISOString() };
 const invalidRt = { ...viable, id: "invalid-rt", accountId: "acct-invalid", usage: normalizeUsage({ error: "invalid_grant" }) };
+const plusAccessAuthExpired = { ...viable, id: "plus-401", accountId: "acct-plus-401", planType: "plus", usage: normalizeUsage({ error: "ChatGPT 用量接口返回 401" }, "plus") };
+const teamAccessAuthExpired = { ...viable, id: "team-401", accountId: "acct-team-401", planType: "team", usage: normalizeUsage({ error: "ChatGPT 用量接口返回 401" }, "team") };
 const hardFailed = { ...viable, id: "failed", accountId: "acct-failed", usage: normalizeUsage({ error: "account suspended" }) };
 const chineseHardFailed = { ...viable, id: "cn-failed", accountId: "acct-cn-failed", usage: normalizeUsage({ error: "账号已停用" }) };
 const cooldown = { ...viable, id: "cooldown", accountId: "acct-cooldown", secretUpdatedAt: new Date(Date.now() + 1000).toISOString(), lastSwitchAt: new Date().toISOString() };
@@ -147,6 +150,8 @@ assert.equal(candidateDecision(expiredAtOnly, experimentalSettings, {}).blocked,
 assert.equal(accountCodexStatus(switchedRt).codexBlockReason, "");
 assert.equal(candidateDecision(switchedRt, settings, {}).eligible, true);
 assert.equal(candidateDecision(invalidRt, settings, {}).blocked, "RT 已失效");
+assert.equal(candidateDecision(plusAccessAuthExpired, settings, {}).blocked, "RT 已失效");
+assert.equal(candidateDecision(teamAccessAuthExpired, settings, {}).eligible, true);
 assert.equal(candidateDecision(hardFailed, settings, {}).blocked, "账号不可用或已失效");
 assert.equal(candidateDecision(chineseHardFailed, settings, {}).blocked, "账号不可用或已失效");
 assert.equal(candidateDecision(cooldown, settings, {}).blocked, "切换冷却 10 分钟内");
@@ -162,6 +167,16 @@ const staleDiagnostic = candidateDiagnostic(candidateDecision(staleLow, settings
 assert.equal(staleDiagnostic.usageFresh, false);
 assert.equal(staleDiagnostic.fiveHour, 1);
 assert.equal(staleDiagnostic.blocked, "");
+
+assert.equal(accountMatchesCurrent({ ...viable, id: "cloud-a" }, { currentCloudAccountId: "cloud-a" }), true);
+assert.equal(accountMatchesCurrent({ ...viable, accountId: "shared", email: "a@example.com", accountIdentityKey: "account:shared" }, {
+  currentAccountId: "shared",
+  currentAccountIdentityKey: "account:shared",
+  currentEmail: "other@example.com",
+}), false);
+assert.equal(accountMatchesCurrent({ ...viable, accountId: "", email: "same@example.com", accountIdentityKey: "" }, {
+  currentEmail: "same@example.com",
+}), false);
 
 assert.throws(
   () => assertSwitchableSession(normalizeSession({ tokens: { access_token: expiredToken } })),

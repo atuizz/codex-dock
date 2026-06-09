@@ -1547,7 +1547,7 @@ function usageIssue(account) {
   const usage = normalizeUsage(account?.usage, accountPlan(account));
   if (!usage.error) return null;
   const text = String(usage.error || "").toLowerCase();
-  if (hasUsableRefreshToken(account) && usageAccessAuthExpiredText(text)) {
+  if (hasUsableRefreshToken(account) && usageAccessAuthExpiredText(text) && quotaAuthFailureCanStillSwitch(account)) {
     return {
       label: "额度刷新授权过期，可切换",
       className: "warn",
@@ -1573,8 +1573,11 @@ function usageAccessAuthExpiredText(text) {
 function usageAuthFailure(account) {
   const usage = normalizeUsage(account?.usage, accountPlan(account));
   const text = String(usage.error || "").toLowerCase();
+  if (hardAccountFailureText(text)) return true;
   if (refreshTokenInvalidText(text)) return true;
-  if (hasUsableRefreshToken(account) && usageAccessAuthExpiredText(text)) return false;
+  if (hasUsableRefreshToken(account) && usageAccessAuthExpiredText(text)) {
+    return !quotaAuthFailureCanStillSwitch(account);
+  }
   return usageAccessAuthExpiredText(text);
 }
 
@@ -1599,7 +1602,16 @@ function experimentalAtEnabled(settings = state.smartSwitchSettings) {
 }
 
 function refreshTokenInvalidText(value) {
-  return /(?:invalid_grant|refresh token was already used|access token could not be refreshed|could not be refreshed|rt 已失效|refresh_token 已失效)/i.test(String(value || ""));
+  return /(?:invalid_grant|invalid refresh token|refresh token (?:was already used|expired|revoked|invalid)|access token could not be refreshed|could not be refreshed|rt 已失效|refresh_token 已失效|刷新令牌已失效|刷新凭据已失效)/i.test(String(value || ""));
+}
+
+function hardAccountFailureText(value) {
+  return /(?:\b(?:deactivated|suspended|banned|disabled)\b|account (?:disabled|deactivated|suspended)|organization_deactivated|封禁|封号|停用|账号异常|账号已被禁用)/i.test(String(value || ""));
+}
+
+function quotaAuthFailureCanStillSwitch(account) {
+  const plan = String(accountPlan(account)).toLowerCase();
+  return ["team", "enterprise"].includes(plan);
 }
 
 function accountCredentialKind(account) {
@@ -1616,7 +1628,9 @@ function codexBlockReason(account, settings = state.smartSwitchSettings) {
   const usage = normalizeUsage(account?.usage, accountPlan(account));
   if (kind === "rt") {
     if (explicit && explicit !== "at_unsupported" && explicit !== "rt_stale") return explicit;
+    if (hardAccountFailureText(usage.error)) return "account_disabled";
     if (refreshTokenInvalidText(usage.error)) return "rt_invalid";
+    if (usageAccessAuthExpiredText(String(usage.error || "").toLowerCase()) && !quotaAuthFailureCanStillSwitch(account)) return "rt_invalid";
     return "";
   }
   if (!experimentalAtEnabled(settings)) return "at_unsupported";
@@ -1628,6 +1642,7 @@ function codexBlockReason(account, settings = state.smartSwitchSettings) {
 function codexBlockLabel(reason) {
   if (reason === "at_unsupported") return "不支持 Codex";
   if (reason === "rt_invalid") return "RT 已失效";
+  if (reason === "account_disabled") return "账号不可用";
   if (reason === "token_expired") return "Token 已过期";
   if (reason === "missing_secret") return "缺少密钥";
   return "不可用";
@@ -1636,6 +1651,7 @@ function codexBlockLabel(reason) {
 function codexBlockDetail(reason) {
   if (reason === "at_unsupported") return "缺少 RT，当前不能用于 Codex，请重新登录 Codex 获取 RT。";
   if (reason === "rt_invalid") return "refresh_token 已失效或已被使用，请重新登录。";
+  if (reason === "account_disabled") return "账号已停用、封禁或组织状态异常，请更换账号。";
   if (reason === "token_expired") return "access_token 已过期且没有可用 RT。";
   if (reason === "missing_secret") return "云端没有可下发的 auth 密文。";
   return "";
@@ -2008,11 +2024,6 @@ function pickCurrentCandidate(candidates) {
 function resolveCurrentAccountId() {
   if (state.currentAuthChecking || !state.accounts.length) return "";
   const current = state.currentAuthAccount || {};
-  const currentAccountId = currentAccountIdValue(current);
-  if (currentAccountId) {
-    const match = pickCurrentCandidate(state.accounts.filter((account) => currentAccountIdValue(account) === currentAccountId));
-    if (match) return match.id;
-  }
 
   const currentFingerprint = state.localAuthFingerprint || accountFingerprint(current);
   if (currentFingerprint && currentFingerprint.replace(/\|/g, "")) {
@@ -2020,14 +2031,16 @@ function resolveCurrentAccountId() {
     if (match) return match.id;
   }
 
-  const currentEmail = currentEmailValue(current);
-  if (currentEmail) {
-    const match = pickCurrentCandidate(state.accounts.filter((account) => currentEmailValue(account) === currentEmail));
+  if (state.currentAuthKey) {
+    const candidates = state.accounts.filter((account) => accountDedupeKey(account) === state.currentAuthKey);
+    const match = candidates.length === 1 ? pickCurrentCandidate(candidates) : null;
     if (match) return match.id;
   }
 
-  if (state.currentAuthKey) {
-    const match = pickCurrentCandidate(state.accounts.filter((account) => accountDedupeKey(account) === state.currentAuthKey));
+  const currentAccountId = currentAccountIdValue(current);
+  if (currentAccountId) {
+    const candidates = state.accounts.filter((account) => currentAccountIdValue(account) === currentAccountId);
+    const match = candidates.length === 1 ? pickCurrentCandidate(candidates) : null;
     if (match) return match.id;
   }
   return "";
