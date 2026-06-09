@@ -148,7 +148,7 @@ function collectUsageWindows(value, results = [], depth = 0) {
   return results;
 }
 
-function nearestWindow(windows, targetSeconds) {
+function nearestWindow(windows, targetSeconds, maxDistanceRatio = Number.POSITIVE_INFINITY) {
   let selected = null;
   let distance = Number.POSITIVE_INFINITY;
   for (const item of windows) {
@@ -158,17 +158,21 @@ function nearestWindow(windows, targetSeconds) {
       distance = nextDistance;
     }
   }
+  if (!selected) return null;
+  if (distance > targetSeconds * maxDistanceRatio) return null;
   return selected;
 }
 
 export function mapCloudUsagePayload(payload, fallbackPlan = "", source = "cloud-worker") {
   const windows = collectUsageWindows(payload);
+  const primaryWindow = payload?.rate_limit?.primary_window || payload?.rateLimit?.primaryWindow || windows[0] || null;
   return normalizeUsage({
     fetched_at: Math.floor(Date.now() / 1000),
     refreshed_at: nowIso(),
     plan_type: bestPlan(payload?.plan_type, payload?.planType, fallbackPlan),
-    five_hour: nearestWindow(windows, 5 * 60 * 60),
-    one_week: nearestWindow(windows, 7 * 24 * 60 * 60),
+    five_hour: nearestWindow(windows, 5 * 60 * 60, 0.35),
+    one_week: nearestWindow(windows, 7 * 24 * 60 * 60, 0.35),
+    primary_window: primaryWindow,
     credits: payload?.credits || null,
     refresh_source: source,
   }, fallbackPlan);

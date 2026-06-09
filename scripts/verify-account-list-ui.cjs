@@ -86,6 +86,27 @@ assert.match(list.html, /Token 已失效/);
 assert.match(list.html, /data-bulk-id="acc-2" checked/);
 assert.match(list.html, /不可用/);
 
+const teamUsage = ui.renderAccountGrid({
+  authResolved: true,
+  layout: "cards",
+  accounts: [{
+    ...accounts[0],
+    id: "team-primary",
+    planType: "team",
+    usage: {
+      refreshed_at: "刚刚",
+      primary_window: { used_percent: 12, remaining_percent: 88, window_seconds: 2628000 },
+    },
+  }],
+  totalAccounts: 1,
+  selectedBulkIds: new Set(),
+  userPresent: true,
+  helperReady: true,
+  operationActive: false,
+});
+assert.match(teamUsage.html, /30D/);
+assert.doesNotMatch(teamUsage.html, /5H/);
+
 const cards = ui.renderAccountGrid({
   authResolved: true,
   layout: "cards",

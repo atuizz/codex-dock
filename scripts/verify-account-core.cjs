@@ -67,4 +67,12 @@ const teamEntries = context.CodexAccountCore.parseImportEntries({
 });
 assert.equal(new Set(teamEntries.map((entry) => entry.session.accountIdentityKey)).size, 2);
 
+const normalizedTeamUsage = context.CodexAccountCore.normalizeUsage({
+  plan_type: "team",
+  fetched_at: 1,
+  primary_window: { used_percent: 12, limit_window_seconds: 2628000 },
+});
+assert.equal(normalizedTeamUsage.primary_window.remaining_percent, 88);
+assert.equal(normalizedTeamUsage.primary_window.window_seconds, 2628000);
+
 console.log("account-core verification passed");

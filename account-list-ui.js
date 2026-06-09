@@ -59,6 +59,30 @@
       `;
     }
 
+    function quotaItems(usage = {}) {
+      const items = [];
+      if (usage?.five_hour) items.push({ label: "5H", window: usage.five_hour });
+      if (usage?.one_week) items.push({ label: "7D", window: usage.one_week });
+      const primary = usage?.primary_window;
+      const primarySeconds = Number(primary?.window_seconds);
+      const duplicate = [usage?.five_hour, usage?.one_week].some((item) => (
+        item && Number(item.window_seconds) === primarySeconds
+      ));
+      if (primary && !duplicate) {
+        const days = Number.isFinite(primarySeconds) ? Math.max(1, Math.round(primarySeconds / 86400)) : 0;
+        items.push({ label: days ? `${days}D` : "额度", window: primary });
+      }
+      if (!items.length) return [
+        { label: "5H", window: null },
+        { label: "7D", window: null },
+      ];
+      return items.slice(0, 2);
+    }
+
+    function renderQuotaMinis(usage = {}) {
+      return quotaItems(usage).map((item) => quotaMini(item.window, item.label, usage)).join("");
+    }
+
     function renderAction(account, current, context) {
       const mode = accountActionMode(account);
       const label = mode === "direct-switch"
@@ -128,8 +152,7 @@
             ${renderStatus(account)}
           </div>
           <div class="account-row-quota">
-            ${quotaMini(account.usage?.five_hour, "5H", account.usage)}
-            ${quotaMini(account.usage?.one_week, "7D", account.usage)}
+            ${renderQuotaMinis(account.usage)}
           </div>
           ${renderActions(account, current, context)}
         </div>
@@ -157,8 +180,7 @@
           </div>
           ${renderStatus(account)}
           <div class="account-card-quota">
-            ${quotaMini(account.usage?.five_hour, "5H", account.usage)}
-            ${quotaMini(account.usage?.one_week, "7D", account.usage)}
+            ${renderQuotaMinis(account.usage)}
           </div>
           ${renderActions(account, current, context)}
         </div>

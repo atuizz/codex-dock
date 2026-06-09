@@ -13,7 +13,7 @@ const helperMainSource = fs.readFileSync(path.join(repoRoot, "native-helper", "C
 const runtimeStatusSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexRuntimeStatus.cs"), "utf8");
 const desktopUiSource = fs.readFileSync(path.join(repoRoot, "native-helper", "HelperDesktopUi.cs"), "utf8");
 const helperBuildScript = fs.readFileSync(path.join(repoRoot, "native-helper", "build-helper.ps1"), "utf8");
-const expectedHelperVersion = "0.4.12";
+const expectedHelperVersion = "0.4.13";
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -45,6 +45,8 @@ assert.match(helperSource, new RegExp(`HelperVersion\\s*=\\s*"${expectedHelperVe
 assert.match(helperSource, /\/api\/update\/check/);
 assert.match(helperSource, /\/api\/update\/open-download/);
 assert.match(helperSource, /\/api\/lifecycle\/self-test/);
+assert.match(helperSource, /primary_window/);
+assert.match(helperSource, /NearestUsageWindowJson\(windows, 5 \* 60 \* 60, 0\.35\)/);
 assert.match(helperSource, /LifecycleStatusJson/);
 assert.match(helperSource, /LifecycleSelfTestJson/);
 assert.match(helperSource, /SimulateLogViewFaultForSelfTest/);

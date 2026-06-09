@@ -59,7 +59,7 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.12";
+        private const string HelperVersion = "0.4.13";
         private const string HelperBuildDate = "2026-06-09";
         private const string ProductFullName = "Codex Dock Agent";
         private const string HelperDownloadDefaultFile = "downloads/CodexDockHelper.exe";
@@ -1825,13 +1825,14 @@ namespace CodexPlusLocalHelper
                 + "\"fetched_at\":" + UnixNow() + ","
                 + "\"refreshed_at\":\"" + JsonEscape(DateTime.UtcNow.ToString("o")) + "\","
                 + "\"plan_type\":\"" + JsonEscape(plan) + "\","
-                + "\"five_hour\":" + NearestUsageWindowJson(windows, 5 * 60 * 60) + ","
-                + "\"one_week\":" + NearestUsageWindowJson(windows, 7 * 24 * 60 * 60) + ","
+                + "\"five_hour\":" + NearestUsageWindowJson(windows, 5 * 60 * 60, 0.35) + ","
+                + "\"one_week\":" + NearestUsageWindowJson(windows, 7 * 24 * 60 * 60, 0.35) + ","
+                + "\"primary_window\":" + FirstUsageWindowJson(windows) + ","
                 + "\"credits\":null"
                 + "}";
         }
 
-        private static string NearestUsageWindowJson(MatchCollection windows, int targetSeconds)
+        private static string NearestUsageWindowJson(MatchCollection windows, int targetSeconds, double maxDistanceRatio)
         {
             Match best = null;
             long bestDistance = long.MaxValue;
@@ -1847,6 +1848,21 @@ namespace CodexPlusLocalHelper
                 }
             }
             if (best == null) return "null";
+            if (bestDistance > (long)(targetSeconds * maxDistanceRatio)) return "null";
+            return UsageWindowMatchJson(best);
+        }
+
+        private static string FirstUsageWindowJson(MatchCollection windows)
+        {
+            foreach (Match match in windows)
+            {
+                return UsageWindowMatchJson(match);
+            }
+            return "null";
+        }
+
+        private static string UsageWindowMatchJson(Match best)
+        {
             var used = double.Parse(best.Groups[1].Value, CultureInfo.InvariantCulture);
             return "{"
                 + "\"used_percent\":" + used.ToString("0.##", CultureInfo.InvariantCulture) + ","
@@ -1863,6 +1879,7 @@ namespace CodexPlusLocalHelper
                 + "\"plan_type\":\"" + JsonEscape(plan) + "\","
                 + "\"five_hour\":null,"
                 + "\"one_week\":null,"
+                + "\"primary_window\":null,"
                 + "\"credits\":null"
                 + "}";
         }

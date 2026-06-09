@@ -195,10 +195,34 @@
       return `
         <div class="quota-cell ${className}">
           <strong>${percent}% 剩余</strong>
-          <span>${escapeHtml(formatResetTime(window.reset_at))}</span>
+          <span>${escapeHtml(`${label} · ${formatResetTime(window.reset_at)}`)}</span>
           <div class="quota-bar"><i style="width:${percent}%"></i></div>
         </div>
       `;
+    }
+
+    function quotaItems(usage = {}) {
+      const items = [];
+      if (usage?.five_hour) items.push({ label: "5H", window: usage.five_hour });
+      if (usage?.one_week) items.push({ label: "7D", window: usage.one_week });
+      const primary = usage?.primary_window;
+      const primarySeconds = Number(primary?.window_seconds);
+      const duplicate = [usage?.five_hour, usage?.one_week].some((item) => (
+        item && Number(item.window_seconds) === primarySeconds
+      ));
+      if (primary && !duplicate) {
+        const days = Number.isFinite(primarySeconds) ? Math.max(1, Math.round(primarySeconds / 86400)) : 0;
+        items.push({ label: days ? `${days}D` : "额度", window: primary });
+      }
+      if (!items.length) return [
+        { label: "5H", window: null },
+        { label: "7D", window: null },
+      ];
+      return items.slice(0, 2);
+    }
+
+    function renderQuotaCells(usage = {}) {
+      return quotaItems(usage).map((item) => quotaCell(item.window, item.label, usage)).join("");
     }
 
     function renderEmpty({ helperReady = false } = {}) {
@@ -249,8 +273,7 @@
             </div>
             ${diagnosticCard(diagnostic)}
             <div class="quota-summary">
-              ${quotaCell(account.usage?.five_hour, "5H", account.usage)}
-              ${quotaCell(account.usage?.one_week, "7D", account.usage)}
+              ${renderQuotaCells(account.usage)}
             </div>
             <div class="signal-grid">
               <div class="signal wide signal-with-action">

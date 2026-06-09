@@ -123,7 +123,21 @@ const mapped = mapCloudUsagePayload({
 assert.equal(mapped.plan_type, "plus");
 assert.equal(mapped.five_hour.used_percent, 31);
 assert.equal(mapped.one_week.used_percent, 47);
+assert.equal(mapped.primary_window.used_percent, 31);
 assert.equal(mapped.refresh_source, "cloud-worker");
+
+const mappedTeamPrimary = mapCloudUsagePayload({
+  plan_type: "team",
+  rate_limit: {
+    allowed: true,
+    primary_window: { limit_window_seconds: 2628000, used_percent: 12, reset_at: 1783633097 },
+  },
+}, "", "cloud-worker");
+assert.equal(mappedTeamPrimary.plan_type, "team");
+assert.equal(mappedTeamPrimary.five_hour, null);
+assert.equal(mappedTeamPrimary.one_week, null);
+assert.equal(mappedTeamPrimary.primary_window.used_percent, 12);
+assert.equal(mappedTeamPrimary.primary_window.window_seconds, 2628000);
 
 const accessToken = jwt({
   exp: Math.floor(Date.now() / 1000) + 3600,

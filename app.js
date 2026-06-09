@@ -1702,9 +1702,11 @@ function usagePenalty(account) {
   if (!usageFresh(usage)) return 0;
   const fiveHourUsed = usage.five_hour?.used_percent;
   const oneWeekUsed = usage.one_week?.used_percent;
+  const primaryUsed = usage.primary_window?.used_percent;
   let penalty = 0;
   if (Number.isFinite(fiveHourUsed)) penalty += Math.max(0, fiveHourUsed - 80) * 0.7;
   if (Number.isFinite(oneWeekUsed)) penalty += Math.max(0, oneWeekUsed - 90) * 0.5;
+  if (Number.isFinite(primaryUsed)) penalty += Math.max(0, primaryUsed - 90) * 0.5;
   return penalty;
 }
 
@@ -1737,7 +1739,12 @@ function smartSwitchReasons(account) {
   if (usageFresh(usage)) {
     if (Number.isFinite(usage.five_hour?.remaining_percent)) reasons.push(`5H ${usage.five_hour.remaining_percent}%`);
     if (Number.isFinite(usage.one_week?.remaining_percent)) reasons.push(`7D ${usage.one_week.remaining_percent}%`);
-  } else if (Number.isFinite(usage.five_hour?.remaining_percent) || Number.isFinite(usage.one_week?.remaining_percent) || usage.refreshed_at) {
+    if (Number.isFinite(usage.primary_window?.remaining_percent)) {
+      const seconds = Number(usage.primary_window.window_seconds);
+      const days = Number.isFinite(seconds) ? Math.max(1, Math.round(seconds / 86400)) : 0;
+      reasons.push(`${days ? `${days}D` : "额度"} ${usage.primary_window.remaining_percent}%`);
+    }
+  } else if (Number.isFinite(usage.five_hour?.remaining_percent) || Number.isFinite(usage.one_week?.remaining_percent) || Number.isFinite(usage.primary_window?.remaining_percent) || usage.refreshed_at) {
     reasons.push("额度待刷新");
   }
   if (account.priority === "primary") reasons.push("优先使用");
@@ -1756,7 +1763,7 @@ function isPaidPlan(account) {
 function accountMinRemaining(account) {
   const usage = accountUsage(account);
   if (!usageFresh(usage)) return -1;
-  const values = [usage.five_hour?.remaining_percent, usage.one_week?.remaining_percent].filter(Number.isFinite);
+  const values = [usage.five_hour?.remaining_percent, usage.one_week?.remaining_percent, usage.primary_window?.remaining_percent].filter(Number.isFinite);
   return values.length ? Math.min(...values) : -1;
 }
 
@@ -1771,6 +1778,7 @@ function accountLowQuota(account) {
   return Boolean(
     Number.isFinite(usage.five_hour?.remaining_percent) && usage.five_hour.remaining_percent <= 30
     || Number.isFinite(usage.one_week?.remaining_percent) && usage.one_week.remaining_percent <= 30
+    || Number.isFinite(usage.primary_window?.remaining_percent) && usage.primary_window.remaining_percent <= 30
   );
 }
 
@@ -1805,6 +1813,7 @@ function usageFilterValue(account) {
   if (!usage?.refreshed_at || !usageFresh(usage)) return "unrefreshed";
   if (Number.isFinite(usage.five_hour?.remaining_percent) && usage.five_hour.remaining_percent <= 30) return "low5h";
   if (Number.isFinite(usage.one_week?.remaining_percent) && usage.one_week.remaining_percent <= 30) return "low7d";
+  if (Number.isFinite(usage.primary_window?.remaining_percent) && usage.primary_window.remaining_percent <= 30) return "low7d";
   return "ready";
 }
 

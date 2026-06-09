@@ -140,6 +140,18 @@ export function usageRemaining(window) {
   return null;
 }
 
+function normalizeUsageWindow(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const remaining = usageRemaining(raw);
+  const used = Number(raw.used_percent ?? raw.usedPercent ?? raw.used);
+  return {
+    used_percent: Number.isFinite(used) ? Math.max(0, Math.min(100, used)) : (Number.isFinite(remaining) ? 100 - remaining : null),
+    remaining_percent: Number.isFinite(remaining) ? remaining : null,
+    window_seconds: Number(raw.window_seconds ?? raw.windowSeconds ?? raw.limit_window_seconds ?? raw.limitWindowSeconds),
+    reset_at: raw.reset_at ?? raw.resetAt ?? null,
+  };
+}
+
 function usageErrorText(usage, extra = "") {
   return String(extra || usage?.error || usage?.message || "").toLowerCase();
 }
@@ -293,6 +305,7 @@ export function normalizeUsage(raw, fallbackPlan = "") {
       plan_type: fallbackPlan || "",
       five_hour: null,
       one_week: null,
+      primary_window: null,
       credits: null,
       refresh_source: "",
       status: "未刷新",
@@ -303,8 +316,9 @@ export function normalizeUsage(raw, fallbackPlan = "") {
     fetched_at: raw.fetched_at ?? raw.fetchedAt ?? null,
     refreshed_at: raw.refreshed_at || raw.refreshedAt || usageTimestampIso(raw.fetched_at ?? raw.fetchedAt) || "",
     plan_type: bestPlan(raw.plan_type, raw.planType, fallbackPlan),
-    five_hour: raw.five_hour || raw.fiveHour || raw.short_window || raw.shortWindow || null,
-    one_week: raw.one_week || raw.oneWeek || raw.long_window || raw.longWindow || null,
+    five_hour: normalizeUsageWindow(raw.five_hour || raw.fiveHour || raw.short_window || raw.shortWindow),
+    one_week: normalizeUsageWindow(raw.one_week || raw.oneWeek || raw.long_window || raw.longWindow),
+    primary_window: normalizeUsageWindow(raw.primary_window || raw.primaryWindow || raw.primary),
     credits: raw.credits || null,
     refresh_source: raw.refresh_source || raw.refreshSource || "",
     status: raw.status || "已刷新",
