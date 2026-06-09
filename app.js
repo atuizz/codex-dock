@@ -1564,7 +1564,10 @@ function usageAccessAuthExpiredText(text) {
   return /\b401\b/.test(text)
     || text.includes("unauthorized")
     || text.includes("authentication token has been invalidated")
-    || text.includes("token has been invalidated");
+    || text.includes("token has been invalidated")
+    || text.includes("token 已失效")
+    || text.includes("授权已失效")
+    || text.includes("登录状态已失效");
 }
 
 function usageAuthFailure(account) {
