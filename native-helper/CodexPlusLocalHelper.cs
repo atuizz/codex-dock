@@ -59,8 +59,8 @@ namespace CodexPlusLocalHelper
 
     public sealed class MainForm : Form
     {
-        private const string HelperVersion = "0.4.11";
-        private const string HelperBuildDate = "2026-06-06";
+        private const string HelperVersion = "0.4.12";
+        private const string HelperBuildDate = "2026-06-09";
         private const string ProductFullName = "Codex Dock Agent";
         private const string HelperDownloadDefaultFile = "downloads/CodexDockHelper.exe";
         private const int HelperLogMaxBytes = 1024 * 1024;

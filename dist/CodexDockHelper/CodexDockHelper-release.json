@@ -1,38 +1,43 @@
-{
-  "product": "Codex Dock Agent",
-  "kind": "portable-windows-helper",
-  "version": "0.4.11",
-  "build_date": "2026-06-06",
-  "minimum_cloud_console": "https://codex.woai.pro",
-  "install": {
-    "mode": "portable",
-    "steps": [
-      "关闭正在运行的 Codex Dock Agent。",
-      "解压 CodexDockHelper portable 包到一个固定目录。",
-      "运行 CodexDockHelper.exe，并在云控制台设备页完成授权。"
-    ]
-  },
-  "files": [
-    {
-      "file": "CodexDockHelper.exe",
-      "bytes": 185856,
-      "sha256": "B8045E12C4470C7FB6F6239671A3A9248481C92B5DC0EFA6BA0AD7BB3BE0C364"
-    },
-    {
-      "file": "CodexDockHelper.ico",
-      "bytes": 2686,
-      "sha256": "BD2CE21848379EBE2980FA8577359751644C84245F6C918E33B591FC95C6A786"
-    },
-    {
-      "file": "README.md",
-      "bytes": 8987,
-      "sha256": "F9BEEEEAA7BBADE0EF33FA099B26BA733E74EF6B63649E469331BDE6E4560539"
-    }
-  ],
-  "package": {
-    "file": "downloads/CodexDockHelper-0.4.11-portable.zip",
-    "format": "zip",
-    "bytes": 199048,
-    "sha256": "E40F17F13C3C89BE0D04419C5329B1B469CB3DB28C13EED3AC850D8F774A3009"
-  }
+﻿{
+    "product":  "Codex Dock Agent",
+    "kind":  "portable-windows-helper",
+    "version":  "0.4.12",
+    "build_date":  "2026-06-09",
+    "minimum_cloud_console":  "https://codex.woai.pro",
+    "install":  {
+                    "mode":  "portable",
+                    "steps":  [
+                                  "Close any running Codex Dock Agent.",
+                                  "Extract the CodexDockHelper portable package to a stable folder.",
+                                  "Run CodexDockHelper.exe and authorize the device from the cloud console."
+                              ]
+                },
+    "files":  [
+                  {
+                      "file":  "CodexDockHelper.exe",
+                      "bytes":  185856,
+                      "sha256":  "7E3414701C0BEA29AF307681603B96EBEE5ECD0CB20FF785733C8FCA3F7B26E3"
+                  },
+                  {
+                      "file":  "CodexDockHelper.ico",
+                      "bytes":  2686,
+                      "sha256":  "BD2CE21848379EBE2980FA8577359751644C84245F6C918E33B591FC95C6A786"
+                  },
+                  {
+                      "file":  "README.md",
+                      "bytes":  8987,
+                      "sha256":  "F9BEEEEAA7BBADE0EF33FA099B26BA733E74EF6B63649E469331BDE6E4560539"
+                  },
+                  {
+                      "file":  "CodexAppServerProxy.exe",
+                      "bytes":  14336,
+                      "sha256":  "A01A6C97512DA595346CE4AABF7BDC3EBCB68770645C31D8EB7AAA9B583F7CF5"
+                  }
+              ],
+    "package":  {
+                    "file":  "CodexDockHelper-0.4.12-portable.zip",
+                    "format":  "zip",
+                    "bytes":  83865,
+                    "sha256":  "43540458F002C654BF33DAC3DD12E4A0F7F6377EB657FD8CE63B8286CA710B6B"
+                }
 }

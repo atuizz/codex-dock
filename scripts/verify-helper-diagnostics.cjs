@@ -13,7 +13,7 @@ const helperMainSource = fs.readFileSync(path.join(repoRoot, "native-helper", "C
 const runtimeStatusSource = fs.readFileSync(path.join(repoRoot, "native-helper", "CodexRuntimeStatus.cs"), "utf8");
 const desktopUiSource = fs.readFileSync(path.join(repoRoot, "native-helper", "HelperDesktopUi.cs"), "utf8");
 const helperBuildScript = fs.readFileSync(path.join(repoRoot, "native-helper", "build-helper.ps1"), "utf8");
-const expectedHelperVersion = "0.4.11";
+const expectedHelperVersion = "0.4.12";
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
