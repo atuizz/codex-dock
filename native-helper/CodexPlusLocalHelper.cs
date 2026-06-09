@@ -1883,6 +1883,45 @@ namespace CodexPlusLocalHelper
             return MatchJsonString(payload, "chatgpt_account_user_id");
         }
 
+        private static string AccountScopeIdFromAuthJson(string authJson)
+        {
+            var direct = MatchJsonString(authJson, "accountScopeId");
+            if (string.IsNullOrEmpty(direct)) direct = MatchJsonString(authJson, "account_scope_id");
+            if (!string.IsNullOrEmpty(direct)) return direct;
+            var payload = JwtPayloadJson(MatchJsonString(authJson, "access_token"));
+            var keys = new[] {
+                "chatgpt_account_id",
+                "organization_id",
+                "org_id",
+                "workspace_id",
+                "tenant_id",
+                "team_id"
+            };
+            foreach (var key in keys)
+            {
+                var value = MatchJsonString(payload, key);
+                if (!string.IsNullOrEmpty(value)) return value;
+            }
+            return "";
+        }
+
+        private static string AccountIdentityKeyFromAuthJson(string authJson)
+        {
+            var direct = MatchJsonString(authJson, "accountIdentityKey");
+            if (string.IsNullOrEmpty(direct)) direct = MatchJsonString(authJson, "account_identity_key");
+            if (!string.IsNullOrEmpty(direct)) return direct.ToLowerInvariant();
+            var email = EmailFromAuthJson(authJson).ToLowerInvariant();
+            var accountId = MatchJsonString(authJson, "account_id");
+            if (string.IsNullOrEmpty(accountId)) accountId = AccountIdFromJwt(MatchJsonString(authJson, "access_token"));
+            accountId = (accountId ?? "").ToLowerInvariant();
+            var scopeId = (AccountScopeIdFromAuthJson(authJson) ?? "").ToLowerInvariant();
+            if (!string.IsNullOrEmpty(accountId) && !string.IsNullOrEmpty(scopeId) && accountId != scopeId) return "account:" + accountId + "|scope:" + scopeId;
+            if (!string.IsNullOrEmpty(accountId)) return "account:" + accountId;
+            if (!string.IsNullOrEmpty(email) && !string.IsNullOrEmpty(scopeId)) return "email:" + email + "|scope:" + scopeId;
+            if (!string.IsNullOrEmpty(email)) return "email:" + email;
+            return "";
+        }
+
         private static string AuthSubject(string authJson)
         {
             var email = EmailFromAuthJson(authJson);
@@ -3820,6 +3859,8 @@ namespace CodexPlusLocalHelper
             }
             var currentAccountId = MatchJsonString(authJson, "account_id");
             var currentEmail = EmailFromAuthJson(authJson);
+            var currentAccountScopeId = AccountScopeIdFromAuthJson(authJson);
+            var currentAccountIdentityKey = AccountIdentityKeyFromAuthJson(authJson);
             if (string.IsNullOrEmpty(trigger))
             {
                 _lastAutoSwitchReason = "";
@@ -3834,6 +3875,8 @@ namespace CodexPlusLocalHelper
                 + "\"deviceKey\":\"" + JsonEscape(config.DeviceKey) + "\","
                 + "\"currentAccountId\":\"" + JsonEscape(currentAccountId) + "\","
                 + "\"currentEmail\":\"" + JsonEscape(currentEmail) + "\","
+                + "\"currentAccountScopeId\":\"" + JsonEscape(currentAccountScopeId) + "\","
+                + "\"currentAccountIdentityKey\":\"" + JsonEscape(currentAccountIdentityKey) + "\","
                 + "\"ok\":" + (string.IsNullOrEmpty(error) ? "true" : "false") + ","
                 + "\"error\":\"" + JsonEscape(error) + "\","
                 + "\"usage\":" + usageJson
@@ -3891,6 +3934,8 @@ namespace CodexPlusLocalHelper
                 + "\"deviceKey\":\"" + JsonEscape(config.DeviceKey) + "\","
                 + "\"currentAccountId\":\"" + JsonEscape(currentAccountId) + "\","
                 + "\"currentEmail\":\"" + JsonEscape(currentEmail) + "\","
+                + "\"currentAccountScopeId\":\"" + JsonEscape(currentAccountScopeId) + "\","
+                + "\"currentAccountIdentityKey\":\"" + JsonEscape(currentAccountIdentityKey) + "\","
                 + "\"triggerReason\":\"" + JsonEscape(trigger) + "\","
                 + "\"triggerType\":\"" + JsonEscape(triggerType) + "\","
                 + "\"triggerSource\":\"" + JsonEscape(triggerSource) + "\","

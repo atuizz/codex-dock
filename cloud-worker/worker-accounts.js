@@ -30,6 +30,43 @@ function pickAny(sources, keys) {
   return "";
 }
 
+function identityScopeFromSources(sources) {
+  const direct = pickAny(sources, [
+    "chatgpt_account_id",
+    "chatgptAccountId",
+    "organization_id",
+    "organizationId",
+    "org_id",
+    "orgId",
+    "workspace_id",
+    "workspaceId",
+    "tenant_id",
+    "tenantId",
+    "team_id",
+    "teamId",
+  ]);
+  if (direct) return String(direct).trim();
+  for (const source of sources) {
+    for (const key of ["organization", "org", "workspace", "tenant", "team", "account"]) {
+      const nested = objectAt(source, key);
+      const id = pick(nested, ["id", "uuid", "slug"]);
+      if (id) return String(id).trim();
+    }
+  }
+  return "";
+}
+
+export function accountIdentityKeyFromParts(parts = {}) {
+  const accountId = String(parts.accountId || parts.account_id || "").trim().toLowerCase();
+  const email = String(parts.email || "").trim().toLowerCase();
+  const scope = String(parts.scopeId || parts.scope_id || parts.teamId || parts.team_id || parts.organizationId || parts.organization_id || parts.workspaceId || parts.workspace_id || "").trim().toLowerCase();
+  if (accountId && scope && scope !== accountId) return `account:${accountId}|scope:${scope}`;
+  if (accountId) return `account:${accountId}`;
+  if (email && scope) return `email:${email}|scope:${scope}`;
+  if (email) return `email:${email}`;
+  return "";
+}
+
 export function canonicalPlan(value) {
   const plan = String(value || "").trim().toLowerCase();
   if (plan === "chatgptplus") return "plus";
@@ -142,6 +179,7 @@ export function normalizeSession(source) {
   const idPayload = decodeJwtPayload(idToken);
   const authPayload = accessPayload["https://api.openai.com/auth"] || idPayload["https://api.openai.com/auth"] || {};
   const profilePayload = accessPayload["https://api.openai.com/profile"] || idPayload["https://api.openai.com/profile"] || {};
+  const accountScopeId = identityScopeFromSources([source, tokens, auth, session, user, profile, authPayload, profilePayload]);
   const accountId = pickAny([source, tokens, auth, user], ["account_id", "accountId", "chatgpt_account_id", "chatgptAccountId", "id"])
     || authPayload.chatgpt_account_id
     || authPayload.chatgpt_account_user_id
@@ -158,6 +196,8 @@ export function normalizeSession(source) {
     email,
     expires: expiresAt,
     profile: { plan: planType },
+    accountScopeId,
+    accountIdentityKey: accountIdentityKeyFromParts({ accountId, email, scopeId: accountScopeId }),
     usage: source.usage || source.usage_snapshot || null,
     tokens: {
       id_token: idToken,
@@ -258,6 +298,12 @@ export function accountSummary(row, usage) {
     usageNote: row.usage_note || "",
     expiryNote: row.expiry_note || "",
     accountId: row.chatgpt_account_id || "",
+    accountScopeId: row.account_scope_id || "",
+    accountIdentityKey: row.account_identity_key || accountIdentityKeyFromParts({
+      accountId: row.chatgpt_account_id || "",
+      email: row.email || "",
+      scopeId: row.account_scope_id || "",
+    }),
     planType,
     expiresAt: row.expires_at || "",
     hasRefreshToken: Boolean(row.has_refresh_token),
@@ -277,10 +323,25 @@ export function accountSummary(row, usage) {
 export function accountMatchesCurrent(account, body) {
   const currentId = String(body.currentAccountId || body.accountId || body.chatgptAccountId || "").trim();
   const currentEmail = String(body.currentEmail || body.email || "").trim().toLowerCase();
+  const currentScopeId = String(body.currentAccountScopeId || body.accountScopeId || body.account_scope_id || body.currentScopeId || "").trim();
+  const currentIdentityKey = String(body.currentAccountIdentityKey || body.accountIdentityKey || body.account_identity_key || accountIdentityKeyFromParts({
+    accountId: currentId,
+    email: currentEmail,
+    scopeId: currentScopeId,
+  })).trim().toLowerCase();
   const currentCloudId = String(body.currentCloudAccountId || body.cloudAccountId || "").trim();
+  const accountIdentityKeys = new Set([
+    String(account.accountIdentityKey || account.account_identity_key || "").trim().toLowerCase(),
+    accountIdentityKeyFromParts({
+      accountId: account.accountId || account.account_id || "",
+      email: account.email || "",
+      scopeId: account.accountScopeId || account.account_scope_id || "",
+    }),
+  ].filter(Boolean));
   if (currentCloudId && account.id === currentCloudId) return true;
-  if (currentId && account.accountId && account.accountId === currentId) return true;
-  if (currentEmail && account.email && account.email.toLowerCase() === currentEmail) return true;
+  if (currentIdentityKey && accountIdentityKeys.has(currentIdentityKey)) return true;
+  if (currentId && account.accountId && account.accountId === currentId && (!currentIdentityKey || !accountIdentityKeys.size)) return true;
+  if (!currentId && !currentIdentityKey && currentEmail && account.email && account.email.toLowerCase() === currentEmail) return true;
   return false;
 }
 
@@ -471,17 +532,30 @@ export async function syncCurrentAuthSecret(env, user, authJson, metadata = {}) 
   const tokens = session.tokens || {};
   const accountId = tokens.account_id || "";
   const email = session.email || "";
+  const accountScopeId = session.accountScopeId || "";
+  const accountIdentityKey = session.accountIdentityKey || accountIdentityKeyFromParts({ accountId, email, scopeId: accountScopeId });
   const hasRefreshToken = hasUsableSessionRefresh(session);
   const existing = await env.DB.prepare(
     `SELECT a.id, a.plan_type, a.last_switch_at, s.encrypted_auth_json
      FROM accounts a
      LEFT JOIN account_secrets s ON s.account_id = a.id AND s.user_id = a.user_id
      WHERE a.user_id = ? AND (
-       (? != '' AND a.chatgpt_account_id = ?)
-       OR (? != '' AND lower(a.email) = ?)
+       (? != '' AND a.account_identity_key = ?)
+       OR (? != '' AND a.account_identity_key = '' AND a.chatgpt_account_id = ?)
+       OR (? = '' AND ? = '' AND ? != '' AND lower(a.email) = ?)
      )
      LIMIT 1`,
-  ).bind(user.id, accountId, accountId, email, email.toLowerCase()).first();
+  ).bind(
+    user.id,
+    accountIdentityKey,
+    accountIdentityKey,
+    accountId,
+    accountId,
+    accountIdentityKey,
+    accountId,
+    email,
+    email.toLowerCase(),
+  ).first();
   if (!existing) {
     return { matched: false, synced: false, accountId: "", reason: "未匹配账号" };
   }
@@ -526,12 +600,14 @@ export async function syncCurrentAuthSecret(env, user, authJson, metadata = {}) 
     `UPDATE accounts
      SET email = COALESCE(NULLIF(?, ''), email),
          chatgpt_account_id = COALESCE(NULLIF(?, ''), chatgpt_account_id),
+         account_scope_id = COALESCE(NULLIF(?, ''), account_scope_id),
+         account_identity_key = COALESCE(NULLIF(?, ''), account_identity_key),
          plan_type = COALESCE(NULLIF(?, ''), plan_type),
          expires_at = COALESCE(NULLIF(?, ''), expires_at),
          has_refresh_token = ?,
          updated_at = ?
      WHERE id = ? AND user_id = ?`,
-  ).bind(email, accountId, planType, expiresAt, hasRefreshToken ? 1 : 0, now, existing.id, user.id).run();
+  ).bind(email, accountId, accountScopeId, accountIdentityKey, planType, expiresAt, hasRefreshToken ? 1 : 0, now, existing.id, user.id).run();
   await env.DB.prepare(
     `INSERT INTO account_secrets (account_id, user_id, encrypted_auth_json, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?)
@@ -545,15 +621,32 @@ export async function syncCurrentAuthSecret(env, user, authJson, metadata = {}) 
 export async function findCurrentAccount(env, user, body) {
   const currentId = String(body.currentAccountId || body.accountId || body.chatgptAccountId || "").trim();
   const currentEmail = String(body.currentEmail || body.email || "").trim().toLowerCase();
-  if (!currentId && !currentEmail) return null;
+  const currentScopeId = String(body.currentAccountScopeId || body.accountScopeId || body.account_scope_id || body.currentScopeId || "").trim();
+  const currentIdentityKey = String(body.currentAccountIdentityKey || body.accountIdentityKey || body.account_identity_key || accountIdentityKeyFromParts({
+    accountId: currentId,
+    email: currentEmail,
+    scopeId: currentScopeId,
+  })).trim().toLowerCase();
+  if (!currentId && !currentEmail && !currentIdentityKey) return null;
   return env.DB.prepare(
     `SELECT * FROM accounts
      WHERE user_id = ? AND (
-       (? != '' AND chatgpt_account_id = ?)
-       OR (? != '' AND lower(email) = ?)
+       (? != '' AND account_identity_key = ?)
+       OR (? != '' AND account_identity_key = '' AND chatgpt_account_id = ?)
+       OR (? = '' AND ? = '' AND ? != '' AND lower(email) = ?)
      )
      LIMIT 1`,
-  ).bind(user.id, currentId, currentId, currentEmail, currentEmail).first();
+  ).bind(
+    user.id,
+    currentIdentityKey,
+    currentIdentityKey,
+    currentId,
+    currentId,
+    currentIdentityKey,
+    currentId,
+    currentEmail,
+    currentEmail,
+  ).first();
 }
 
 export async function listAccounts(env, user) {
@@ -577,6 +670,12 @@ export async function upsertAccount(env, user, item) {
   const session = normalizeSession(item.session || item.authJson || item);
   const tokens = session.tokens || {};
   const accountId = tokens.account_id || "";
+  const accountScopeId = item.accountScopeId || item.account_scope_id || session.accountScopeId || "";
+  const accountIdentityKey = item.accountIdentityKey || item.account_identity_key || session.accountIdentityKey || accountIdentityKeyFromParts({
+    accountId,
+    email: item.email || session.email || "",
+    scopeId: accountScopeId,
+  });
   const accessPayload = decodeJwtPayload(tokens.access_token || "");
   const planType = bestPlan(session.profile?.plan, item.usage?.plan_type, item.usage?.planType);
   const expiresAt = session.expires || (accessPayload.exp ? new Date(accessPayload.exp * 1000).toISOString() : "");
@@ -586,11 +685,21 @@ export async function upsertAccount(env, user, item) {
   const existing = await env.DB.prepare(
     `SELECT id, plan_type FROM accounts
      WHERE user_id = ? AND (
-       (chatgpt_account_id != '' AND chatgpt_account_id = ?)
-       OR (email != '' AND email = ?)
+       (? != '' AND account_identity_key = ?)
+       OR (? != '' AND account_identity_key = '' AND chatgpt_account_id = ?)
+       OR (? = '' AND ? = '' AND email != '' AND email = ?)
      )
      LIMIT 1`,
-  ).bind(user.id, accountId, email).first();
+  ).bind(
+    user.id,
+    accountIdentityKey,
+    accountIdentityKey,
+    accountId,
+    accountId,
+    accountIdentityKey,
+    accountId,
+    email,
+  ).first();
   const id = existing?.id || crypto.randomUUID();
   const name = item.name || email || accountId || "Unnamed Account";
   const resolvedPlanType = bestPlan(existing?.plan_type, planType);
@@ -604,7 +713,8 @@ export async function upsertAccount(env, user, item) {
     await env.DB.prepare(
       `UPDATE accounts
        SET name = ?, email = ?, group_name = ?, priority = ?, usage_note = ?, expiry_note = ?,
-           chatgpt_account_id = ?, plan_type = ?, expires_at = ?, has_refresh_token = ?, updated_at = ?
+           chatgpt_account_id = ?, account_scope_id = ?, account_identity_key = ?,
+           plan_type = ?, expires_at = ?, has_refresh_token = ?, updated_at = ?
        WHERE id = ? AND user_id = ?`,
     ).bind(
       name,
@@ -614,6 +724,8 @@ export async function upsertAccount(env, user, item) {
       item.usageNote || item.usage_note || "",
       item.expiryNote || item.expiry_note || expiresAt || "",
       accountId,
+      accountScopeId,
+      accountIdentityKey,
       resolvedPlanType,
       expiresAt,
       hasRefreshToken ? 1 : 0,
@@ -628,8 +740,8 @@ export async function upsertAccount(env, user, item) {
   } else {
     await env.DB.prepare(
       `INSERT INTO accounts
-       (id, user_id, name, email, group_name, priority, usage_note, expiry_note, chatgpt_account_id, plan_type, expires_at, has_refresh_token, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, user_id, name, email, group_name, priority, usage_note, expiry_note, chatgpt_account_id, account_scope_id, account_identity_key, plan_type, expires_at, has_refresh_token, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id,
       user.id,
@@ -640,6 +752,8 @@ export async function upsertAccount(env, user, item) {
       item.usageNote || item.usage_note || "",
       item.expiryNote || item.expiry_note || expiresAt || "",
       accountId,
+      accountScopeId,
+      accountIdentityKey,
       resolvedPlanType,
       expiresAt,
       hasRefreshToken ? 1 : 0,

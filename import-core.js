@@ -23,6 +23,7 @@
     const formatCore = deps.formatCore || root.CodexFormatCore || {};
     const createId = deps.createId || defaultCreateId;
     const accountDedupeKey = deps.accountDedupeKey || accountCore.accountDedupeKey;
+    const accountIdentityKeyFromParts = deps.accountIdentityKeyFromParts || accountCore.accountIdentityKeyFromParts;
     const authFingerprint = deps.authFingerprint || accountCore.authFingerprint;
     const normalizeLocalAccount = deps.normalizeLocalAccount || accountCore.normalizeLocalAccount;
     const normalizeUsage = deps.normalizeUsage || accountCore.normalizeUsage;
@@ -37,9 +38,17 @@
       const dedupe = typeof accountDedupeKey === "function" ? accountDedupeKey(account) : "";
       if (dedupe && !dedupe.startsWith("id:")) keys.add(dedupe);
       const accountId = String(account?.accountId || account?.account_id || account?.session?.tokens?.account_id || "").trim().toLowerCase();
-      if (accountId) keys.add(`account:${accountId}`);
+      const scopeId = String(account?.accountScopeId || account?.account_scope_id || account?.session?.accountScopeId || "").trim().toLowerCase();
+      const identityKey = account?.accountIdentityKey || account?.account_identity_key || account?.session?.accountIdentityKey
+        || (typeof accountIdentityKeyFromParts === "function" ? accountIdentityKeyFromParts({
+          accountId,
+          email: account?.email || account?.session?.email || "",
+          scopeId,
+        }) : "");
+      if (identityKey) keys.add(identityKey);
+      else if (accountId) keys.add(`account:${accountId}`);
       const email = String(account?.email || account?.session?.email || "").trim().toLowerCase();
-      if (email) keys.add(`email:${email}`);
+      if (email && !accountId && !identityKey) keys.add(`email:${email}`);
       const fingerprint = typeof authFingerprint === "function" ? authFingerprint(account?.session) : "";
       if (fingerprint && fingerprint.replace(/\|/g, "")) keys.add(`token:${fingerprint}`);
       return [...keys];
@@ -84,6 +93,8 @@
           usageNote: sourceName,
           expiryNote: session.expires || "",
           accountId: session.tokens?.account_id || "",
+          accountScopeId: session.accountScopeId || "",
+          accountIdentityKey: session.accountIdentityKey || "",
           expiresAt: session.expires || "",
           planType: session.profile?.plan || "",
           usage: hasUsageSnapshot(session.usage) ? normalizeUsage(session.usage, session.profile?.plan) : null,
@@ -150,6 +161,8 @@
       return {
         name: account.name,
         email: account.email,
+        accountScopeId: account.accountScopeId || "",
+        accountIdentityKey: account.accountIdentityKey || "",
         group: account.group || "默认",
         priority: account.priority || "normal",
         usageNote: account.usageNote || "",

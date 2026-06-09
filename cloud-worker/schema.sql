@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   usage_note TEXT NOT NULL DEFAULT '',
   expiry_note TEXT NOT NULL DEFAULT '',
   chatgpt_account_id TEXT NOT NULL DEFAULT '',
+  account_scope_id TEXT NOT NULL DEFAULT '',
+  account_identity_key TEXT NOT NULL DEFAULT '',
   plan_type TEXT NOT NULL DEFAULT '',
   expires_at TEXT NOT NULL DEFAULT '',
   has_refresh_token INTEGER NOT NULL DEFAULT 0,
@@ -48,6 +50,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 
 CREATE INDEX IF NOT EXISTS idx_accounts_user_updated ON accounts(user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_accounts_user_chatgpt ON accounts(user_id, chatgpt_account_id);
+CREATE INDEX IF NOT EXISTS idx_accounts_user_identity ON accounts(user_id, account_identity_key);
 CREATE INDEX IF NOT EXISTS idx_accounts_user_email ON accounts(user_id, email);
 
 CREATE TABLE IF NOT EXISTS account_secrets (

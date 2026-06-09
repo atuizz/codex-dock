@@ -80,6 +80,29 @@ assert.equal(pending[2].accountName, "broken.json");
 const deduped = core.normalizePendingImportStatuses([...pending, { ...pending[1], id: "duplicate" }], { existingAccounts });
 assert.equal(deduped.length, 3);
 
+const sameEmailDifferentAccounts = core.normalizePendingImportStatuses(core.buildPendingImportItems([
+  {
+    ok: true,
+    accountName: "Team A",
+    session: {
+      email: "team@example.com",
+      profile: { plan: "team" },
+      tokens: { account_id: "acct-team-a", access_token: "at-team-a", refresh_token: "rt-team-a" },
+    },
+  },
+  {
+    ok: true,
+    accountName: "Team B",
+    session: {
+      email: "team@example.com",
+      profile: { plan: "team" },
+      tokens: { account_id: "acct-team-b", access_token: "at-team-b", refresh_token: "rt-team-b" },
+    },
+  },
+], "teams.json"));
+assert.equal(sameEmailDifferentAccounts.length, 2);
+assert.deepEqual(sameEmailDifferentAccounts.map((item) => item.status), ["新增", "新增"]);
+
 const summary = core.summarizeImportPreview(deduped);
 assert.deepEqual(
   { total: summary.total, importable: summary.importable, added: summary.added, updated: summary.updated, failed: summary.failed },

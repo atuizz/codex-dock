@@ -189,6 +189,43 @@
     return "";
   }
 
+  function identityScopeFromSources(sources) {
+    const direct = pickAny(sources, [
+      "chatgpt_account_id",
+      "chatgptAccountId",
+      "organization_id",
+      "organizationId",
+      "org_id",
+      "orgId",
+      "workspace_id",
+      "workspaceId",
+      "tenant_id",
+      "tenantId",
+      "team_id",
+      "teamId",
+    ]);
+    if (direct) return String(direct).trim();
+    for (const source of sources) {
+      for (const key of ["organization", "org", "workspace", "tenant", "team", "account"]) {
+        const nested = objectAt(source, key);
+        const id = pick(nested, ["id", "uuid", "slug"]);
+        if (id) return String(id).trim();
+      }
+    }
+    return "";
+  }
+
+  function accountIdentityKeyFromParts(parts = {}) {
+    const accountId = String(parts.accountId || parts.account_id || "").trim().toLowerCase();
+    const email = String(parts.email || "").trim().toLowerCase();
+    const scope = String(parts.scopeId || parts.scope_id || parts.teamId || parts.team_id || parts.organizationId || parts.organization_id || parts.workspaceId || parts.workspace_id || "").trim().toLowerCase();
+    if (accountId && scope && scope !== accountId) return `account:${accountId}|scope:${scope}`;
+    if (accountId) return `account:${accountId}`;
+    if (email && scope) return `email:${email}|scope:${scope}`;
+    if (email) return `email:${email}`;
+    return "";
+  }
+
   function hasTokenishFields(source) {
     if (!source || typeof source !== "object") return false;
     const direct = ["access_token", "accessToken", "refresh_token", "refreshToken", "id_token", "idToken", "session_token", "sessionToken"];
@@ -250,6 +287,7 @@
     const idPayload = decodeJwtPayload(idToken) || {};
     const authPayload = accessPayload["https://api.openai.com/auth"] || idPayload["https://api.openai.com/auth"] || {};
     const profilePayload = accessPayload["https://api.openai.com/profile"] || idPayload["https://api.openai.com/profile"] || {};
+    const accountScopeId = identityScopeFromSources([source, tokens, auth, sessionTokens, user, subscription, authPayload, profilePayload]);
     const accountId = extracted.account_id
       || authPayload.chatgpt_account_id
       || authPayload.chatgpt_account_user_id
@@ -270,6 +308,8 @@
         email,
         expires,
         profile: { plan },
+        accountScopeId,
+        accountIdentityKey: accountIdentityKeyFromParts({ accountId, email, scopeId: accountScopeId }),
         usage,
         tokens: {
           id_token: idToken || accessToken,
@@ -332,6 +372,13 @@
 
   function accountDedupeKey(account) {
     const accountId = account.accountId || account.account_id || account.session?.tokens?.account_id || "";
+    const scopeId = account.accountScopeId || account.account_scope_id || account.session?.accountScopeId || "";
+    const identityKey = account.accountIdentityKey || account.account_identity_key || account.session?.accountIdentityKey || accountIdentityKeyFromParts({
+      accountId,
+      email: account.email || account.session?.email || "",
+      scopeId,
+    });
+    if (identityKey) return identityKey;
     if (accountId) return `account:${String(accountId).toLowerCase()}`;
     const email = account.email || account.session?.email || "";
     if (email) return `email:${String(email).toLowerCase()}`;
@@ -366,6 +413,7 @@
     const idPayload = decodeJwtPayload(tokens.id_token || "") || {};
     const authPayload = accessPayload["https://api.openai.com/auth"] || idPayload["https://api.openai.com/auth"] || {};
     const profilePayload = accessPayload["https://api.openai.com/profile"] || idPayload["https://api.openai.com/profile"] || {};
+    const accountScopeId = account.accountScopeId || account.account_scope_id || session?.accountScopeId || identityScopeFromSources([account, session, tokens, authPayload, profilePayload]);
     const accountId = account.accountId || account.account_id || tokens.account_id || authPayload.chatgpt_account_id || "";
     const email = account.email || session?.email || profilePayload.email || "";
     const plan = bestPlan(account.planType, account.plan_type, account.usage?.plan_type, session?.profile?.plan, authPayload.chatgpt_plan_type);
@@ -381,6 +429,8 @@
       usageNote: account.usageNote || account.usage_note || "",
       expiryNote: account.expiryNote || account.expiry_note || "",
       accountId,
+      accountScopeId,
+      accountIdentityKey: account.accountIdentityKey || account.account_identity_key || session?.accountIdentityKey || accountIdentityKeyFromParts({ accountId, email, scopeId: accountScopeId }),
       expiresAt,
       hasRefreshToken: account.hasRefreshToken ?? account.has_refresh_token ?? hasUsableRefreshToken({ session }),
       planType: plan,
@@ -410,6 +460,12 @@
       usageNote: account.usageNote || account.usage_note || "",
       expiryNote: account.expiryNote || account.expiry_note || "",
       accountId: account.accountId || account.account_id || "",
+      accountScopeId: account.accountScopeId || account.account_scope_id || "",
+      accountIdentityKey: account.accountIdentityKey || account.account_identity_key || accountIdentityKeyFromParts({
+        accountId: account.accountId || account.account_id || "",
+        email: account.email || "",
+        scopeId: account.accountScopeId || account.account_scope_id || "",
+      }),
       expiresAt: account.expiresAt || account.expires_at || "",
       hasRefreshToken: Boolean(account.hasRefreshToken ?? account.has_refresh_token),
       planType: plan,
@@ -451,6 +507,8 @@
     jwtExpiryText,
     authFingerprint,
     accountDedupeKey,
+    identityScopeFromSources,
+    accountIdentityKeyFromParts,
     hasUsableRefreshToken,
     accessTokenExpiry,
     accountPlan,

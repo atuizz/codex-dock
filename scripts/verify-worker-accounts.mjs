@@ -13,6 +13,7 @@ import {
   summarizeCandidateBlocks,
   syncCurrentAuthSecret,
   switchPayloadForAccount,
+  upsertAccount,
   usageFresh,
 } from "../cloud-worker/worker-accounts.js";
 import {
@@ -393,6 +394,129 @@ class SyncDB {
     throw new Error(`unexpected SQL: ${sql}`);
   }
 }
+
+class UpsertDB {
+  constructor() {
+    this.rows = [];
+    this.secrets = [];
+    this.usageDeleted = [];
+  }
+
+  prepare(sql) {
+    if (/SELECT id, plan_type FROM accounts/.test(sql)) {
+      return {
+        bind: (...args) => ({
+          first: async () => {
+            const identityKey = args[1] || "";
+            const accountId = args[3] || "";
+            const email = args[7] || "";
+            return this.rows.find((row) => (identityKey && row.account_identity_key === identityKey)
+              || (accountId && !row.account_identity_key && row.chatgpt_account_id === accountId)
+              || (!identityKey && !accountId && email && row.email === email)) || null;
+          },
+        }),
+      };
+    }
+    if (/INSERT INTO accounts/.test(sql)) {
+      return {
+        bind: (...args) => ({
+          run: async () => {
+            this.rows.push({
+              id: args[0],
+              user_id: args[1],
+              name: args[2],
+              email: args[3],
+              group_name: args[4],
+              priority: args[5],
+              usage_note: args[6],
+              expiry_note: args[7],
+              chatgpt_account_id: args[8],
+              account_scope_id: args[9],
+              account_identity_key: args[10],
+              plan_type: args[11],
+            });
+          },
+        }),
+      };
+    }
+    if (/UPDATE accounts/.test(sql)) {
+      return {
+        bind: (...args) => ({
+          run: async () => {
+            const row = this.rows.find((item) => item.id === args[13] && item.user_id === args[14]);
+            if (row) {
+              row.name = args[0];
+              row.email = args[1];
+              row.chatgpt_account_id = args[6];
+              row.account_scope_id = args[7];
+              row.account_identity_key = args[8];
+              row.plan_type = args[9];
+            }
+          },
+        }),
+      };
+    }
+    if (/INSERT INTO account_secrets/.test(sql)) {
+      return {
+        bind: (...args) => ({
+          run: async () => {
+            this.secrets.push(args);
+          },
+        }),
+      };
+    }
+    if (/UPDATE account_secrets/.test(sql)) {
+      return {
+        bind: (...args) => ({
+          run: async () => {
+            this.secrets.push(args);
+          },
+        }),
+      };
+    }
+    if (/DELETE FROM usage_snapshots/.test(sql)) {
+      return {
+        bind: (...args) => ({
+          run: async () => {
+            this.usageDeleted.push(args);
+          },
+        }),
+      };
+    }
+    throw new Error(`unexpected upsert SQL: ${sql}`);
+  }
+}
+
+const sameEmailUpsertDb = new UpsertDB();
+env.DB = sameEmailUpsertDb;
+const sameEmailUser = { id: "user-1" };
+const unscopedTeamToken = jwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
+assert.equal(await upsertAccount(env, sameEmailUser, {
+  name: "Team A",
+  email: "team@example.com",
+  session: {
+    tokens: { access_token: unscopedTeamToken, refresh_token: "rt-team-a", account_id: "acct-team-a" },
+    profile: { plan: "team" },
+  },
+}), "added");
+assert.equal(await upsertAccount(env, sameEmailUser, {
+  name: "Team B",
+  email: "team@example.com",
+  session: {
+    tokens: { access_token: unscopedTeamToken, refresh_token: "rt-team-b", account_id: "acct-team-b" },
+    profile: { plan: "team" },
+  },
+}), "added");
+assert.equal(await upsertAccount(env, sameEmailUser, {
+  name: "Team B Refresh",
+  email: "team@example.com",
+  session: {
+    tokens: { access_token: unscopedTeamToken, refresh_token: "rt-team-b-new", account_id: "acct-team-b" },
+    profile: { plan: "team" },
+  },
+}), "updated");
+assert.equal(sameEmailUpsertDb.rows.length, 2);
+assert.deepEqual(sameEmailUpsertDb.rows.map((row) => row.account_identity_key).sort(), ["account:acct-team-a", "account:acct-team-b"]);
 
 const oldRtSession = normalizeSession({ tokens: { access_token: accessToken, refresh_token: "rt-old" } });
 const lastSwitchAt = new Date().toISOString();
